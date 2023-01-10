@@ -143,9 +143,9 @@ set(NVIM_VERSION_PATCH 0)
 set(NVIM_VERSION_PRERELEASE "-dev") # for package maintainers
 
 # API level
-set(NVIM_API_LEVEL 10)         # Bump this after any API change.
+set(NVIM_API_LEVEL 11)         # Bump this after any API change.
 set(NVIM_API_LEVEL_COMPAT 0)  # Adjust this after a _breaking_ API change.
-set(NVIM_API_PRERELEASE false)
+set(NVIM_API_PRERELEASE true)
 
 set(NVIM_VERSION_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
 # NVIM_VERSION_CFLAGS set further below.
@@ -414,16 +414,6 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
   add_definitions(-D_GNU_SOURCE)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SIZEOF_VOID_P EQUAL 8 AND NOT PREFER_LUA AND LUAJIT_VERSION LESS "2.1.0-beta3")
-  # Required for luajit < 2.1.0-beta3.
-  set(CMAKE_EXE_LINKER_FLAGS
-    "${CMAKE_EXE_LINKER_FLAGS} -pagezero_size 10000 -image_base 100000000")
-  set(CMAKE_SHARED_LINKER_FLAGS
-    "${CMAKE_SHARED_LINKER_FLAGS} -image_base 100000000")
-  set(CMAKE_MODULE_LINKER_FLAGS
-    "${CMAKE_MODULE_LINKER_FLAGS} -image_base 100000000")
-endif()
-
 include_directories("${PROJECT_BINARY_DIR}/cmake.config")
 include_directories("${PROJECT_SOURCE_DIR}/src")
 
@@ -498,33 +488,29 @@ if(MSGPACK_HAS_FLOAT32)
   add_definitions(-DNVIM_MSGPACK_HAS_FLOAT32)
 endif()
 
-option(FEAT_TUI "Enable the Terminal UI" ON)
+find_package(UNIBILIUM 2.0 REQUIRED)
+include_directories(SYSTEM ${UNIBILIUM_INCLUDE_DIRS})
 
-if(FEAT_TUI)
-  find_package(UNIBILIUM 2.0 REQUIRED)
-  include_directories(SYSTEM ${UNIBILIUM_INCLUDE_DIRS})
+list(APPEND CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
+list(APPEND CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
+check_c_source_compiles("
+#include <unibilium.h>
 
-  list(APPEND CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
-  list(APPEND CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
-  check_c_source_compiles("
-  #include <unibilium.h>
-
-  int
-  main(void)
-  {
-    unibi_str_from_var(unibi_var_from_str(\"\"));
-    return unibi_num_from_var(unibi_var_from_num(0));
-  }
-  " UNIBI_HAS_VAR_FROM)
-  list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
-  list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
-  if(UNIBI_HAS_VAR_FROM)
-    add_definitions(-DNVIM_UNIBI_HAS_VAR_FROM)
-  endif()
-
-  find_package(LibTermkey 0.22 REQUIRED)
-  include_directories(SYSTEM ${LIBTERMKEY_INCLUDE_DIRS})
+int
+main(void)
+{
+  unibi_str_from_var(unibi_var_from_str(\"\"));
+  return unibi_num_from_var(unibi_var_from_num(0));
+}
+" UNIBI_HAS_VAR_FROM)
+list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
+list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
+if(UNIBI_HAS_VAR_FROM)
+  add_definitions(-DNVIM_UNIBI_HAS_VAR_FROM)
 endif()
+
+find_package(LibTermkey 0.22 REQUIRED)
+include_directories(SYSTEM ${LIBTERMKEY_INCLUDE_DIRS})
 
 find_package(LIBVTERM 0.3 REQUIRED)
 include_directories(SYSTEM ${LIBVTERM_INCLUDE_DIRS})

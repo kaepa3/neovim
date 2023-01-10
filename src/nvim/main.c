@@ -97,6 +97,7 @@
 #include "nvim/msgpack_rpc/helpers.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/os/signal.h"
+#include "nvim/tui/tui.h"
 
 // values for "window_layout"
 enum {
@@ -278,10 +279,16 @@ int main(int argc, char **argv)
   // argument list "global_alist".
   command_line_scan(&params);
 
-  open_script_files(&params);
+#ifndef MSWIN
+  int tty_fd = params.input_isatty
+    ? STDIN_FILENO
+    : (params.output_isatty
+       ? STDOUT_FILENO
+       : (params.err_isatty ? STDERR_FILENO : -1));
+  pty_process_save_termios(tty_fd);
+#endif
 
-  nlua_init();
-
+  nlua_init(argv, argc, params.lua_arg0);
   TIME_MSG("init lua interpreter");
 
   if (embedded_mode) {
@@ -291,9 +298,29 @@ int main(int argc, char **argv)
     }
   }
 
-  server_init(params.listen_addr);
+  bool use_builtin_ui = (!headless_mode && !embedded_mode && !silent_mode);
+
+  // don't bind the server yet, if we are using builtin ui.
+  // This will be done when nvim server has been forked from the ui process
+  if (!use_builtin_ui) {
+    server_init(params.listen_addr);
+  }
+
   if (params.remote) {
-    remote_request(&params, params.remote, params.server_addr, argc, argv);
+    remote_request(&params, params.remote, params.server_addr, argc, argv,
+                   use_builtin_ui);
+  }
+
+  bool remote_ui = (ui_client_channel_id != 0);
+
+  if (use_builtin_ui && !remote_ui) {
+    ui_client_forward_stdin = !params.input_isatty;
+    uint64_t rv = ui_client_start_server(params.argc, params.argv);
+    if (!rv) {
+      os_errmsg("Failed to start Nvim server!\n");
+      getout(1);
+    }
+    ui_client_channel_id = rv;
   }
 
   if (GARGCOUNT > 0) {
@@ -344,22 +371,20 @@ int main(int argc, char **argv)
   debug_break_level = params.use_debug_break_level;
 
   // Read ex-commands if invoked with "-es".
-  if (!params.input_isatty && !params.input_neverscript
-      && silent_mode && exmode_active) {
+  if (!params.input_isatty && !params.input_istext && silent_mode && exmode_active) {
     input_start(STDIN_FILENO);
+  }
+
+  if (ui_client_channel_id) {
+    ui_client_run(remote_ui);  // NORETURN
   }
 
   // Wait for UIs to set up Nvim or show early messages
   // and prompts (--cmd, swapfile dialog, …).
   bool use_remote_ui = (embedded_mode && !headless_mode);
-  bool use_builtin_ui = (!headless_mode && !embedded_mode && !silent_mode);
-  if (use_remote_ui || use_builtin_ui) {
+  if (use_remote_ui) {
     TIME_MSG("waiting for UI");
-    if (use_remote_ui) {
-      remote_ui_wait_for_attach();
-    } else {
-      ui_builtin_start();
-    }
+    remote_ui_wait_for_attach();
     TIME_MSG("done waiting for UI");
     firstwin->w_prev_height = firstwin->w_height;  // may have changed
   }
@@ -370,11 +395,12 @@ int main(int argc, char **argv)
   win_new_screensize();
   TIME_MSG("clear screen");
 
-  if (ui_client_channel_id) {
-    ui_client_init(ui_client_channel_id);
-    ui_client_execute(ui_client_channel_id);
-    abort();  // unreachable
+  // Handle "foo | nvim". EDIT_FILE may be overwritten now. #6299
+  if (edit_stdin(&params)) {
+    params.edit_type = EDIT_STDIN;
   }
+
+  open_script_files(&params);
 
   // Default mappings (incl. menus)
   Error err = ERROR_INIT;
@@ -384,19 +410,18 @@ int main(int argc, char **argv)
   api_clear_error(&err);
   assert(o.type == kObjectTypeNil);
   api_free_object(o);
+
   TIME_MSG("init default mappings");
 
   init_default_autocmds();
   TIME_MSG("init default autocommands");
 
-  bool vimrc_none = params.use_vimrc != NULL && strequal(params.use_vimrc, "NONE");
+  bool vimrc_none = strequal(params.use_vimrc, "NONE");
 
   // Reset 'loadplugins' for "-u NONE" before "--cmd" arguments.
   // Allows for setting 'loadplugins' there.
-  if (vimrc_none) {
-    // When using --clean we still want to load plugins
-    p_lpl = params.clean;
-  }
+  // For --clean we still want to load plugins.
+  p_lpl = vimrc_none ? params.clean : p_lpl;
 
   // Execute --cmd arguments.
   exe_pre_commands(&params);
@@ -483,7 +508,7 @@ int main(int argc, char **argv)
   // writing end of the pipe doesn't like, e.g., in case stdin and stderr
   // are the same terminal: "cat | vim -".
   // Using autocommands here may cause trouble...
-  if ((params.edit_type == EDIT_STDIN || stdin_fd >= 0) && !recoverymode) {
+  if (params.edit_type == EDIT_STDIN && !recoverymode) {
     read_stdin();
   }
 
@@ -590,6 +615,12 @@ int main(int argc, char **argv)
     (void)eval_has_provider("clipboard");
   }
 
+  if (params.luaf != NULL) {
+    bool lua_ok = nlua_exec_file(params.luaf);
+    TIME_MSG("executing Lua -l script");
+    getout(lua_ok ? 0 : 1);
+  }
+
   TIME_MSG("before starting main loop");
   ILOG("starting main loop");
 
@@ -607,9 +638,13 @@ void os_exit(int r)
 {
   exiting = true;
 
-  ui_flush();
-  ui_call_stop();
-  ml_close_all(true);           // remove all memfiles
+  if (ui_client_channel_id) {
+    ui_client_stop();
+  } else {
+    ui_flush();
+    ui_call_stop();
+    ml_close_all(true);           // remove all memfiles
+  }
 
   if (!event_teardown() && r == 0) {
     r = 1;  // Exit with error if main_loop did not teardown gracefully.
@@ -633,9 +668,8 @@ void getout(int exitval)
 {
   exiting = true;
 
-  // When running in Ex mode an error causes us to exit with a non-zero exit
-  // code.  POSIX requires this, although it's not 100% clear from the
-  // standard.
+  // On error during Ex mode, exit with a non-zero code.
+  // POSIX requires this, although it's not 100% clear from the standard.
   if (exmode_active) {
     exitval += ex_exitval;
   }
@@ -726,6 +760,7 @@ void getout(int exitval)
   if (did_emsg) {
     // give the user a chance to read the (error) message
     no_wait_return = false;
+    // TODO(justinmk): this may call getout(0), clobbering exitval...
     wait_return(false);
   }
 
@@ -749,10 +784,9 @@ void getout(int exitval)
   os_exit(exitval);
 }
 
-/// Preserve files and exit.
-/// @note IObuff must contain a message.
-/// @note This may be called from deadly_signal() in a signal handler, avoid
-///       unsafe functions, such as allocating memory.
+/// Preserve files, print contents of `IObuff`, and exit 1.
+///
+/// May be called from deadly_signal().
 void preserve_exit(void)
   FUNC_ATTR_NORETURN
 {
@@ -837,15 +871,24 @@ static uint64_t server_connect(char *server_addr, const char **errmsg)
 
 /// Handle remote subcommands
 static void remote_request(mparm_T *params, int remote_args, char *server_addr, int argc,
-                           char **argv)
+                           char **argv, bool ui_only)
 {
+  bool is_ui = strequal(argv[remote_args], "--remote-ui");
+  if (ui_only && !is_ui) {
+    // TODO(bfredl): this implies always starting the TUI.
+    // if we be smart we could delay this past should_exit
+    return;
+  }
+
   const char *connect_error = NULL;
   uint64_t chan = server_connect(server_addr, &connect_error);
   Object rvobj = OBJECT_INIT;
 
-  if (strequal(argv[remote_args], "--remote-ui-test")) {
+  if (is_ui) {
     if (!chan) {
-      emsg(connect_error);
+      os_errmsg("Remote ui failed to start: ");
+      os_errmsg(connect_error);
+      os_errmsg("\n");
       exit(1);
     }
 
@@ -925,14 +968,14 @@ static void remote_request(mparm_T *params, int remote_args, char *server_addr, 
 
 /// Decides whether text (as opposed to commands) will be read from stdin.
 /// @see EDIT_STDIN
-static bool edit_stdin(bool explicit, mparm_T *parmp)
+static bool edit_stdin(mparm_T *parmp)
 {
   bool implicit = !headless_mode
-                  && !embedded_mode
-                  && (!exmode_active || parmp->input_neverscript)
+                  && !(embedded_mode && stdin_fd <= 0)
+                  && (!exmode_active || parmp->input_istext)
                   && !parmp->input_isatty
                   && parmp->scriptin == NULL;  // `-s -` was not given.
-  return explicit || implicit;
+  return parmp->had_stdin_file || implicit;
 }
 
 /// Scan the command line arguments.
@@ -941,7 +984,6 @@ static void command_line_scan(mparm_T *parmp)
   int argc = parmp->argc;
   char **argv = parmp->argv;
   int argv_idx;                         // index in argv[n][]
-  bool had_stdin_file = false;          // found explicit "-" argument
   bool had_minmin = false;              // found "--" argument
   int want_argument;                    // option argument with argument
   long n;
@@ -961,9 +1003,9 @@ static void command_line_scan(mparm_T *parmp)
       } else {
         parmp->commands[parmp->n_commands++] = &(argv[0][1]);
       }
-
-      // Optional argument.
     } else if (argv[0][0] == '-' && !had_minmin) {
+      // Optional argument.
+
       want_argument = false;
       char c = argv[0][argv_idx++];
       switch (c) {
@@ -973,17 +1015,15 @@ static void command_line_scan(mparm_T *parmp)
           silent_mode = true;
           parmp->no_swap_file = true;
         } else {
-          if (parmp->edit_type != EDIT_NONE
-              && parmp->edit_type != EDIT_FILE
-              && parmp->edit_type != EDIT_STDIN) {
+          if (parmp->edit_type > EDIT_STDIN) {
             mainerr(err_too_many_args, argv[0]);
           }
-          had_stdin_file = true;
+          parmp->had_stdin_file = true;
           parmp->edit_type = EDIT_STDIN;
         }
         argv_idx = -1;  // skip to next argument
         break;
-      case '-':    // "--" don't take any more option arguments
+      case '-':    // "--" No more option arguments.
         // "--help" give help message
         // "--version" give version message
         // "--noplugin[s]" skip plugins
@@ -1079,7 +1119,7 @@ static void command_line_scan(mparm_T *parmp)
         break;
       case 'E':    // "-E" Ex mode
         exmode_active = true;
-        parmp->input_neverscript = true;
+        parmp->input_istext = true;
         break;
       case 'f':    // "-f"  GUI: run in foreground.
         break;
@@ -1090,10 +1130,6 @@ static void command_line_scan(mparm_T *parmp)
       case 'H':    // "-H" start in Hebrew mode: rl + hkmap set.
         p_hkmap = true;
         set_option_value_give_err("rl", 1L, NULL, 0);
-        break;
-      case 'l':    // "-l" lisp mode, 'lisp' and 'showmatch' on.
-        set_option_value_give_err("lisp", 1L, NULL, 0);
-        p_sm = true;
         break;
       case 'M':    // "-M"  no changes or writing of files
         reset_modifiable();
@@ -1199,6 +1235,7 @@ static void command_line_scan(mparm_T *parmp)
         FALLTHROUGH;
       case 'S':    // "-S {file}" execute Vim script
       case 'i':    // "-i {shada}" use for ShaDa file
+      case 'l':    // "-l {file}" Lua mode
       case 'u':    // "-u {vimrc}" vim inits file
       case 'U':    // "-U {gvimrc}" gvim inits file
       case 'W':    // "-W {scriptout}" overwrite
@@ -1279,10 +1316,27 @@ static void command_line_scan(mparm_T *parmp)
           set_option_value_give_err("shadafile", 0L, argv[0], 0);
           break;
 
+        case 'l':    // "-l" Lua script: args after "-l".
+          headless_mode = true;
+          silent_mode = true;
+          p_verbose = 1;
+          parmp->no_swap_file = true;
+          parmp->use_vimrc = parmp->use_vimrc ? parmp->use_vimrc : "NONE";
+          if (p_shadafile == NULL || *p_shadafile == NUL) {
+            set_option_value_give_err("shadafile", 0L, "NONE", 0);
+          }
+          parmp->luaf = argv[0];
+          argc--;
+          if (argc > 0) {  // Lua args after "-l <file>".
+            parmp->lua_arg0 = parmp->argc - argc;
+            argc = 0;
+          }
+          break;
+
         case 's':    // "-s {scriptin}" read from script file
           if (parmp->scriptin != NULL) {
 scripterror:
-            vim_snprintf((char *)IObuff, IOSIZE,
+            vim_snprintf(IObuff, IOSIZE,
                          _("Attempt to open script file again: \"%s %s\"\n"),
                          argv[-1], argv[0]);
             os_errmsg(IObuff);
@@ -1322,9 +1376,7 @@ scripterror:
       argv_idx = -1;  // skip to next argument
 
       // Check for only one type of editing.
-      if (parmp->edit_type != EDIT_NONE
-          && parmp->edit_type != EDIT_FILE
-          && parmp->edit_type != EDIT_STDIN) {
+      if (parmp->edit_type > EDIT_STDIN) {
         mainerr(err_too_many_args, argv[0]);
       }
       parmp->edit_type = EDIT_FILE;
@@ -1345,7 +1397,7 @@ scripterror:
       path_fix_case(p);
 #endif
 
-      int alist_fnum_flag = edit_stdin(had_stdin_file, parmp)
+      int alist_fnum_flag = edit_stdin(parmp)
                             ? 1   // add buffer nr after exp.
                             : 2;  // add buffer number now and use curbuf
       alist_add(&global_alist, p, alist_fnum_flag);
@@ -1360,8 +1412,8 @@ scripterror:
     }
   }
 
-  if (embedded_mode && silent_mode) {
-    mainerr(_("--embed conflicts with -es/-Es"), NULL);
+  if (embedded_mode && (silent_mode || parmp->luaf)) {
+    mainerr(_("--embed conflicts with -es/-Es/-l"), NULL);
   }
 
   // If there is a "+123" or "-c" command, set v:swapcommand to the first one.
@@ -1371,11 +1423,6 @@ scripterror:
     snprintf(swcmd, swcmd_len, ":%s\r", parmp->commands[0]);
     set_vim_var_string(VV_SWAPCOMMAND, swcmd, -1);
     xfree(swcmd);
-  }
-
-  // Handle "foo | nvim". EDIT_FILE may be overwritten now. #6299
-  if (edit_stdin(had_stdin_file, parmp)) {
-    parmp->edit_type = EDIT_STDIN;
   }
 
   TIME_MSG("parsing arguments");
@@ -1394,6 +1441,8 @@ static void init_params(mparm_T *paramp, int argc, char **argv)
   paramp->listen_addr = NULL;
   paramp->server_addr = NULL;
   paramp->remote = 0;
+  paramp->luaf = NULL;
+  paramp->lua_arg0 = -1;
 }
 
 /// Initialize global startuptime file if "--startuptime" passed as an argument.
@@ -1415,14 +1464,6 @@ static void check_and_set_isatty(mparm_T *paramp)
   stdout_isatty
     = paramp->output_isatty = os_isatty(STDOUT_FILENO);
   paramp->err_isatty = os_isatty(STDERR_FILENO);
-#ifndef MSWIN
-  int tty_fd = paramp->input_isatty
-    ? STDIN_FILENO
-    : (paramp->output_isatty
-       ? STDOUT_FILENO
-       : (paramp->err_isatty ? STDERR_FILENO : -1));
-  pty_process_save_termios(tty_fd);
-#endif
   TIME_MSG("window checked");
 }
 
@@ -1473,8 +1514,8 @@ static void handle_quickfix(mparm_T *paramp)
     if (paramp->use_ef != NULL) {
       set_string_option_direct("ef", -1, paramp->use_ef, OPT_FREE, SID_CARG);
     }
-    vim_snprintf((char *)IObuff, IOSIZE, "cfile %s", p_ef);
-    if (qf_init(NULL, (char *)p_ef, p_efm, true, (char *)IObuff, p_menc) < 0) {
+    vim_snprintf(IObuff, IOSIZE, "cfile %s", p_ef);
+    if (qf_init(NULL, (char *)p_ef, p_efm, true, IObuff, p_menc) < 0) {
       msg_putchar('\n');
       os_exit(3);
     }
@@ -1489,8 +1530,8 @@ static void handle_tag(char_u *tagname)
   if (tagname != NULL) {
     swap_exists_did_quit = false;
 
-    vim_snprintf((char *)IObuff, IOSIZE, "ta %s", tagname);
-    do_cmdline_cmd((char *)IObuff);
+    vim_snprintf(IObuff, IOSIZE, "ta %s", tagname);
+    do_cmdline_cmd(IObuff);
     TIME_MSG("jumping to tag");
 
     // If the user doesn't want to edit the file then we quit here.
@@ -1527,14 +1568,7 @@ static void open_script_files(mparm_T *parmp)
   if (parmp->scriptin) {
     int error;
     if (strequal(parmp->scriptin, "-")) {
-      const int stdin_dup_fd = os_dup(STDIN_FILENO);
-#ifdef MSWIN
-      // Replace the original stdin with the console input handle.
-      os_replace_stdin_to_conin();
-#endif
-      FileDescriptor *const stdin_dup = file_open_fd_new(&error, stdin_dup_fd,
-                                                         kFileReadOnly|kFileNonBlocking);
-      assert(stdin_dup != NULL);
+      FileDescriptor *stdin_dup = file_open_stdin();
       scriptin[0] = stdin_dup;
     } else {
       scriptin[0] = file_open_new(&error, parmp->scriptin,
@@ -2101,7 +2135,7 @@ static void mainerr(const char *errstr, const char *str)
 static void version(void)
 {
   // TODO(bfred): not like this?
-  nlua_init();
+  nlua_init(NULL, 0, -1);
   info_message = true;  // use os_msg(), not os_errmsg()
   list_version();
   msg_putchar('\n');
@@ -2122,6 +2156,7 @@ static void usage(void)
   os_msg(_("  +                     Start at end of file\n"));
   os_msg(_("  --cmd <cmd>           Execute <cmd> before any config\n"));
   os_msg(_("  +<cmd>, -c <cmd>      Execute <cmd> after config and first file\n"));
+  os_msg(_("  -l <script> [args...] Execute Lua <script> (with optional args)\n"));
   os_msg("\n");
   os_msg(_("  -b                    Binary mode\n"));
   os_msg(_("  -d                    Diff mode\n"));

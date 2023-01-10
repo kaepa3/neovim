@@ -113,7 +113,7 @@ end
 ---
 ---@param s string String to split
 ---@param sep string Separator or pattern
----@param kwargs ({plain: boolean, trimempty: boolean}|nil) Keyword arguments:
+---@param kwargs (table|nil) Keyword arguments:
 ---       - plain: (boolean) If `true` use `sep` literally (passed to string.find)
 ---       - trimempty: (boolean) If `true` remove empty items from the front
 ---         and back of the list
@@ -516,8 +516,8 @@ end
 ---
 ---@generic T
 ---@param list T[] (list) Table
----@param start number Start range of slice
----@param finish number End range of slice
+---@param start number|nil Start range of slice
+---@param finish number|nil End range of slice
 ---@return T[] (list) Copy of table sliced from start to finish (inclusive)
 function vim.list_slice(list, start, finish)
   local new_list = {}

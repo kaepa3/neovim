@@ -145,7 +145,7 @@ This sets the 'titlestring' option to "hi" and 'iconstring' to "there": >
 
 Similarly, the double quote character starts a comment.  To include the '"' in
 the option value, use '\"' instead.  This example sets the 'titlestring'
-option to 'hi "there"': >
+option to "hi "there"": >
    :set titlestring=hi\ \"there\"
 
 For Win32 backslashes in file names are mostly not removed.  More precise: For
@@ -163,7 +163,7 @@ halved and when you expect the backslashes to be kept.  The third gives a
 result which is probably not what you want.  Avoid it.
 
 				*add-option-flags* *remove-option-flags*
-				*E539* *E550* *E551* *E552*
+				*E539*
 Some options are a list of flags.  When you want to add a flag to such an
 option, without changing the existing ones, you can do it like this: >
    :set guioptions+=a
@@ -1325,7 +1325,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	These names are recognized:
 
 						*clipboard-unnamed*
-	unnamed		When included, Vim will use the clipboard register '*'
+	unnamed		When included, Vim will use the clipboard register "*"
 			for all yank, delete, change and put operations which
 			would normally go to the unnamed register.  When a
 			register is explicitly specified, it will always be
@@ -1336,8 +1336,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*clipboard-unnamedplus*
 	unnamedplus	A variant of the "unnamed" flag which uses the
-			clipboard register '+' (|quoteplus|) instead of
-			register '*' for all yank, delete, change and put
+			clipboard register "+" (|quoteplus|) instead of
+			register "*" for all yank, delete, change and put
 			operations which would normally go to the unnamed
 			register.  When "unnamed" is also included to the
 			option, yank and delete operations (but not put)
@@ -4357,7 +4357,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	w x	updown		up-down sizing arrows
 	w x	leftright	left-right sizing arrows
 	w x	busy		The system's usual busy pointer
-	w x	no		The system's usual 'no input' pointer
+	w x	no		The system's usual "no input" pointer
 	  x	udsizing	indicates up-down resizing
 	  x	lrsizing	indicates left-right resizing
 	  x	crosshair	like a big thin +
@@ -4434,12 +4434,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 		'nonu'          'nu'            'nonu'          'nu'
 		'nornu'         'nornu'         'rnu'           'rnu'
-
+>
 	    |apple          |  1 apple      |  2 apple      |  2 apple
 	    |pear           |  2 pear       |  1 pear       |  1 pear
 	    |nobody         |  3 nobody     |  0 nobody     |3   nobody
 	    |there          |  4 there      |  1 there      |  1 there
-
+<
 						*'numberwidth'* *'nuw'*
 'numberwidth' 'nuw'	number	(default: 4)
 			local to window
@@ -4680,58 +4680,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	Identifies the preview window.  Only one window can have this option
 	set.  It's normally not set directly, but by using one of the commands
 	|:ptag|, |:pedit|, etc.
-
-						*'printdevice'* *'pdev'*
-'printdevice' 'pdev'	string	(default empty)
-			global
-	The name of the printer to be used for |:hardcopy|.
-	See |pdev-option|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
-
-						*'printencoding'* *'penc'*
-'printencoding' 'penc'	string	(default empty, except for some systems)
-			global
-	Sets the character encoding used when printing.
-	See |penc-option|.
-
-						*'printexpr'* *'pexpr'*
-'printexpr' 'pexpr'	string	(default: see below)
-			global
-	Expression used to print the PostScript produced with |:hardcopy|.
-	See |pexpr-option|.
-	This option cannot be set from a |modeline| or in the |sandbox|, for
-	security reasons.
-
-						*'printfont'* *'pfn'*
-'printfont' 'pfn'	string	(default "courier")
-			global
-	The name of the font that will be used for |:hardcopy|.
-	See |pfn-option|.
-
-						*'printheader'* *'pheader'*
-'printheader' 'pheader'  string  (default "%<%f%h%m%=Page %N")
-			global
-	The format of the header produced in |:hardcopy| output.
-	See |pheader-option|.
-
-						*'printmbcharset'* *'pmbcs'*
-'printmbcharset' 'pmbcs'  string (default "")
-			global
-	The CJK character set to be used for CJK output from |:hardcopy|.
-	See |pmbcs-option|.
-
-						*'printmbfont'* *'pmbfn'*
-'printmbfont' 'pmbfn'	string (default "")
-			global
-	List of font names to be used for CJK output from |:hardcopy|.
-	See |pmbfn-option|.
-
-						*'printoptions'* *'popt'*
-'printoptions' 'popt' string (default "")
-			global
-	List of items that control the format of the output of |:hardcopy|.
-	See |popt-option|.
 
 						*'pumblend'* *'pb'*
 'pumblend' 'pb'		number	(default 0)
@@ -5004,7 +4952,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	  pack/		packages |:packadd|
 	  parser/	|treesitter| syntax parsers
 	  plugin/	plugin scripts |write-plugin|
-	  print/	files for printing |postscript-print-encoding|
 	  query/	|treesitter| queries
 	  rplugin/	|remote-plugin| scripts
 	  spell/	spell checking files |spell|
@@ -5573,30 +5520,30 @@ A jump table for the options with a short description can be found at |Q_op|.
 		and "[a]" instead of "appended" for ':w >> file' command
 	  x	use "[dos]" instead of "[dos format]", "[unix]"		*shm-x*
 		instead of "[unix format]" and "[mac]" instead of "[mac
-		format]".
+		format]"
 	  a	all of the above abbreviations				*shm-a*
 
 	  o	overwrite message for writing a file with subsequent	*shm-o*
 		message for reading a file (useful for ":wn" or when
 		'autowrite' on)
-	  O	message for reading a file overwrites any previous	*smh-O*
-		message.  Also for quickfix message (e.g., ":cn").
+	  O	message for reading a file overwrites any previous	*shm-O*
+		message;  also for quickfix message (e.g., ":cn")
 	  s	don't give "search hit BOTTOM, continuing at TOP" or	*shm-s*
 		"search hit TOP, continuing at BOTTOM" messages; when using
 		the search count do not show "W" after the count message (see
 		S below)
 	  t	truncate file message at the start if it is too long	*shm-t*
 		to fit on the command-line, "<" will appear in the left most
-		column.  Ignored in Ex mode.
+		column; ignored in Ex mode
 	  T	truncate other messages in the middle if they are too	*shm-T*
-		long to fit on the command line.  "..." will appear in the
-		middle.  Ignored in Ex mode.
+		long to fit on the command line; "..." will appear in the
+		middle; ignored in Ex mode
 	  W	don't give "written" or "[w]" when writing a file	*shm-W*
 	  A	don't give the "ATTENTION" message when an existing	*shm-A*
-		swap file is found.
+		swap file is found
 	  I	don't give the intro message when starting Vim,		*shm-I*
-	  	see |:intro|.
-	  c	don't give |ins-completion-menu| messages.  For		*shm-c*
+	  	see |:intro|
+	  c	don't give |ins-completion-menu| messages; for		*shm-c*
 		example, "-- XXX completion (YYY)", "match 1 of 2", "The only
 		match", "Pattern not found", "Back at original", etc.
 	  C	don't give messages while scanning for ins-completion	*shm-C*
@@ -5653,6 +5600,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 			*'showcmdloc'* *'sloc'*
 'showcmdloc' 'sloc'	string	(default "last")
+			global
 	This option can be used to display the (partially) entered command in
 	another location.  Possible values are:
 	  last		Last line of the screen (default).
@@ -5797,11 +5745,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 	alternative.
 	Normally 'autoindent' should also be on when using 'smartindent'.
 	An indent is automatically inserted:
-	- After a line ending in '{'.
+	- After a line ending in "{".
 	- After a line starting with a keyword from 'cinwords'.
-	- Before a line starting with '}' (only with the "O" command).
+	- Before a line starting with "}" (only with the "O" command).
 	When typing '}' as the first character in a new line, that line is
-	given the same indent as the matching '{'.
+	given the same indent as the matching "{".
 	When typing '#' as the first character in a new line, the indent for
 	that line is removed, the '#' is put in the first column.  The indent
 	is restored for the next line.  If you don't want this, use this
@@ -6053,6 +6001,52 @@ A jump table for the options with a short description can be found at |Q_op|.
 	In case of buffer changing commands the cursor is placed at the column
 	where it was the last time the buffer was edited.
 
+				*'statuscolumn'* *'stc'*
+'statuscolumn' 'stc'	string	(default: empty)
+			local to window
+	EXPERIMENTAL
+	When non-empty, this option determines the content of the area to the
+	side of a window, normally containing the fold, sign and number columns.
+	The format of this option is like that of 'statusline'.
+
+	Some of the items from the 'statusline' format are different for
+	'statuscolumn':
+
+	%l	line number of currently drawn line
+	%r	relative line number of currently drawn line
+	%s	sign column for currently drawn line
+	%C	fold column for currently drawn line
+
+	To draw the sign and fold columns, they must be included in
+	'statuscolumn'.
+
+	The |v:lnum|   variable holds the line number to be drawn.
+	The |v:relnum| variable holds the relative line number to be drawn.
+	The |v:wrap|   variable holds true for the wrapped part of a line.
+
+	Examples: >vim
+		" Relative number with bar separator and click handlers:
+		:set statuscolumn=%@SignCb@%s%=%T%@NumCb@%r│%T
+
+		" Right aligned relative cursor line number:
+		:let &stc='%=%{v:relnum?v:relnum:v:lnum} '
+
+		" Line numbers in hexadecimal for non wrapped part of lines:
+		:let &stc='%=%{v:wrap?"":printf("%x",v:lnum)} '
+
+		" Human readable line numbers with thousands separator:
+		:let &stc='%{substitute(v:lnum,"\\d\\zs\\ze\\'
+			   . '%(\\d\\d\\d\\)\\+$",",","g")}'
+
+		" Both relative and absolute line numbers with different
+		" highlighting for odd and even relative numbers:
+		:let &stc='%#NonText#%{&nu?v:lnum:""}' .
+		 '%=%{&rnu&&(v:lnum%2)?"\ ".v:relnum:""}' .
+		 '%#LineNr#%{&rnu&&!(v:lnum%2)?"\ ".v:relnum:""}'
+
+<	WARNING: this expression is evaluated for each screen line so defining
+	an expensive expression can negatively affect render performance.
+
 			   *'statusline'* *'stl'* *E540* *E542*
 'statusline' 'stl'	string	(default empty)
 			global or local to window |global-local|
@@ -6077,6 +6071,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 	When there is error while evaluating the option then it will be made
 	empty to avoid further errors.  Otherwise screen updating would loop.
+	When the result contains unprintable characters the result is
+	unpredictable.
 
 	Note that the only effect of 'ruler' when this option is set (and
 	'laststatus' is 2 or 3) is controlling the output of |CTRL-G|.
@@ -6084,12 +6080,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	field	    meaning ~
 	-	    Left justify the item.  The default is right justified
 		    when minwid is larger than the length of the item.
-	0	    Leading zeroes in numeric items.  Overridden by '-'.
-	minwid	    Minimum width of the item, padding as set by '-' & '0'.
+	0	    Leading zeroes in numeric items.  Overridden by "-".
+	minwid	    Minimum width of the item, padding as set by "-" & "0".
 		    Value must be 50 or less.
-	maxwid	    Maximum width of the item.  Truncation occurs with a '<'
+	maxwid	    Maximum width of the item.  Truncation occurs with a "<"
 		    on the left for text items.  Numeric items will be
-		    shifted down to maxwid-2 digits followed by '>'number
+		    shifted down to maxwid-2 digits followed by ">"number
 		    where number is the amount of missing digits, much like
 		    an exponential notation.
 	item	    A one letter code as described below.
@@ -6125,7 +6121,6 @@ A jump table for the options with a short description can be found at |Q_op|.
 	o N   Byte number in file of byte under cursor, first byte is 1.
 	      Mnemonic: Offset from start of file (with one added)
 	O N   As above, in hexadecimal.
-	N N   Printer page number.  (Only works in the 'printheader' option.)
 	l N   Line number.
 	L N   Number of lines in buffer.
 	c N   Column number (byte index).
@@ -6138,22 +6133,22 @@ A jump table for the options with a short description can be found at |Q_op|.
 	S S   'showcmd' content, see 'showcmdloc'.
 	a S   Argument list status as in default title.  ({current} of {max})
 	      Empty if the argument file count is zero or one.
-	{ NF  Evaluate expression between '%{' and '}' and substitute result.
-	      Note that there is no '%' before the closing '}'.  The
-	      expression cannot contain a '}' character, call a function to
+	{ NF  Evaluate expression between "%{" and "}" and substitute result.
+	      Note that there is no "%" before the closing "}".  The
+	      expression cannot contain a "}" character, call a function to
 	      work around that.  See |stl-%{| below.
-	{% -  This is almost same as { except the result of the expression is
+	`{%` -  This is almost same as "{" except the result of the expression is
 	      re-evaluated as a statusline format string.  Thus if the
-	      return value of expr contains % items they will get expanded.
-	      The expression can contain the } character, the end of
-	      expression is denoted by %}.
+	      return value of expr contains "%" items they will get expanded.
+	      The expression can contain the "}" character, the end of
+	      expression is denoted by "%}".
 	      For example: >
 		func! Stl_filename() abort
 		    return "%t"
 		endfunc
 <	        `stl=%{Stl_filename()}`   results in `"%t"`
 	        `stl=%{%Stl_filename()%}` results in `"Name of current file"`
-	%} -  End of `{%` expression
+	%} -  End of "{%" expression
 	( -   Start of item group.  Can be used for setting the width and
 	      alignment of a section.  Must be followed by %) somewhere.
 	) -   End of item group.  No width fields allowed.
@@ -6406,7 +6401,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	the |:retab| command, and the 'softtabstop' option.
 
 	Note: Setting 'tabstop' to any other value than 8 can make your file
-	appear wrong in many places, e.g., when printing it.
+	appear wrong in many places.
 	The value must be more than 0 and less than 10000.
 
 	There are four main ways to use tabs in Vim:

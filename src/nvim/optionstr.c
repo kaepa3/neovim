@@ -23,7 +23,6 @@
 #include "nvim/fold.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/hardcopy.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
@@ -860,11 +859,6 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
         }
       }
     }
-  } else if (varp == &p_penc) {
-    // Canonize printencoding if VIM standard one
-    p = enc_canonize(p_penc);
-    xfree(p_penc);
-    p_penc = p;
   } else if (varp == &curbuf->b_p_keymap) {
     if (!valid_filetype(*varp)) {
       errmsg = e_invarg;
@@ -1040,7 +1034,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
           if (errbuf != NULL) {
             vim_snprintf(errbuf, errbuflen,
                          _("E526: Missing number after <%s>"),
-                         transchar_byte(*(s - 1)));
+                         transchar_byte((uint8_t)(*(s - 1))));
             errmsg = errbuf;
           } else {
             errmsg = "";
@@ -1071,10 +1065,6 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     }
   } else if (varp == &p_guicursor) {  // 'guicursor'
     errmsg = parse_shape_opt(SHAPE_CURSOR);
-  } else if (varp == &p_popt) {
-    errmsg = parse_printoptions();
-  } else if (varp == &p_pmfn) {
-    errmsg = parse_printmbfont();
   } else if (varp == &p_langmap) {  // 'langmap'
     langmap_set();
   } else if (varp == &p_breakat) {  // 'breakat'
@@ -1187,12 +1177,14 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
       redraw_titles();
     }
   } else if (gvarp == &p_stl || gvarp == &p_wbr || varp == &p_tal
-             || varp == &p_ruf) {
-    // 'statusline', 'winbar', 'tabline' or 'rulerformat'
+             || varp == &p_ruf || varp == &curwin->w_p_stc) {
+    // 'statusline', 'winbar', 'tabline', 'rulerformat' or 'statuscolumn'
     int wid;
 
     if (varp == &p_ruf) {       // reset ru_wid first
       ru_wid = 0;
+    } else if (varp == &curwin->w_p_stc) {
+      curwin->w_nrwidth_line_count = 0;
     }
     s = *varp;
     if (varp == &p_ruf && *s == '%') {
@@ -1207,7 +1199,8 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
         errmsg = check_stl_option(p_ruf);
       }
     } else if (varp == &p_ruf || s[0] != '%' || s[1] != '!') {
-      // check 'statusline', 'winbar' or 'tabline' only if it doesn't start with "%!"
+      // check 'statusline', 'winbar', 'tabline' or 'statuscolumn'
+      // only if it doesn't start with "%!"
       errmsg = check_stl_option(s);
     }
     if (varp == &p_ruf && errmsg == NULL) {
@@ -1492,8 +1485,7 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
              || gvarp == &p_fex
              || gvarp == &p_inex
              || gvarp == &p_inde
-             || varp == &p_pex
-             || varp == &p_pexpr) {  // '*expr' options
+             || varp == &p_pex) {  // '*expr' options
     char **p_opt = NULL;
 
     // If the option value starts with <SID> or s:, then replace that with
@@ -1519,9 +1511,6 @@ char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *errbuf
     }
     if (varp == &p_pex) {  // 'patchexpr'
       p_opt = &p_pex;
-    }
-    if (varp == &p_pexpr) {  // 'printexpr'
-      p_opt = &p_pexpr;
     }
 
     if (p_opt != NULL) {

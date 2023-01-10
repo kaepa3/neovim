@@ -648,7 +648,7 @@ wingotofile:
 
 static void cmd_with_count(char *cmd, char *bufp, size_t bufsize, int64_t Prenum)
 {
-  size_t len = STRLCPY(bufp, cmd, bufsize);
+  size_t len = xstrlcpy(bufp, cmd, bufsize);
 
   if (Prenum > 0 && len < bufsize) {
     vim_snprintf(bufp + len, bufsize - len, "%" PRId64, Prenum);
@@ -786,6 +786,12 @@ void win_set_minimal_style(win_T *wp)
     free_string_option(wp->w_p_cc);
     wp->w_p_cc = xstrdup("");
   }
+
+  // statuscolumn: cleared
+  if (wp->w_p_stc != NULL && *wp->w_p_stc != NUL) {
+    free_string_option(wp->w_p_stc);
+    wp->w_p_stc = xstrdup("");
+  }
 }
 
 void win_config_float(win_T *wp, FloatConfig fconfig)
@@ -798,6 +804,15 @@ void win_config_float(win_T *wp, FloatConfig fconfig)
     fconfig.row += curwin->w_wrow;
     fconfig.col += curwin->w_wcol;
     fconfig.window = curwin->handle;
+  } else if (fconfig.relative == kFloatRelativeMouse) {
+    int row = mouse_row, col = mouse_col, grid = mouse_grid;
+    win_T *mouse_win = mouse_find_win(&grid, &row, &col);
+    if (mouse_win != NULL) {
+      fconfig.relative = kFloatRelativeWindow;
+      fconfig.row += row;
+      fconfig.col += col;
+      fconfig.window = mouse_win->handle;
+    }
   }
 
   bool change_external = fconfig.external != wp->w_float_config.external;
@@ -4879,7 +4894,7 @@ void fix_current_dir(void)
   // New directory is either the local directory of the window, tab or NULL.
   char *new_dir = curwin->w_localdir ? curwin->w_localdir : curtab->tp_localdir;
   char cwd[MAXPATHL];
-  if (os_dirname((char_u *)cwd, MAXPATHL) != OK) {
+  if (os_dirname(cwd, MAXPATHL) != OK) {
     cwd[0] = NUL;
   }
 
@@ -5093,6 +5108,9 @@ static void win_free(win_T *wp, tabpage_T *tp)
 
   stl_clear_click_defs(wp->w_winbar_click_defs, wp->w_winbar_click_defs_size);
   xfree(wp->w_winbar_click_defs);
+
+  stl_clear_click_defs(wp->w_statuscol_click_defs, wp->w_statuscol_click_defs_size);
+  xfree(wp->w_statuscol_click_defs);
 
   // Remove the window from the b_wininfo lists, it may happen that the
   // freed memory is re-used for another window.
@@ -5414,7 +5432,7 @@ static int check_window_scroll_resize(int *size_count, win_T **first_scroll_win,
   int tot_skipcol = 0;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    // Skip floating windows that do not have a snapshot (usually becuase they are newly-created),
+    // Skip floating windows that do not have a snapshot (usually because they are newly-created),
     // as unlike split windows, creating floating windows do not cause other windows to resize.
     if (wp->w_floating && wp->w_last_topline == 0) {
       wp->w_last_topline = wp->w_topline;
@@ -5765,8 +5783,8 @@ static void frame_setheight(frame_T *curfrp, int height)
     if (height > ROWS_AVAIL) {
       // If height is greater than the available space, try to create space for
       // the frame by reducing 'cmdheight' if possible, while making sure
-      // `cmdheight` doesn't go below 1.
-      height = (int)MIN((p_ch > 0 ? ROWS_AVAIL + (p_ch - 1) : ROWS_AVAIL), height);
+      // `cmdheight` doesn't go below 1 if it wasn't set to 0 explicitly.
+      height = (int)MIN(ROWS_AVAIL + p_ch - !p_ch_was_zero, height);
     }
     if (height > 0) {
       frame_new_height(curfrp, height, false, false);
@@ -6097,8 +6115,6 @@ void win_setminwidth(void)
 /// Status line of dragwin is dragged "offset" lines down (negative is up).
 void win_drag_status_line(win_T *dragwin, int offset)
 {
-  static bool p_ch_was_zero = false;
-
   // If the user explicitly set 'cmdheight' to zero, then allow for dragging
   // the status line making it zero again.
   if (p_ch == 0) {

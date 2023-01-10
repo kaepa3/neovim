@@ -324,7 +324,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
   }
 
   p = skipwhite(p);
-  delim = (delim_optional && vim_isIDc(*p)) ? ' ' : *p++;
+  delim = (delim_optional && vim_isIDc((uint8_t)(*p))) ? ' ' : *p++;
   *search_delim = delim;
   end = skip_regexp_ex(p, delim, magic_isset(), NULL, NULL, &magic);
 
@@ -575,32 +575,34 @@ static int may_add_char_to_search(int firstc, int *c, incsearch_state_T *s)
 
 static void finish_incsearch_highlighting(int gotesc, incsearch_state_T *s, bool call_update_screen)
 {
-  if (s->did_incsearch) {
-    s->did_incsearch = false;
-    if (gotesc) {
+  if (!s->did_incsearch) {
+    return;
+  }
+
+  s->did_incsearch = false;
+  if (gotesc) {
+    curwin->w_cursor = s->save_cursor;
+  } else {
+    if (!equalpos(s->save_cursor, s->search_start)) {
+      // put the '" mark at the original position
       curwin->w_cursor = s->save_cursor;
-    } else {
-      if (!equalpos(s->save_cursor, s->search_start)) {
-        // put the '" mark at the original position
-        curwin->w_cursor = s->save_cursor;
-        setpcmark();
-      }
-      curwin->w_cursor = s->search_start;  // -V519
+      setpcmark();
     }
-    restore_viewstate(curwin, &s->old_viewstate);
-    highlight_match = false;
+    curwin->w_cursor = s->search_start;  // -V519
+  }
+  restore_viewstate(curwin, &s->old_viewstate);
+  highlight_match = false;
 
-    // by default search all lines
-    search_first_line = 0;
-    search_last_line = MAXLNUM;
+  // by default search all lines
+  search_first_line = 0;
+  search_last_line = MAXLNUM;
 
-    magic_overruled = s->magic_overruled_save;
+  magic_overruled = s->magic_overruled_save;
 
-    validate_cursor();          // needed for TAB
-    redraw_all_later(UPD_SOME_VALID);
-    if (call_update_screen) {
-      update_screen();
-    }
+  validate_cursor();          // needed for TAB
+  redraw_all_later(UPD_SOME_VALID);
+  if (call_update_screen) {
+    update_screen();
   }
 }
 
@@ -1460,7 +1462,7 @@ static int command_line_erase_chars(CommandLineState *s)
 
   if (s->c == K_DEL) {
     ccline.cmdpos += mb_off_next((char_u *)ccline.cmdbuff,
-                                 (char_u *)ccline.cmdbuff + ccline.cmdpos);
+                                 ccline.cmdbuff + ccline.cmdpos);
   }
 
   if (ccline.cmdpos > 0) {
@@ -2097,7 +2099,7 @@ static int command_line_handle_key(CommandLineState *s)
   if (IS_SPECIAL(s->c) || mod_mask != 0) {
     put_on_cmdline(get_special_key_name(s->c, mod_mask), -1, true);
   } else {
-    int j = utf_char2bytes(s->c, (char *)IObuff);
+    int j = utf_char2bytes(s->c, IObuff);
     IObuff[j] = NUL;                // exclude composing chars
     put_on_cmdline((char_u *)IObuff, j, true);
   }
@@ -3230,7 +3232,7 @@ static void draw_cmdline(int start, int len)
     for (int i = start; i < start + len; i += mb_l) {
       char_u *p = (char_u *)ccline.cmdbuff + i;
       int u8cc[MAX_MCO];
-      int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
+      int u8c = utfc_ptr2char_len((char *)p, u8cc, start + len - i);
       mb_l = utfc_ptr2len_len((char *)p, start + len - i);
       if (ARABIC_CHAR(u8c)) {
         do_arabicshape = true;
@@ -3266,7 +3268,7 @@ static void draw_cmdline(int start, int len)
     for (int i = start; i < start + len; i += mb_l) {
       char_u *p = (char_u *)ccline.cmdbuff + i;
       int u8cc[MAX_MCO];
-      int u8c = utfc_ptr2char_len(p, u8cc, start + len - i);
+      int u8c = utfc_ptr2char_len((char *)p, u8cc, start + len - i);
       mb_l = utfc_ptr2len_len((char *)p, start + len - i);
       if (ARABIC_CHAR(u8c)) {
         int pc;
@@ -3290,7 +3292,7 @@ static void draw_cmdline(int start, int len)
           } else {
             int pcc[MAX_MCO];
 
-            pc = utfc_ptr2char_len(p + mb_l, pcc, start + len - i - mb_l);
+            pc = utfc_ptr2char_len((char *)p + mb_l, pcc, start + len - i - mb_l);
             pc1 = pcc[0];
           }
           nc = prev_c;
@@ -3841,7 +3843,7 @@ void compute_cmdrow(void)
     cmdline_row = wp->w_winrow + wp->w_height
                   + wp->w_hsep_height + wp->w_status_height + global_stl_height();
   }
-  if (cmdline_row == Rows) {
+  if (cmdline_row == Rows && p_ch > 0) {
     cmdline_row--;
   }
   lines_left = cmdline_row;
@@ -3954,7 +3956,7 @@ char *vim_strsave_fnameescape(const char *const fname, const int what)
   // ":buffer" command.
   for (const char *p = what == VSE_BUFFER ? BUFFER_ESC_CHARS : PATH_ESC_CHARS;
        *p != NUL; p++) {
-    if ((*p != '[' && *p != '{' && *p != '!') || !vim_isfilec(*p)) {
+    if ((*p != '[' && *p != '{' && *p != '!') || !vim_isfilec((uint8_t)(*p))) {
       buf[j++] = *p;
     }
   }
@@ -4081,12 +4083,14 @@ static char *get_cmdline_completion(void)
   }
   CmdlineInfo *p = get_ccline_ptr();
 
-  if (p != NULL && p->xpc != NULL) {
-    set_expand_context(p->xpc);
-    char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
-    if (cmd_compl != NULL) {
-      return xstrdup(cmd_compl);
-    }
+  if (p == NULL || p->xpc == NULL) {
+    return NULL;
+  }
+
+  set_expand_context(p->xpc);
+  char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
+  if (cmd_compl != NULL) {
+    return xstrdup(cmd_compl);
   }
 
   return NULL;

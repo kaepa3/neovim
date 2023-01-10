@@ -491,10 +491,10 @@ int smsg(const char *s, ...)
   va_list arglist;
 
   va_start(arglist, s);
-  vim_vsnprintf((char *)IObuff, IOSIZE, s, arglist);
+  vim_vsnprintf(IObuff, IOSIZE, s, arglist);
   va_end(arglist);
 
-  return msg((char *)IObuff);
+  return msg(IObuff);
 }
 
 int smsg_attr(int attr, const char *s, ...)
@@ -503,7 +503,7 @@ int smsg_attr(int attr, const char *s, ...)
   va_list arglist;
 
   va_start(arglist, s);
-  vim_vsnprintf((char *)IObuff, IOSIZE, s, arglist);
+  vim_vsnprintf(IObuff, IOSIZE, s, arglist);
   va_end(arglist);
   return msg_attr((const char *)IObuff, attr);
 }
@@ -514,7 +514,7 @@ int smsg_attr_keep(int attr, const char *s, ...)
   va_list arglist;
 
   va_start(arglist, s);
-  vim_vsnprintf((char *)IObuff, IOSIZE, s, arglist);
+  vim_vsnprintf(IObuff, IOSIZE, s, arglist);
   va_end(arglist);
   return msg_attr_keep((const char *)IObuff, attr, true, false);
 }
@@ -881,10 +881,10 @@ void msg_schedule_semsg(const char *const fmt, ...)
 {
   va_list ap;
   va_start(ap, fmt);
-  vim_vsnprintf((char *)IObuff, IOSIZE, fmt, ap);
+  vim_vsnprintf(IObuff, IOSIZE, fmt, ap);
   va_end(ap);
 
-  char *s = xstrdup((char *)IObuff);
+  char *s = xstrdup(IObuff);
   loop_schedule_deferred(&main_loop, event_create(msg_semsg_event, 1, s));
 }
 
@@ -1530,7 +1530,7 @@ char *msg_outtrans_one(char *p, int attr)
     msg_outtrans_len_attr(p, l, attr);
     return p + l;
   }
-  msg_puts_attr((const char *)transchar_byte(*p), attr);
+  msg_puts_attr((const char *)transchar_byte((uint8_t)(*p)), attr);
   return p + 1;
 }
 
@@ -3003,31 +3003,36 @@ static int do_more_prompt(int typed_char)
 }
 
 #if defined(MSWIN)
-void os_errmsg(char *str)
+/// Headless (no UI) error message handler.
+static void do_msg(char *str, bool errmsg)
 {
+  static bool did_err = false;
   assert(str != NULL);
   wchar_t *utf16str;
   int r = utf8_to_utf16(str, -1, &utf16str);
-  if (r != 0) {
+  if (r != 0 && !did_err) {
+    did_err = true;
     fprintf(stderr, "utf8_to_utf16 failed: %d", r);
-  } else {
-    fwprintf(stderr, L"%ls", utf16str);
+    ELOG("utf8_to_utf16 failed: %d", r);
+  } else if (r == 0) {
+    if (errmsg) {
+      fwprintf(stderr, L"%ls", utf16str);
+    } else {
+      wprintf(L"%ls", utf16str);
+    }
     xfree(utf16str);
   }
 }
 
-/// Give a message.  To be used when the UI is not initialized yet.
+void os_errmsg(char *str)
+{
+  do_msg(str, true);
+}
+
+/// Headless (no UI) message handler.
 void os_msg(char *str)
 {
-  assert(str != NULL);
-  wchar_t *utf16str;
-  int r = utf8_to_utf16(str, -1, &utf16str);
-  if (r != 0) {
-    fprintf(stderr, "utf8_to_utf16 failed: %d", r);
-  } else {
-    wprintf(L"%ls", utf16str);
-    xfree(utf16str);
-  }
+  do_msg(str, false);
 }
 #endif  // MSWIN
 
@@ -3442,8 +3447,8 @@ void give_warning(char *message, bool hl)
 
 void give_warning2(char *const message, char *const a1, bool hl)
 {
-  vim_snprintf((char *)IObuff, IOSIZE, message, a1);
-  give_warning((char *)IObuff, hl);
+  vim_snprintf(IObuff, IOSIZE, message, a1);
+  give_warning(IObuff, hl);
 }
 
 /// Advance msg cursor to column "col".

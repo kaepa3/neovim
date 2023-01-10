@@ -36,10 +36,8 @@ set(HEADER_GENERATOR ${GENERATOR_DIR}/gen_declarations.lua)
 set(GENERATED_INCLUDES_DIR ${PROJECT_BINARY_DIR}/include)
 set(GENERATED_API_DISPATCH ${GENERATED_DIR}/api/private/dispatch_wrappers.generated.h)
 set(GENERATED_FUNCS_METADATA ${GENERATED_DIR}/api/private/funcs_metadata.generated.h)
-set(GENERATED_UI_EVENTS ${GENERATED_DIR}/ui_events.generated.h)
 set(GENERATED_UI_EVENTS_CALL ${GENERATED_DIR}/ui_events_call.generated.h)
 set(GENERATED_UI_EVENTS_REMOTE ${GENERATED_DIR}/ui_events_remote.generated.h)
-set(GENERATED_UI_EVENTS_BRIDGE ${GENERATED_DIR}/ui_events_bridge.generated.h)
 set(GENERATED_UI_EVENTS_CLIENT ${GENERATED_DIR}/ui_events_client.generated.h)
 set(GENERATED_UI_EVENTS_METADATA ${GENERATED_DIR}/api/private/ui_events_metadata.generated.h)
 set(GENERATED_EX_CMDS_ENUM ${GENERATED_INCLUDES_DIR}/ex_cmds_enum.generated.h)
@@ -111,9 +109,6 @@ foreach(subdir
         viml
         viml/parser
        )
-  if(${subdir} MATCHES "tui" AND NOT FEAT_TUI)
-    continue()
-  endif()
 
   file(MAKE_DIRECTORY ${GENERATED_DIR}/${subdir})
   file(MAKE_DIRECTORY ${GENERATED_INCLUDES_DIR}/${subdir})
@@ -220,7 +215,6 @@ foreach(sfile ${NVIM_SOURCES}
               ${GENERATED_API_DISPATCH}
               "${GENERATED_UI_EVENTS_CALL}"
               "${GENERATED_UI_EVENTS_REMOTE}"
-              "${GENERATED_UI_EVENTS_BRIDGE}"
               "${GENERATED_KEYSETS}"
               "${GENERATED_UI_EVENTS_CLIENT}"
               )
@@ -315,18 +309,14 @@ list(APPEND NVIM_GENERATED_SOURCES
 )
 
 add_custom_command(
-  OUTPUT ${GENERATED_UI_EVENTS}
-         ${GENERATED_UI_EVENTS_CALL}
+  OUTPUT ${GENERATED_UI_EVENTS_CALL}
          ${GENERATED_UI_EVENTS_REMOTE}
-         ${GENERATED_UI_EVENTS_BRIDGE}
          ${GENERATED_UI_EVENTS_METADATA}
          ${GENERATED_UI_EVENTS_CLIENT}
   COMMAND ${LUA_PRG} ${API_UI_EVENTS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}
                      ${CMAKE_CURRENT_LIST_DIR}/api/ui_events.in.h
-                     ${GENERATED_UI_EVENTS}
                      ${GENERATED_UI_EVENTS_CALL}
                      ${GENERATED_UI_EVENTS_REMOTE}
-                     ${GENERATED_UI_EVENTS_BRIDGE}
                      ${GENERATED_UI_EVENTS_METADATA}
                      ${GENERATED_UI_EVENTS_CLIENT}
   DEPENDS
@@ -634,21 +624,11 @@ endif()
 
 if(CLANG_ASAN_UBSAN)
   message(STATUS "Enabling Clang address sanitizer and undefined behavior sanitizer for nvim.")
-  check_c_compiler_flag(-fno-sanitize-recover=all SANITIZE_RECOVER_ALL)
-  if(SANITIZE_RECOVER_ALL)
-    if(CI_BUILD)
-      # Try to recover from all sanitize issues so we get reports about all failures
-      set(SANITIZE_RECOVER -fsanitize-recover=all)     # Clang 3.6+
-    else()
-      set(SANITIZE_RECOVER -fno-sanitize-recover=all)  # Clang 3.6+
-    endif()
+  if(CI_BUILD)
+    # Try to recover from all sanitize issues so we get reports about all failures
+    set(SANITIZE_RECOVER -fsanitize-recover=all)
   else()
-    if(CI_BUILD)
-      # Try to recover from all sanitize issues so we get reports about all failures
-      set(SANITIZE_RECOVER -fsanitize-recover)         # Clang 3.5-
-    else()
-      set(SANITIZE_RECOVER -fno-sanitize-recover)      # Clang 3.5-
-    endif()
+    set(SANITIZE_RECOVER -fno-sanitize-recover=all)
   endif()
   set_property(TARGET nvim APPEND PROPERTY COMPILE_OPTIONS ${SANITIZE_RECOVER} -fno-omit-frame-pointer -fno-optimize-sibling-calls -fsanitize=address -fsanitize=undefined -fsanitize-blacklist=${PROJECT_SOURCE_DIR}/src/.asan-blacklist)
   set_property(TARGET nvim APPEND_STRING PROPERTY LINK_FLAGS "-fsanitize=address -fsanitize=undefined ")

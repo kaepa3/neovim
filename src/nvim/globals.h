@@ -328,9 +328,6 @@ EXTERN sctx_T current_sctx INIT(= { 0, 0, 0 });
 // ID of the current channel making a client API call
 EXTERN uint64_t current_channel_id INIT(= 0);
 
-// ID of the client channel. Used by ui client
-EXTERN uint64_t ui_client_channel_id INIT(= 0);
-
 EXTERN bool did_source_packages INIT(= false);
 
 // Scope information for the code that indirectly triggered the current
@@ -494,9 +491,9 @@ EXTERN bool exiting INIT(= false);
 // internal value of v:dying
 EXTERN int v_dying INIT(= 0);
 // is stdin a terminal?
-EXTERN int stdin_isatty INIT(= true);
+EXTERN bool stdin_isatty INIT(= true);
 // is stdout a terminal?
-EXTERN int stdout_isatty INIT(= true);
+EXTERN bool stdout_isatty INIT(= true);
 /// filedesc set by embedder for reading first buffer like `cmd | nvim -`
 EXTERN int stdin_fd INIT(= -1);
 
@@ -518,7 +515,7 @@ EXTERN int allbuf_lock INIT(= 0);
 /// not allowed then.
 EXTERN int sandbox INIT(= 0);
 
-/// Batch-mode: "-es" or "-Es" commandline argument was given.
+/// Batch-mode: "-es", "-Es", "-l" commandline argument was given.
 EXTERN int silent_mode INIT(= false);
 
 /// Start position of active Visual selection.
@@ -844,9 +841,6 @@ EXTERN int stl_syntax INIT(= 0);
 // don't use 'hlsearch' temporarily
 EXTERN bool no_hlsearch INIT(= false);
 
-// Page number used for %N in 'pageheader' and 'guitablabel'.
-EXTERN linenr_T printer_page_num;
-
 EXTERN bool typebuf_was_filled INIT(= false);     // received text from client
                                                   // or from feedkeys()
 
@@ -1048,7 +1042,7 @@ EXTERN int vim_ignored;
 
 // stdio is an RPC channel (--embed).
 EXTERN bool embedded_mode INIT(= false);
-// Do not start a UI nor read/write to stdio (unless embedding).
+// Do not start UI (--headless, -l) nor read/write to stdio (unless embedding).
 EXTERN bool headless_mode INIT(= false);
 
 // uncrustify:on
@@ -1087,8 +1081,6 @@ typedef enum {
 
 // Only filled for Win32.
 EXTERN char windowsVersion[20] INIT(= { 0 });
-
-EXTERN int exit_need_delay INIT(= 0);
 
 /// While executing a regexp and set to OPTION_MAGIC_ON or OPTION_MAGIC_OFF this
 /// overrules p_magic.  Otherwise set to OPTION_MAGIC_NOT_SET.

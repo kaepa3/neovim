@@ -34,13 +34,42 @@ The following changes may require adaptations in user config or plugins.
 
   See https://github.com/neovim/neovim/pull/20545 for more information.
 
+• `:hardcopy` is now removed (see |hardcopy| and |nvim-features-removed|):
+  - Commands removed:
+    - `:hardcopy`
+  - Options removed:
+    - `printdevice`
+    - `printencoding`
+    - `printexpr`
+    - `printfont`
+    - `printheader`
+    - `printmbcharset`
+
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
 The following new APIs or features were added.
 
+• |nvim_open_win()| now accepts a relative `mouse` option to open a floating win
+  relative to the mouse. Note that the mouse doesn't update frequently without
+  setting `vim.o.mousemoveevent = true`
+
+• EditorConfig support is now builtin. This is enabled by default and happens
+  automatically. To disable it, users should add >lua
+
+    vim.g.editorconfig = false
+<
+  (or the Vimscript equivalent) to their |config| file.
+
+• Run Lua scripts from your shell using |-l|. >
+      nvim -l foo.lua --arg1 --arg2
+<  Also works with stdin: >
+      echo "print(42)" | nvim -l -
+
+• Added a |vim.lsp.codelens.clear()| function to clear codelenses.
+
 • |vim.inspect_pos()|, |vim.show_pos()| and |:Inspect| allow a user to get or show items
-  at a given buffer postion. Currently this includes treesitter captures,
+  at a given buffer position. Currently this includes treesitter captures,
   semantic tokens, syntax groups and extmarks.
 
 • Added support for semantic token highlighting to the LSP client. This
@@ -93,6 +122,11 @@ The following new APIs or features were added.
 
 • |'splitkeep'| option to control the scroll behavior of horizontal splits.
 
+• |'statuscolumn'| option to customize the area to the side of a window,
+  normally containing the fold, sign and number columns. This new option follows
+  the 'statusline' syntax and can be used to transform the line numbers, create
+  mouse click callbacks for |signs|, introduce a custom margin or separator etc.
+
 • |nvim_select_popupmenu_item()| now supports |cmdline-completion| popup menu.
 
 • |'diffopt'| now includes a `linematch` option to enable a second-stage diff
@@ -101,6 +135,11 @@ The following new APIs or features were added.
 
   See https://github.com/neovim/neovim/pull/14537.
 
+• |--remote-ui| option was added to connect to a remote instance and display
+  in it in a |TUI| in the local terminal. This can be used run a headless nvim
+  instance in the background and display its UI on demand, which previously
+  only was possible using an external UI implementation.
+
 ==============================================================================
 CHANGED FEATURES                                                 *news-changes*
 
@@ -108,6 +147,14 @@ The following changes to existing APIs or features add new behavior.
 
 • 'exrc' now supports `.nvim.lua` file.
 • 'exrc' is no longer marked deprecated.
+
+• The |TUI| is changed to run in a separate process (previously, a separate
+  thread was used). This is not supposed to be a visible change to the user,
+  but might be the cause of subtle changes of behavior and bugs.
+
+  Previously, the TUI could be disabled as a build time feature (+tui/-tui),
+  resulting in a nvim binary which only could be run headless or embedded
+  in an external process. As of this version, TUI is always available.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*

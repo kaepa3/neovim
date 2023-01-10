@@ -2676,19 +2676,20 @@ static int arg_augroup_get(char **argp)
 {
   char *p;
   char *arg = *argp;
-  int group = AUGROUP_ALL;
 
   for (p = arg; *p && !ascii_iswhite(*p) && *p != '|'; p++) {}
-  if (p > arg) {
-    char *group_name = xstrnsave(arg, (size_t)(p - arg));
-    group = augroup_find(group_name);
-    if (group == AUGROUP_ERROR) {
-      group = AUGROUP_ALL;  // no match, use all groups
-    } else {
-      *argp = skipwhite(p);  // match, skip over group name
-    }
-    xfree(group_name);
+  if (p <= arg) {
+    return AUGROUP_ALL;
   }
+
+  char *group_name = xstrnsave(arg, (size_t)(p - arg));
+  int group = augroup_find(group_name);
+  if (group == AUGROUP_ERROR) {
+    group = AUGROUP_ALL;  // no match, use all groups
+  } else {
+    *argp = skipwhite(p);  // match, skip over group name
+  }
+  xfree(group_name);
   return group;
 }
 
@@ -2732,22 +2733,7 @@ void do_autocmd_uienter(uint64_t chanid, bool attached)
 
 // FocusGained
 
-static void focusgained_event(void **argv)
-{
-  bool *gainedp = argv[0];
-  do_autocmd_focusgained(*gainedp);
-  xfree(gainedp);
-}
-
-void autocmd_schedule_focusgained(bool gained)
-{
-  bool *gainedp = xmalloc(sizeof(*gainedp));
-  *gainedp = gained;
-  loop_schedule_deferred(&main_loop,
-                         event_create(focusgained_event, 1, gainedp));
-}
-
-static void do_autocmd_focusgained(bool gained)
+void do_autocmd_focusgained(bool gained)
 {
   static bool recursive = false;
   static Timestamp last_time = (time_t)0;
