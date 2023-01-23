@@ -38,7 +38,6 @@
 #include "nvim/path.h"
 #include "nvim/pos.h"
 #include "nvim/runtime.h"
-#include "nvim/types.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
@@ -964,7 +963,7 @@ void ex_mkrc(exarg_T *eap)
     vim_mkdir_emsg((const char *)p_vdir, 0755);
   }
 
-  fd = open_exfile((char_u *)fname, eap->forceit, WRITEBIN);
+  fd = open_exfile(fname, eap->forceit, WRITEBIN);
   if (fd != NULL) {
     if (eap->cmdidx == CMD_mkview) {
       flagp = &vop_flags;
