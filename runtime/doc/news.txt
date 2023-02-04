@@ -45,6 +45,8 @@ The following changes may require adaptations in user config or plugins.
     - `printheader`
     - `printmbcharset`
 
+• libiconv is now a required build dependency.
+
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
@@ -146,6 +148,8 @@ The following new APIs or features were added.
 • Several improvements were made to make the code generation scripts more
   deterministic, and a `LUA_GEN_PRG` build parameter has been introduced to
   allow for a workaround for some remaining reproducibility problems.
+
+• |:highlight| now supports an additional attribute "altfont".
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changes*

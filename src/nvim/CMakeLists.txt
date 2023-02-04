@@ -22,24 +22,19 @@ find_package(TreeSitter REQUIRED)
 target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${TreeSitter_INCLUDE_DIRS})
 target_link_libraries(main_lib INTERFACE ${TreeSitter_LIBRARIES})
 
-find_package(UNIBILIUM 2.0 REQUIRED)
-target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${UNIBILIUM_INCLUDE_DIRS})
-target_link_libraries(main_lib INTERFACE ${UNIBILIUM_LIBRARIES})
+find_package(unibilium 2.0 REQUIRED)
+target_link_libraries(main_lib INTERFACE unibilium)
 
 find_package(LibTermkey 0.22 REQUIRED)
 target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LIBTERMKEY_INCLUDE_DIRS})
 target_link_libraries(main_lib INTERFACE ${LIBTERMKEY_LIBRARIES})
 
-find_package(LIBVTERM 0.3 REQUIRED)
-target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LIBVTERM_INCLUDE_DIRS})
-target_link_libraries(main_lib INTERFACE ${LIBVTERM_LIBRARIES})
+find_package(libvterm 0.3 REQUIRED)
+target_link_libraries(main_lib INTERFACE libvterm)
 
-if(Iconv_FOUND)
-  target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${Iconv_INCLUDE_DIRS})
-  if(Iconv_LIBRARIES)
-    target_link_libraries(main_lib INTERFACE ${Iconv_LIBRARIES})
-  endif()
-endif()
+find_package(Iconv REQUIRED)
+target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${Iconv_INCLUDE_DIRS})
+target_link_libraries(main_lib INTERFACE ${Iconv_LIBRARIES})
 
 option(ENABLE_LIBINTL "enable libintl" ON)
 if(ENABLE_LIBINTL)
@@ -57,19 +52,13 @@ if(PREFER_LUA)
   find_package(Lua 5.1 EXACT REQUIRED)
   target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LUA_INCLUDE_DIR})
   target_link_libraries(main_lib INTERFACE ${LUA_LIBRARIES})
-  # Passive (not REQUIRED): if LUAJIT_FOUND is not set, nvim-test is skipped.
+  # Passive (not REQUIRED): if LUAJIT_FOUND is not set, fixtures for unittests is skipped.
   find_package(LuaJit)
 else()
   find_package(LuaJit REQUIRED)
   target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LUAJIT_INCLUDE_DIRS})
   target_link_libraries(main_lib INTERFACE ${LUAJIT_LIBRARIES})
 endif()
-
-# Determine platform's threading library. Set CMAKE_THREAD_PREFER_PTHREAD
-# explicitly to indicate a strong preference for pthread.
-set(CMAKE_THREAD_PREFER_PTHREAD ON)
-find_package(Threads REQUIRED)
-target_link_libraries(main_lib INTERFACE ${CMAKE_THREAD_LIBS_INIT})
 
 option(ENABLE_IWYU "Run include-what-you-use with the compiler." OFF)
 if(ENABLE_IWYU)
@@ -95,6 +84,8 @@ if(MSVC)
   # Disable warnings that give too many false positives.
   target_compile_options(main_lib INTERFACE -wd4311 -wd4146)
   target_compile_definitions(main_lib INTERFACE _CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+
+  target_sources(main_lib INTERFACE ${CMAKE_CURRENT_LIST_DIR}/os/nvim.manifest)
 else()
   target_compile_options(main_lib INTERFACE -Wall -Wextra -pedantic -Wno-unused-parameter
     -Wstrict-prototypes -std=gnu99 -Wshadow -Wconversion
@@ -182,24 +173,6 @@ if(CI_BUILD)
   endif()
 endif()
 
-list(APPEND CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
-list(APPEND CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
-check_c_source_compiles("
-#include <unibilium.h>
-
-int
-main(void)
-{
-  unibi_str_from_var(unibi_var_from_str(\"\"));
-  return unibi_num_from_var(unibi_var_from_num(0));
-}
-" UNIBI_HAS_VAR_FROM)
-list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${UNIBILIUM_INCLUDE_DIRS}")
-list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${UNIBILIUM_LIBRARIES}")
-if(UNIBI_HAS_VAR_FROM)
-  target_compile_definitions(main_lib INTERFACE NVIM_UNIBI_HAS_VAR_FROM)
-endif()
-
 list(APPEND CMAKE_REQUIRED_INCLUDES "${MSGPACK_INCLUDE_DIRS}")
 check_c_source_compiles("
 #include <msgpack.h>
@@ -245,34 +218,6 @@ if(TS_HAS_SET_ALLOCATOR)
 endif()
 list(REMOVE_ITEM CMAKE_REQUIRED_INCLUDES "${TreeSitter_INCLUDE_DIRS}")
 list(REMOVE_ITEM CMAKE_REQUIRED_LIBRARIES "${TreeSitter_LIBRARIES}")
-
-# Include <string.h> because some toolchains define _FORTIFY_SOURCE=2 in
-# internal header files, which should in turn be #included by <string.h>.
-check_c_source_compiles("
-#include <string.h>
-
-#if defined(_FORTIFY_SOURCE) && _FORTIFY_SOURCE > 1
-#error \"_FORTIFY_SOURCE > 1\"
-#endif
-int
-main(void)
-{
-  return 0;
-}
-" HAS_ACCEPTABLE_FORTIFY)
-
-if(NOT HAS_ACCEPTABLE_FORTIFY)
-  message(STATUS "Unsupported _FORTIFY_SOURCE found, forcing _FORTIFY_SOURCE=1")
-  # Extract possible prefix to _FORTIFY_SOURCE (e.g. -Wp,-D_FORTIFY_SOURCE).
-  string(REGEX MATCH "[^\ ]+-D_FORTIFY_SOURCE" _FORTIFY_SOURCE_PREFIX "${CMAKE_C_FLAGS}")
-  string(REPLACE "-D_FORTIFY_SOURCE" "" _FORTIFY_SOURCE_PREFIX "${_FORTIFY_SOURCE_PREFIX}" )
-  if(NOT _FORTIFY_SOURCE_PREFIX STREQUAL "")
-    message(STATUS "Detected _FORTIFY_SOURCE Prefix=${_FORTIFY_SOURCE_PREFIX}")
-  endif()
-  # -U in add_definitions doesn't end up in the correct spot, so we add it to
-  # the flags variable instead.
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${_FORTIFY_SOURCE_PREFIX}-U_FORTIFY_SOURCE ${_FORTIFY_SOURCE_PREFIX}-D_FORTIFY_SOURCE=1")
-endif()
 
 target_compile_definitions(main_lib INTERFACE INCLUDE_GENERATED_DECLARATIONS)
 
@@ -467,7 +412,15 @@ else()
     ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion -Wno-missing-noreturn -Wno-missing-format-attribute -Wno-double-promotion -Wno-strict-prototypes")
 endif()
 
-if(NOT "${MIN_LOG_LEVEL}" MATCHES "^$")
+# Log level (MIN_LOG_LEVEL in log.h)
+if("${MIN_LOG_LEVEL}" MATCHES "^$")
+  # Minimize logging for release-type builds.
+  target_compile_definitions(main_lib INTERFACE MIN_LOG_LEVEL=$<IF:$<CONFIG:Debug>,1,3>)
+else()
+  if(NOT MIN_LOG_LEVEL MATCHES "^[0-3]$")
+    message(FATAL_ERROR "invalid MIN_LOG_LEVEL: " ${MIN_LOG_LEVEL})
+  endif()
+  message(STATUS "MIN_LOG_LEVEL=${MIN_LOG_LEVEL}")
   target_compile_definitions(main_lib INTERFACE MIN_LOG_LEVEL=${MIN_LOG_LEVEL})
 endif()
 
@@ -490,10 +443,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_OSX_SYSROOT)
   list(APPEND gen_cflags "-isysroot")
   list(APPEND gen_cflags "${CMAKE_OSX_SYSROOT}")
 endif()
-string(TOUPPER "${CMAKE_BUILD_TYPE}" build_type)
-separate_arguments(C_FLAGS_ARRAY UNIX_COMMAND ${CMAKE_C_FLAGS})
-separate_arguments(C_FLAGS_${build_type}_ARRAY UNIX_COMMAND ${CMAKE_C_FLAGS_${build_type}})
-set(gen_cflags ${gen_cflags} ${C_FLAGS_${build_type}_ARRAY} ${C_FLAGS_ARRAY})
+set(gen_cflags ${gen_cflags} -O2)
 
 set(NVIM_VERSION_GIT_H ${PROJECT_BINARY_DIR}/cmake.config/auto/versiondef_git.h)
 add_custom_target(update_version_stamp
@@ -691,8 +641,6 @@ foreach(hfile ${NVIM_GENERATED_FOR_HEADERS})
   endif()
 endforeach()
 
-# Our dependencies come first.
-
 if (CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
   target_link_libraries(main_lib INTERFACE pthread c++abi)
 endif()
@@ -706,6 +654,14 @@ if(UNIX)
   if (NOT CMAKE_SYSTEM_NAME STREQUAL "SunOS")
     target_link_libraries(main_lib INTERFACE util)
   endif()
+endif()
+
+if(NOT LUAJIT_FOUND)
+  message(STATUS "luajit not found, skipping unit tests")
+else()
+  glob_wrapper(UNIT_TEST_FIXTURES ${PROJECT_SOURCE_DIR}/test/unit/fixtures/*.c)
+  target_sources(nvim PRIVATE $<$<CONFIG:Debug>:${UNIT_TEST_FIXTURES}>)
+  target_compile_definitions(nvim PRIVATE $<$<CONFIG:Debug>:UNIT_TESTING>)
 endif()
 
 target_sources(nvim PRIVATE ${NVIM_GENERATED_FOR_SOURCES} ${NVIM_GENERATED_FOR_HEADERS}
@@ -730,8 +686,11 @@ endif()
 if(ENABLE_LTO)
   include(CheckIPOSupported)
   check_ipo_supported(RESULT IPO_SUPPORTED)
-  if(IPO_SUPPORTED AND (NOT CMAKE_BUILD_TYPE MATCHES Debug))
-    set_target_properties(nvim PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+  if(IPO_SUPPORTED)
+    set_target_properties(nvim PROPERTIES
+      INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+      INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE
+      INTERPROCEDURAL_OPTIMIZATION_MINSIZEREL TRUE)
   endif()
 endif()
 
@@ -866,27 +825,6 @@ set_target_properties(
 target_compile_definitions(libnvim PRIVATE MAKE_LIB)
 target_link_libraries(libnvim PRIVATE main_lib PUBLIC libuv_lib)
 
-if(NOT LUAJIT_FOUND)
-  message(STATUS "luajit not found, skipping nvim-test (unit tests) target")
-else()
-  glob_wrapper(UNIT_TEST_FIXTURES ${PROJECT_SOURCE_DIR}/test/unit/fixtures/*.c)
-  add_library(
-    nvim-test
-    MODULE
-    EXCLUDE_FROM_ALL
-    ${NVIM_SOURCES} ${NVIM_GENERATED_SOURCES}
-    ${NVIM_HEADERS} ${NVIM_GENERATED_FOR_SOURCES} ${NVIM_GENERATED_FOR_HEADERS}
-    ${EXTERNAL_SOURCES} ${EXTERNAL_HEADERS}
-    ${UNIT_TEST_FIXTURES}
-  )
-  target_link_libraries(nvim-test PRIVATE ${LUAJIT_LIBRARIES} main_lib PUBLIC libuv_lib)
-  if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-    target_link_libraries(nvim-test PRIVATE "-framework CoreServices")
-  endif()
-  target_include_directories(nvim-test PRIVATE ${LUAJIT_INCLUDE_DIRS})
-  target_compile_definitions(nvim-test PRIVATE UNIT_TESTING)
-endif()
-
 if(CLANG_ASAN_UBSAN)
   message(STATUS "Enabling Clang address sanitizer and undefined behavior sanitizer for nvim.")
   if(CI_BUILD)
@@ -1012,6 +950,3 @@ add_custom_target(generated-sources DEPENDS
 )
 
 add_subdirectory(po)
-
-include(GetCompileFlags)
-get_compile_flags(NVIM_VERSION_CFLAGS)

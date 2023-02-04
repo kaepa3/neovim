@@ -239,6 +239,14 @@ int main(int argc, char **argv)
 
   argv0 = argv[0];
 
+  if (argc > 1 && STRICMP(argv[1], "-ll") == 0) {
+    if (argc == 2) {
+      print_mainerr(err_arg_missing, argv[1]);
+      exit(1);
+    }
+    nlua_run_script(argv, argc, 3);
+  }
+
   char *fname = NULL;     // file name from command line
   mparm_T params;         // various parameters passed between
                           // main() and other functions.
@@ -803,6 +811,11 @@ void preserve_exit(void)
   really_exiting = true;
   // Ignore SIGHUP while we are already exiting. #9274
   signal_reject_deadly();
+
+  if (ui_client_channel_id) {
+    os_exit(1);
+  }
+
   os_errmsg(IObuff);
   os_errmsg("\n");
   ui_flush();
@@ -1723,7 +1736,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
 
   // When w_arg_idx is -1 remove the window (see create_windows()).
   if (curwin->w_arg_idx == -1) {
-    win_close(curwin, true);
+    win_close(curwin, true, false);
     advance = false;
   }
 
@@ -1735,7 +1748,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
     // When w_arg_idx is -1 remove the window (see create_windows()).
     if (curwin->w_arg_idx == -1) {
       arg_idx++;
-      win_close(curwin, true);
+      win_close(curwin, true, false);
       advance = false;
       continue;
     }
@@ -1782,7 +1795,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
           did_emsg = false;             // avoid hit-enter prompt
           getout(1);
         }
-        win_close(curwin, true);
+        win_close(curwin, true, false);
         advance = false;
       }
       if (arg_idx == GARGCOUNT - 1) {
@@ -2111,6 +2124,12 @@ static int execute_env(char *env)
 static void mainerr(const char *errstr, const char *str)
   FUNC_ATTR_NORETURN
 {
+  print_mainerr(errstr, str);
+  os_exit(1);
+}
+
+static void print_mainerr(const char *errstr, const char *str)
+{
   char *prgname = path_tail(argv0);
 
   signal_stop();              // kill us with CTRL-C here, if you like
@@ -2126,8 +2145,6 @@ static void mainerr(const char *errstr, const char *str)
   os_errmsg(_("\nMore info with \""));
   os_errmsg(prgname);
   os_errmsg(" -h\"\n");
-
-  os_exit(1);
 }
 
 /// Prints version information for "nvim -v" or "nvim --version".

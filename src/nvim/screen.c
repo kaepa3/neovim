@@ -295,52 +295,54 @@ bool get_keymap_str(win_T *wp, char *fmt, char *buf, int len)
     return false;
   }
 
-  {
-    buf_T *old_curbuf = curbuf;
-    win_T *old_curwin = curwin;
-    char *s;
+  buf_T *old_curbuf = curbuf;
+  win_T *old_curwin = curwin;
+  char *s;
 
-    curbuf = wp->w_buffer;
-    curwin = wp;
-    STRCPY(buf, "b:keymap_name");       // must be writable
-    emsg_skip++;
-    s = p = eval_to_string(buf, NULL, false);
-    emsg_skip--;
-    curbuf = old_curbuf;
-    curwin = old_curwin;
-    if (p == NULL || *p == NUL) {
-      if (wp->w_buffer->b_kmap_state & KEYMAP_LOADED) {
-        p = wp->w_buffer->b_p_keymap;
-      } else {
-        p = "lang";
-      }
+  curbuf = wp->w_buffer;
+  curwin = wp;
+  STRCPY(buf, "b:keymap_name");       // must be writable
+  emsg_skip++;
+  s = p = eval_to_string(buf, NULL, false);
+  emsg_skip--;
+  curbuf = old_curbuf;
+  curwin = old_curwin;
+  if (p == NULL || *p == NUL) {
+    if (wp->w_buffer->b_kmap_state & KEYMAP_LOADED) {
+      p = wp->w_buffer->b_p_keymap;
+    } else {
+      p = "lang";
     }
-    if (vim_snprintf(buf, (size_t)len, fmt, p) > len - 1) {
-      buf[0] = NUL;
-    }
-    xfree(s);
   }
+  if (vim_snprintf(buf, (size_t)len, fmt, p) > len - 1) {
+    buf[0] = NUL;
+  }
+  xfree(s);
   return buf[0] != NUL;
 }
 
 /// Prepare for 'hlsearch' highlighting.
 void start_search_hl(void)
 {
-  if (p_hls && !no_hlsearch) {
-    end_search_hl();  // just in case it wasn't called before
-    last_pat_prog(&screen_search_hl.rm);
-    // Set the time limit to 'redrawtime'.
-    screen_search_hl.tm = profile_setlimit(p_rdt);
+  if (!p_hls || no_hlsearch) {
+    return;
   }
+
+  end_search_hl();  // just in case it wasn't called before
+  last_pat_prog(&screen_search_hl.rm);
+  // Set the time limit to 'redrawtime'.
+  screen_search_hl.tm = profile_setlimit(p_rdt);
 }
 
 /// Clean up for 'hlsearch' highlighting.
 void end_search_hl(void)
 {
-  if (screen_search_hl.rm.regprog != NULL) {
-    vim_regfree(screen_search_hl.rm.regprog);
-    screen_search_hl.rm.regprog = NULL;
+  if (screen_search_hl.rm.regprog == NULL) {
+    return;
   }
+
+  vim_regfree(screen_search_hl.rm.regprog);
+  screen_search_hl.rm.regprog = NULL;
 }
 
 /// Check if there should be a delay.  Used before clearing or redrawing the
@@ -671,11 +673,13 @@ void clearmode(void)
 static void recording_mode(int attr)
 {
   msg_puts_attr(_("recording"), attr);
-  if (!shortmess(SHM_RECORDING)) {
-    char s[4];
-    snprintf(s, ARRAY_SIZE(s), " @%c", reg_recording);
-    msg_puts_attr(s, attr);
+  if (shortmess(SHM_RECORDING)) {
+    return;
   }
+
+  char s[4];
+  snprintf(s, ARRAY_SIZE(s), " @%c", reg_recording);
+  msg_puts_attr(s, attr);
 }
 
 void get_trans_bufname(buf_T *buf)
@@ -764,7 +768,6 @@ void comp_col(void)
 /// Otherwise it depends on 'numberwidth' and the line count.
 int number_width(win_T *wp)
 {
-  int n;
   linenr_T lnum;
 
   if (wp->w_p_rnu && !wp->w_p_nu) {
@@ -780,17 +783,13 @@ int number_width(win_T *wp)
   }
   wp->w_nrwidth_line_count = lnum;
 
-  // make best estimate for 'statuscolumn'
+  // reset for 'statuscolumn'
   if (*wp->w_p_stc != NUL) {
-    char buf[MAXPATHL];
-    wp->w_nrwidth_width = 0;
-    n = build_statuscol_str(wp, lnum, 0, 0, NUL, buf, NULL, NULL);
-    n = MAX(n, (wp->w_p_nu || wp->w_p_rnu) * (int)wp->w_p_nuw);
-    wp->w_nrwidth_width = MIN(n, MAX_NUMBERWIDTH);
+    wp->w_nrwidth_width = (wp->w_p_nu || wp->w_p_rnu) * (int)wp->w_p_nuw;
     return wp->w_nrwidth_width;
   }
 
-  n = 0;
+  int n = 0;
   do {
     lnum /= 10;
     n++;

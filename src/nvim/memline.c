@@ -117,7 +117,7 @@ struct pointer_block {
   uint16_t pb_id;               // ID for pointer block: PTR_ID
   uint16_t pb_count;            // number of pointers in this block
   uint16_t pb_count_max;        // maximum value for pb_count
-  PTR_EN pb_pointer[1];         // list of pointers to blocks (actually longer)
+  PTR_EN pb_pointer[];          // list of pointers to blocks
                                 // followed by empty space until end of page
 };
 
@@ -133,7 +133,7 @@ struct data_block {
   unsigned db_txt_end;          // byte just after data block
   // linenr_T db_line_count;
   long db_line_count;           // number of lines in this block
-  unsigned db_index[1];         // index for start of line (actually bigger)
+  unsigned db_index[];          // index for start of line
                                 // followed by empty space up to db_txt_start
                                 // followed by the text in the lines until
                                 // end of page
@@ -149,7 +149,7 @@ struct data_block {
 #define DB_INDEX_MASK   (~DB_MARKED)
 
 #define INDEX_SIZE  (sizeof(unsigned))      // size of one db_index entry
-#define HEADER_SIZE (sizeof(DATA_BL) - INDEX_SIZE)  // size of data block header
+#define HEADER_SIZE (offsetof(DATA_BL, db_index))  // size of data block header
 
 enum {
   B0_FNAME_SIZE_ORG = 900,      // what it was in older versions
@@ -2720,7 +2720,8 @@ static bhdr_T *ml_new_ptr(memfile_T *mfp)
   PTR_BL *pp = hp->bh_data;
   pp->pb_id = PTR_ID;
   pp->pb_count = 0;
-  pp->pb_count_max = (uint16_t)((mfp->mf_page_size - sizeof(PTR_BL)) / sizeof(PTR_EN) + 1);
+  pp->pb_count_max
+    = (uint16_t)((mfp->mf_page_size - offsetof(PTR_BL, pb_pointer)) / sizeof(PTR_EN));
 
   return hp;
 }

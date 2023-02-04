@@ -3006,7 +3006,7 @@ static void qf_jump_newwin(qf_info_T *qi, int dir, int errornr, int forceit, boo
 
   if (retval != OK) {
     if (opened_window) {
-      win_close(curwin, true);          // Close opened window
+      win_close(curwin, true, false);          // Close opened window
     }
     if (qf_ptr != NULL && qf_ptr->qf_fnum != 0) {
       // Couldn't open file, so put index back where it was.  This could
@@ -3548,7 +3548,7 @@ void ex_cclose(exarg_T *eap)
   // Find existing quickfix window and close it.
   win_T *win = qf_find_win(qi);
   if (win != NULL) {
-    win_close(win, false);
+    win_close(win, false, false);
   }
 }
 
@@ -3854,10 +3854,11 @@ static buf_T *qf_find_buf(qf_info_T *qi)
 }
 
 /// Process the 'quickfixtextfunc' option value.
-/// @return  OK or FAIL
-int qf_process_qftf_option(void)
+void qf_process_qftf_option(char **errmsg)
 {
-  return option_set_callback_func(p_qftf, &qftf_cb);
+  if (option_set_callback_func(p_qftf, &qftf_cb) == FAIL) {
+    *errmsg = e_invarg;
+  }
 }
 
 /// Update the w:quickfix_title variable in the quickfix/location list window in
@@ -5709,7 +5710,7 @@ static void wipe_dummy_buffer(buf_T *buf, char *dirname_start)
     if (firstwin->w_next != NULL) {
       for (win_T *wp = firstwin; wp != NULL; wp = wp->w_next) {
         if (wp->w_buffer == buf) {
-          if (win_close(wp, false) == OK) {
+          if (win_close(wp, false, false) == OK) {
             did_one = true;
           }
           break;

@@ -276,26 +276,27 @@ static int score_wordcount_adj(slang_T *slang, int score, char_u *word, bool spl
   int newscore;
 
   hashitem_T *hi = hash_find(&slang->sl_wordcount, (char *)word);
-  if (!HASHITEM_EMPTY(hi)) {
-    wc = HI2WC(hi);
-    if (wc->wc_count < SCORE_THRES2) {
-      bonus = SCORE_COMMON1;
-    } else if (wc->wc_count < SCORE_THRES3) {
-      bonus = SCORE_COMMON2;
-    } else {
-      bonus = SCORE_COMMON3;
-    }
-    if (split) {
-      newscore = score - bonus / 2;
-    } else {
-      newscore = score - bonus;
-    }
-    if (newscore < 0) {
-      return 0;
-    }
-    return newscore;
+  if (HASHITEM_EMPTY(hi)) {
+    return score;
   }
-  return score;
+
+  wc = HI2WC(hi);
+  if (wc->wc_count < SCORE_THRES2) {
+    bonus = SCORE_COMMON1;
+  } else if (wc->wc_count < SCORE_THRES3) {
+    bonus = SCORE_COMMON2;
+  } else {
+    bonus = SCORE_COMMON3;
+  }
+  if (split) {
+    newscore = score - bonus / 2;
+  } else {
+    newscore = score - bonus;
+  }
+  if (newscore < 0) {
+    return 0;
+  }
+  return newscore;
 }
 
 /// Like captype() but for a KEEPCAP word add ONECAP if the word starts with a
@@ -310,36 +311,39 @@ static int badword_captype(char_u *word, char_u *end)
   bool first;
   char_u *p;
 
-  if (flags & WF_KEEPCAP) {
-    // Count the number of UPPER and lower case letters.
-    l = u = 0;
-    first = false;
-    for (p = word; p < end; MB_PTR_ADV(p)) {
-      c = utf_ptr2char((char *)p);
-      if (SPELL_ISUPPER(c)) {
-        u++;
-        if (p == word) {
-          first = true;
-        }
-      } else {
-        l++;
+  if (!(flags & WF_KEEPCAP)) {
+    return flags;
+  }
+
+  // Count the number of UPPER and lower case letters.
+  l = u = 0;
+  first = false;
+  for (p = word; p < end; MB_PTR_ADV(p)) {
+    c = utf_ptr2char((char *)p);
+    if (SPELL_ISUPPER(c)) {
+      u++;
+      if (p == word) {
+        first = true;
       }
-    }
-
-    // If there are more UPPER than lower case letters suggest an
-    // ALLCAP word.  Otherwise, if the first letter is UPPER then
-    // suggest ONECAP.  Exception: "ALl" most likely should be "All",
-    // require three upper case letters.
-    if (u > l && u > 2) {
-      flags |= WF_ALLCAP;
-    } else if (first) {
-      flags |= WF_ONECAP;
-    }
-
-    if (u >= 2 && l >= 2) {     // maCARONI maCAroni
-      flags |= WF_MIXCAP;
+    } else {
+      l++;
     }
   }
+
+  // If there are more UPPER than lower case letters suggest an
+  // ALLCAP word.  Otherwise, if the first letter is UPPER then
+  // suggest ONECAP.  Exception: "ALl" most likely should be "All",
+  // require three upper case letters.
+  if (u > l && u > 2) {
+    flags |= WF_ALLCAP;
+  } else if (first) {
+    flags |= WF_ONECAP;
+  }
+
+  if (u >= 2 && l >= 2) {     // maCARONI maCAroni
+    flags |= WF_MIXCAP;
+  }
+
   return flags;
 }
 
@@ -2704,7 +2708,7 @@ static int stp_sal_score(suggest_T *stp, suginfo_T *su, slang_T *slang, char_u *
 /// handled already.
 typedef struct {
   int16_t sft_score;   ///< lowest score used
-  char_u sft_word[1];  ///< soundfolded word, actually longer
+  char_u sft_word[];   ///< soundfolded word
 } sftword_T;
 
 static sftword_T dumsft;
@@ -2824,7 +2828,7 @@ static void add_sound_suggest(suginfo_T *su, char *goodword, int score, langp_T 
   hi = hash_lookup(&slang->sl_sounddone, (const char *)goodword, goodword_len,
                    hash);
   if (HASHITEM_EMPTY(hi)) {
-    sft = xmalloc(sizeof(sftword_T) + goodword_len);
+    sft = xmalloc(offsetof(sftword_T, sft_word) + goodword_len + 1);
     sft->sft_score = (int16_t)score;
     memcpy(sft->sft_word, goodword, goodword_len + 1);
     hash_add_item(&slang->sl_sounddone, hi, (char *)sft->sft_word, hash);
@@ -3247,10 +3251,11 @@ static void add_banned(suginfo_T *su, char *word)
   hash = hash_hash(word);
   const size_t word_len = strlen(word);
   hi = hash_lookup(&su->su_banned, word, word_len, hash);
-  if (HASHITEM_EMPTY(hi)) {
-    s = xmemdupz(word, word_len);
-    hash_add_item(&su->su_banned, hi, (char *)s, hash);
+  if (!HASHITEM_EMPTY(hi)) {  // already present
+    return;
   }
+  s = xmemdupz(word, word_len);
+  hash_add_item(&su->su_banned, hi, (char *)s, hash);
 }
 
 /// Recompute the score for all suggestions if sound-folding is possible.  This
@@ -3317,21 +3322,23 @@ static int sug_compare(const void *s1, const void *s2)
 static int cleanup_suggestions(garray_T *gap, int maxscore, int keep)
   FUNC_ATTR_NONNULL_ALL
 {
-  if (gap->ga_len > 0) {
-    // Sort the list.
-    qsort(gap->ga_data, (size_t)gap->ga_len, sizeof(suggest_T), sug_compare);
+  if (gap->ga_len <= 0) {
+    return maxscore;
+  }
 
-    // Truncate the list to the number of suggestions that will be displayed.
-    if (gap->ga_len > keep) {
-      suggest_T *const stp = &SUG(*gap, 0);
+  // Sort the list.
+  qsort(gap->ga_data, (size_t)gap->ga_len, sizeof(suggest_T), sug_compare);
 
-      for (int i = keep; i < gap->ga_len; i++) {
-        xfree(stp[i].st_word);
-      }
-      gap->ga_len = keep;
-      if (keep >= 1) {
-        return stp[keep - 1].st_score;
-      }
+  // Truncate the list to the number of suggestions that will be displayed.
+  if (gap->ga_len > keep) {
+    suggest_T *const stp = &SUG(*gap, 0);
+
+    for (int i = keep; i < gap->ga_len; i++) {
+      xfree(stp[i].st_word);
+    }
+    gap->ga_len = keep;
+    if (keep >= 1) {
+      return stp[keep - 1].st_score;
     }
   }
   return maxscore;

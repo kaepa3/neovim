@@ -31,6 +31,11 @@ set(TOUCHES_DIR ${PROJECT_BINARY_DIR}/touches)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+find_program(CCACHE_PRG ccache)
+if(CCACHE_PRG)
+  set(CMAKE_C_COMPILER_LAUNCHER ${CMAKE_COMMAND} -E env CCACHE_SLOPPINESS=pch_defines,time_macros ${CCACHE_PRG})
+endif()
+
 # Prefer our bundled versions of dependencies.
 if(DEFINED ENV{DEPS_BUILD_DIR})
   if(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
@@ -112,11 +117,6 @@ endif()
 message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
 
 set_default_buildtype()
-if(CMAKE_BUILD_TYPE MATCHES Debug)
-  set(DEBUG 1)
-else()
-  set(DEBUG 0)
-endif()
 
 # If not in a git repo (e.g., a tarball) these tokens define the complete
 # version string, else they are combined with the result of `git describe`.
@@ -129,28 +129,6 @@ set(NVIM_VERSION_PRERELEASE "-dev") # for package maintainers
 set(NVIM_API_LEVEL 11)         # Bump this after any API change.
 set(NVIM_API_LEVEL_COMPAT 0)  # Adjust this after a _breaking_ API change.
 set(NVIM_API_PRERELEASE true)
-
-set(NVIM_VERSION_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
-# NVIM_VERSION_CFLAGS set further below.
-
-# Log level (MIN_LOG_LEVEL in log.h)
-if("${MIN_LOG_LEVEL}" MATCHES "^$")
-  # Minimize logging for release-type builds.
-  if(CMAKE_BUILD_TYPE STREQUAL "Release"
-      OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo"
-      OR CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
-    message(STATUS "MIN_LOG_LEVEL not specified, default is 3 (ERROR) for release builds")
-    set(MIN_LOG_LEVEL 3)
-  else()
-    message(STATUS "MIN_LOG_LEVEL not specified, default is 1 (INFO)")
-    set(MIN_LOG_LEVEL 1)
-  endif()
-else()
-  if(NOT MIN_LOG_LEVEL MATCHES "^[0-3]$")
-    message(FATAL_ERROR "invalid MIN_LOG_LEVEL: " ${MIN_LOG_LEVEL})
-  endif()
-  message(STATUS "MIN_LOG_LEVEL=${MIN_LOG_LEVEL}")
-endif()
 
 # Default to -O2 on release builds.
 if(CMAKE_C_FLAGS_RELEASE MATCHES "-O3")
@@ -173,20 +151,6 @@ endif()
 # We _want_ assertions in RelWithDebInfo build-type.
 if(CMAKE_C_FLAGS_RELWITHDEBINFO MATCHES DNDEBUG)
   string(REPLACE "-DNDEBUG" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
-endif()
-
-# gcc 4.0+ sets _FORTIFY_SOURCE=2 automatically.  This currently
-# does not work with Neovim due to some uses of dynamically-sized structures.
-# https://github.com/neovim/neovim/issues/223
-
-# Include the build type's default flags in the check for _FORTIFY_SOURCE,
-# otherwise we may incorrectly identify the level as acceptable and find out
-# later that it was not when optimizations were enabled.  CFLAGS is applied
-# even though you don't see it in CMAKE_REQUIRED_FLAGS.
-set(INIT_FLAGS_NAME CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE})
-string(TOUPPER ${INIT_FLAGS_NAME} INIT_FLAGS_NAME)
-if(${INIT_FLAGS_NAME})
-  set(CMAKE_REQUIRED_FLAGS "${${INIT_FLAGS_NAME}}")
 endif()
 
 option(LOG_LIST_ACTIONS "Add list actions logging" OFF)
@@ -342,18 +306,11 @@ install_helper(
   FILES ${CMAKE_SOURCE_DIR}/src/man/nvim.1
   DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
-option(ENABLE_LIBICONV "enable libiconv" ON)
-if(ENABLE_LIBICONV)
-  find_package(Iconv REQUIRED)
-endif()
-
 #
 # Go down the tree.
 #
 
 add_subdirectory(src/nvim)
-get_directory_property(NVIM_VERSION_CFLAGS DIRECTORY src/nvim DEFINITION NVIM_VERSION_CFLAGS)
-add_subdirectory(test/includes)
 add_subdirectory(cmake.config)
 add_subdirectory(test/functional/fixtures)  # compile test programs
 add_subdirectory(runtime)
@@ -376,7 +333,7 @@ endif()
 if(BUSTED_PRG)
   get_target_property(TEST_INCLUDE_DIRS main_lib INTERFACE_INCLUDE_DIRECTORIES)
 
-  set(UNITTEST_PREREQS nvim-test unittest-headers)
+  set(UNITTEST_PREREQS nvim)
   set(FUNCTIONALTEST_PREREQS nvim printenv-test printargs-test shell-test pwsh-test streams-test tty-test ${GENERATED_HELP_TAGS})
   set(BENCHMARK_PREREQS nvim tty-test)
 
@@ -386,6 +343,7 @@ if(BUSTED_PRG)
       COMMAND ${CMAKE_COMMAND}
         -DBUSTED_PRG=${BUSTED_PRG}
         -DLUA_PRG=${LUA_PRG}
+        -DNVIM_PRG=$<TARGET_FILE:nvim>
         -DWORKING_DIR=${CMAKE_CURRENT_SOURCE_DIR}
         -DBUSTED_OUTPUT_TYPE=${BUSTED_OUTPUT_TYPE}
         -DTEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test
@@ -400,17 +358,9 @@ if(BUSTED_PRG)
     message(WARNING "disabling unit tests: no Luajit FFI in ${LUA_PRG}")
   endif()
 
-  if(LUA_HAS_FFI)
-    set(TEST_LIBNVIM_PATH $<TARGET_FILE:nvim-test>)
-  else()
-    set(TEST_LIBNVIM_PATH "")
-  endif()
   configure_file(
     ${CMAKE_SOURCE_DIR}/test/cmakeconfig/paths.lua.in
-    ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua.gen)
-  file(GENERATE
-    OUTPUT ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua
-    INPUT ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua.gen)
+    ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua)
 
   add_custom_target(functionaltest
     COMMAND ${CMAKE_COMMAND}

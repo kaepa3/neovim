@@ -64,7 +64,7 @@ struct msgchunk_S {
   char sb_eol;                  // true when line ends after this text
   int sb_msg_col;               // column in which text starts
   int sb_attr;                  // text attributes
-  char sb_text[1];              // text to be displayed, actually longer
+  char sb_text[];               // text to be displayed
 };
 
 // Magic chars used in confirm dialog strings
@@ -2514,7 +2514,7 @@ static void store_sb_text(char **sb_str, char *s, int attr, int *sb_col, int fin
   }
 
   if (s > *sb_str) {
-    mp = xmalloc((sizeof(msgchunk_T) + (size_t)(s - *sb_str)));
+    mp = xmalloc(offsetof(msgchunk_T, sb_text) + (size_t)(s - *sb_str) + 1);
     mp->sb_eol = (char)finish;
     mp->sb_msg_col = *sb_col;
     mp->sb_attr = attr;

@@ -368,7 +368,7 @@ newwindow:
         newtab = curtab;
         goto_tabpage_tp(oldtab, true, true);
         if (curwin == wp) {
-          win_close(curwin, false);
+          win_close(curwin, false, false);
         }
         if (valid_tabpage(newtab)) {
           goto_tabpage_tp(newtab, true, true);
@@ -517,7 +517,7 @@ wingotofile:
         RESET_BINDING(curwin);
         if (do_ecmd(0, ptr, NULL, NULL, ECMD_LASTL, ECMD_HIDE, NULL) == FAIL) {
           // Failed to open the file, close the window opened for it.
-          win_close(curwin, false);
+          win_close(curwin, false, false);
           goto_tabpage_win(oldtab, oldwin);
         } else if (nchar == 'F' && lnum >= 0) {
           curwin->w_cursor.lnum = lnum;
@@ -2491,7 +2491,7 @@ void close_windows(buf_T *buf, bool keep_curwin)
   for (win_T *wp = lastwin; wp != NULL && (is_aucmd_win(lastwin) || !one_window(wp));) {
     if (wp->w_buffer == buf && (!keep_curwin || wp != curwin)
         && !(wp->w_closing || wp->w_buffer->b_locked > 0)) {
-      if (win_close(wp, false) == FAIL) {
+      if (win_close(wp, false, false) == FAIL) {
         // If closing the window fails give up, to avoid looping forever.
         break;
       }
@@ -2527,24 +2527,23 @@ void close_windows(buf_T *buf, bool keep_curwin)
   RedrawingDisabled--;
 }
 
-/// Check that the specified window is the last one.
-/// @param win  counted even if floating
-///
-/// @return  true if the specified window is the only window that exists,
-///          false if there is another, possibly in another tab page.
+/// Check if "win" is the last non-floating window that exists.
 bool last_window(win_T *win) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   return one_window(win) && first_tabpage->tp_next == NULL;
 }
 
-/// Check if current tab page contains no more than one window other than `aucmd_win[]`.
-/// @param counted_float  counted even if floating, but not if it is `aucmd_win[]`
-bool one_window(win_T *counted_float) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
+/// Check if "win" is the only non-floating window in the current tabpage.
+bool one_window(win_T *win) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
+  if (win->w_floating) {
+    return false;
+  }
+
   bool seen_one = false;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (!is_aucmd_win(wp) && (!wp->w_floating || wp == counted_float)) {
+    if (!wp->w_floating) {
       if (seen_one) {
         return false;
       }
@@ -2568,6 +2567,24 @@ bool last_nonfloat(win_T *wp) FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
   return wp != NULL && firstwin == wp && !(wp->w_next && !wp->w_floating);
 }
 
+/// Check if floating windows in the current tab can be closed.
+/// Do not call this when the autocommand window is in use!
+///
+/// @return true if all floating windows can be closed
+static bool can_close_floating_windows(void)
+{
+  assert(!is_aucmd_win(lastwin));
+  for (win_T *wp = lastwin; wp->w_floating; wp = wp->w_prev) {
+    buf_T *buf = wp->w_buffer;
+    int need_hide = (bufIsChanged(buf) && buf->b_nwindows <= 1);
+
+    if (need_hide && !buf_hide(buf)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /// Close the possibly last window in a tab page.
 ///
 /// @param  win          window to close
@@ -2582,6 +2599,7 @@ static bool close_last_window_tabpage(win_T *win, bool free_buf, tabpage_T *prev
   if (!ONE_WINDOW) {
     return false;
   }
+
   buf_T *old_curbuf = curbuf;
 
   Terminal *term = win->w_buffer ? win->w_buffer->terminal : NULL;
@@ -2659,7 +2677,7 @@ static void win_close_buffer(win_T *win, bool free_buf, bool abort_if_last)
 //
 // Called by :quit, :close, :xit, :wq and findtag().
 // Returns FAIL when the window was not closed.
-int win_close(win_T *win, bool free_buf)
+int win_close(win_T *win, bool free_buf, bool force)
 {
   tabpage_T *prev_curtab = curtab;
   frame_T *win_frame = win->w_floating ? NULL : win->w_frame->fr_parent;
@@ -2683,14 +2701,18 @@ int win_close(win_T *win, bool free_buf)
       emsg(_("E814: Cannot close window, only autocmd window would remain"));
       return FAIL;
     }
-    // close the last window until the there are no floating windows
-    while (lastwin->w_floating) {
-      buf_T *buf = lastwin->w_buffer;
-      bool need_hide = (bufIsChanged(buf) && buf->b_nwindows <= 1);
-      if (win_close(lastwin, !need_hide && !buf_hide(buf)) == FAIL) {
-        // If closing the window fails give up, to avoid looping forever.
-        return FAIL;
+    if (force || can_close_floating_windows()) {
+      // close the last window until the there are no floating windows
+      while (lastwin->w_floating) {
+        // `force` flag isn't actually used when closing a floating window.
+        if (win_close(lastwin, free_buf, true) == FAIL) {
+          // If closing the window fails give up, to avoid looping forever.
+          return FAIL;
+        }
       }
+    } else {
+      emsg(e_floatonly);
+      return FAIL;
     }
   }
 
@@ -3880,7 +3902,7 @@ void close_others(int message, int forceit)
         continue;
       }
     }
-    win_close(wp, !buf_hide(wp->w_buffer) && !bufIsChanged(wp->w_buffer));
+    win_close(wp, !buf_hide(wp->w_buffer) && !bufIsChanged(wp->w_buffer), false);
   }
 
   if (message && !ONE_WINDOW) {
@@ -4123,12 +4145,13 @@ int may_open_tabpage(void)
 {
   int n = (cmdmod.cmod_tab == 0) ? postponed_split_tab : cmdmod.cmod_tab;
 
-  if (n != 0) {
-    cmdmod.cmod_tab = 0;         // reset it to avoid doing it twice
-    postponed_split_tab = 0;
-    return win_new_tabpage(n, NULL);
+  if (n == 0) {
+    return FAIL;
   }
-  return FAIL;
+
+  cmdmod.cmod_tab = 0;         // reset it to avoid doing it twice
+  postponed_split_tab = 0;
+  return win_new_tabpage(n, NULL);
 }
 
 // Create up to "maxcount" tabpages with empty windows.
@@ -4473,11 +4496,12 @@ void goto_tabpage_tp(tabpage_T *tp, bool trigger_enter_autocmds, bool trigger_le
 /// @return true if the tab page is valid, false otherwise.
 bool goto_tabpage_lastused(void)
 {
-  if (valid_tabpage(lastused_tabpage)) {
-    goto_tabpage_tp(lastused_tabpage, true, true);
-    return true;
+  if (!valid_tabpage(lastused_tabpage)) {
+    return false;
   }
-  return false;
+
+  goto_tabpage_tp(lastused_tabpage, true, true);
+  return true;
 }
 
 // Enter window "wp" in tab page "tp".
@@ -7229,11 +7253,12 @@ static void clear_snapshot(tabpage_T *tp, int idx)
 
 static void clear_snapshot_rec(frame_T *fr)
 {
-  if (fr != NULL) {
-    clear_snapshot_rec(fr->fr_next);
-    clear_snapshot_rec(fr->fr_child);
-    xfree(fr);
+  if (fr == NULL) {
+    return;
   }
+  clear_snapshot_rec(fr->fr_next);
+  clear_snapshot_rec(fr->fr_child);
+  xfree(fr);
 }
 
 /// Traverse a snapshot to find the previous curwin.

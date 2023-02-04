@@ -46,16 +46,14 @@ describe('LSP', function()
     local test_name = "basic_init"
     exec_lua([=[
       lsp = require('vim.lsp')
-      local test_name, fixture_filename, logfile = ...
+      local test_name, fake_lsp_code, fake_lsp_logfile = ...
       function test__start_client()
         return lsp.start_client {
           cmd_env = {
-            NVIM_LOG_FILE = logfile;
+            NVIM_LOG_FILE = fake_lsp_logfile;
           };
           cmd = {
-            vim.v.progpath, '-Es', '-u', 'NONE', '--headless',
-            "-c", string.format("lua TEST_NAME = %q", test_name),
-            "-c", "luafile "..fixture_filename;
+            vim.v.progpath, '-l', fake_lsp_code, test_name;
           };
           workspace_folders = {{
               uri = 'file://' .. vim.loop.cwd(),
@@ -3431,6 +3429,38 @@ describe('LSP', function()
         ['end'] = { line = 1, character = 4 },
       }
       eq(expected_range, result[3].params.range)
+    end)
+    it('Aborts with notify if no clients support requested method', function()
+      exec_lua(create_server_definition)
+      exec_lua([[
+        vim.notify = function(msg, _)
+          notify_msg = msg
+        end
+      ]])
+      local fail_msg = "[LSP] Format request failed, no matching language servers."
+      local function check_notify(name, formatting, range_formatting)
+        local timeout_msg = "[LSP][" .. name .. "] timeout"
+        exec_lua([[
+          local formatting, range_formatting, name = ...
+          local server = _create_server({ capabilities = {
+            documentFormattingProvider = formatting,
+            documentRangeFormattingProvider = range_formatting,
+          }})
+          vim.lsp.start({ name = name, cmd = server.cmd })
+          notify_msg = nil
+          vim.lsp.buf.format({ name = name, timeout_ms = 1 })
+        ]], formatting, range_formatting, name)
+        eq(formatting and timeout_msg or fail_msg, exec_lua('return notify_msg'))
+        exec_lua([[
+          notify_msg = nil
+          vim.lsp.buf.format({ name = name, timeout_ms = 1, range = {start={1, 0}, ['end']={1, 0}}})
+        ]])
+        eq(range_formatting and timeout_msg or fail_msg, exec_lua('return notify_msg'))
+      end
+      check_notify("none", false, false)
+      check_notify("formatting", true, false)
+      check_notify("rangeFormatting", false, true)
+      check_notify("both", true, true)
     end)
   end)
   describe('cmd', function()
