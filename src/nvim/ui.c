@@ -11,6 +11,7 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
+#include "nvim/api/private/validate.h"
 #include "nvim/api/ui.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
@@ -63,31 +64,31 @@ static int pending_has_mouse = -1;
 static Array call_buf = ARRAY_DICT_INIT;
 
 #if MIN_LOG_LEVEL > LOGLVL_DBG
-# define UI_LOG(funname)
+# define ui_log(funname)
 #else
 static size_t uilog_seen = 0;
-static char uilog_last_event[1024] = { 0 };
+static const char *uilog_last_event = NULL;
 
-# ifndef EXITFREE
-#  define entered_free_all_mem false
+static void ui_log(const char *funname)
+{
+# ifdef EXITFREE
+  if (entered_free_all_mem) {
+    return;  // do nothing, we cannot log now
+  }
 # endif
 
-# define UI_LOG(funname) \
-  do { \
-    if (entered_free_all_mem) { \
-      /* do nothing, we cannot log now */ \
-    } else if (strequal(uilog_last_event, STR(funname))) { \
-      uilog_seen++; \
-    } else { \
-      if (uilog_seen > 0) { \
-        logmsg(LOGLVL_DBG, "UI: ", NULL, -1, true, \
-               "%s (+%zu times...)", uilog_last_event, uilog_seen); \
-      } \
-      logmsg(LOGLVL_DBG, "UI: ", NULL, -1, true, STR(funname)); \
-      uilog_seen = 0; \
-      xstrlcpy(uilog_last_event, STR(funname), sizeof(uilog_last_event)); \
-    } \
-  } while (0)
+  if (uilog_last_event == funname) {
+    uilog_seen++;
+  } else {
+    if (uilog_seen > 0) {
+      logmsg(LOGLVL_DBG, "UI: ", NULL, -1, true,
+             "%s (+%zu times...)", uilog_last_event, uilog_seen);
+    }
+    logmsg(LOGLVL_DBG, "UI: ", NULL, -1, true, "%s", funname);
+    uilog_seen = 0;
+    uilog_last_event = funname;
+  }
+}
 #endif
 
 // UI_CALL invokes a function on all registered UI instances.
@@ -104,7 +105,7 @@ static char uilog_last_event[1024] = { 0 };
       } \
     } \
     if (any_call) { \
-      UI_LOG(funname); \
+      ui_log(STR(funname)); \
     } \
   } while (0)
 
@@ -133,6 +134,7 @@ void ui_free_all_mem(void)
 }
 #endif
 
+/// Returns true if any `rgb=true` UI is attached.
 bool ui_rgb_attached(void)
 {
   if (!headless_mode && p_tgc) {
@@ -140,6 +142,18 @@ bool ui_rgb_attached(void)
   }
   for (size_t i = 0; i < ui_count; i++) {
     if (uis[i]->rgb) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Returns true if a GUI is attached.
+bool ui_gui_attached(void)
+{
+  for (size_t i = 0; i < ui_count; i++) {
+    bool tui = uis[i]->stdin_tty || uis[i]->stdout_tty;
+    if (!tui) {
       return true;
     }
   }
@@ -419,7 +433,7 @@ void ui_line(ScreenGrid *grid, int row, int startcol, int endcol, int clearcol, 
                    (const sattr_T *)grid->attrs + off);
 
   // 'writedelay': flush & delay each time.
-  if (p_wd && !(rdb_flags & RDB_COMPOSITOR)) {
+  if (p_wd && (rdb_flags & RDB_LINE)) {
     // If 'writedelay' is active, set the cursor to indicate what was drawn.
     ui_call_grid_cursor_goto(grid->handle, row,
                              MIN(clearcol, (int)grid->cols - 1));
@@ -472,11 +486,6 @@ int ui_current_col(void)
   return cursor_col;
 }
 
-handle_T ui_cursor_grid(void)
-{
-  return cursor_grid_handle;
-}
-
 void ui_flush(void)
 {
   assert(!ui_client_channel_id);
@@ -510,6 +519,10 @@ void ui_flush(void)
     pending_has_mouse = has_mouse;
   }
   ui_call_flush();
+
+  if (p_wd && (rdb_flags & RDB_FLUSH)) {
+    os_microdelay((uint64_t)labs(p_wd) * 1000U, true);
+  }
 }
 
 /// Check if 'mouse' is active for the current mode
@@ -598,6 +611,14 @@ Array ui_array(void)
     PUT(info, "height", INTEGER_OBJ(ui->height));
     PUT(info, "rgb", BOOLEAN_OBJ(ui->rgb));
     PUT(info, "override", BOOLEAN_OBJ(ui->override));
+
+    // TUI fields. (`stdin_fd` is intentionally omitted.)
+    PUT(info, "term_name", STRING_OBJ(cstr_to_string(ui->term_name)));
+    PUT(info, "term_background", STRING_OBJ(cstr_to_string(ui->term_background)));
+    PUT(info, "term_colors", INTEGER_OBJ(ui->term_colors));
+    PUT(info, "stdin_tty", BOOLEAN_OBJ(ui->stdin_tty));
+    PUT(info, "stdout_tty", BOOLEAN_OBJ(ui->stdout_tty));
+
     for (UIExtension j = 0; j < kUIExtCount; j++) {
       if (ui_ext_names[j][0] != '_' || ui->ui_ext[j]) {
         PUT(info, ui_ext_names[j], BOOLEAN_OBJ(ui->ui_ext[j]));
@@ -609,7 +630,7 @@ Array ui_array(void)
   return all_uis;
 }
 
-void ui_grid_resize(handle_T grid_handle, int width, int height, Error *error)
+void ui_grid_resize(handle_T grid_handle, int width, int height, Error *err)
 {
   if (grid_handle == DEFAULT_GRID_HANDLE) {
     screen_resize(width, height);
@@ -617,11 +638,9 @@ void ui_grid_resize(handle_T grid_handle, int width, int height, Error *error)
   }
 
   win_T *wp = get_win_by_grid_handle(grid_handle);
-  if (wp == NULL) {
-    api_set_error(error, kErrorTypeValidation,
-                  "No window with the given handle");
+  VALIDATE_INT((wp != NULL), "window handle", (int64_t)grid_handle, {
     return;
-  }
+  });
 
   if (wp->w_floating) {
     if (width != wp->w_width || height != wp->w_height) {
@@ -656,6 +675,8 @@ void ui_call_event(char *name, Array args)
   if (!handled) {
     UI_CALL(true, event, ui, name, args);
   }
+
+  ui_log(name);
 }
 
 void ui_cb_update_ext(void)

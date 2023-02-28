@@ -125,7 +125,8 @@ static char *(p_spo_values[]) = { "camel", "noplainbuffer", NULL };
 static char *(p_icm_values[]) = { "nosplit", "split", NULL };
 static char *(p_jop_values[]) = { "stack", "view", NULL };
 static char *(p_tpf_values[]) = { "BS", "HT", "FF", "ESC", "DEL", "C0", "C1", NULL };
-static char *(p_rdb_values[]) = { "compositor", "nothrottle", "invalid", "nodelta", NULL };
+static char *(p_rdb_values[]) = { "compositor", "nothrottle", "invalid", "nodelta", "line",
+                                  "flush", NULL };
 static char *(p_sloc_values[]) = { "last", "statusline", "tabline", NULL };
 
 /// All possible flags for 'shm'.
@@ -329,7 +330,6 @@ void set_string_option_direct(const char *name, int opt_idx, const char *val, in
                               int set_sid)
 {
   char *s;
-  char **varp;
   int both = (opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0;
   int idx = opt_idx;
 
@@ -352,7 +352,7 @@ void set_string_option_direct(const char *name, int opt_idx, const char *val, in
 
   s = xstrdup(val);
   {
-    varp = (char **)get_varp_scope(opt, both ? OPT_LOCAL : opt_flags);
+    char **varp = (char **)get_varp_scope(opt, both ? OPT_LOCAL : opt_flags);
     if ((opt_flags & OPT_FREE) && (opt->flags & P_ALLOCED)) {
       free_string_option(*varp);
     }
@@ -410,7 +410,8 @@ void set_string_option_direct_in_win(win_T *wp, const char *name, int opt_idx, c
 ///                        #OPT_GLOBAL.
 ///
 /// @return NULL on success, an untranslated error message on error.
-char *set_string_option(const int opt_idx, const char *const value, const int opt_flags)
+char *set_string_option(const int opt_idx, const char *const value, const int opt_flags,
+                        char *const errbuf, const size_t errbuflen)
   FUNC_ATTR_NONNULL_ARG(2) FUNC_ATTR_WARN_UNUSED_RESULT
 {
   vimoption_T *opt = get_option(opt_idx);
@@ -442,7 +443,7 @@ char *set_string_option(const int opt_idx, const char *const value, const int op
 
   int value_checked = false;
   char *const errmsg = did_set_string_option(opt_idx, varp, oldval,
-                                             NULL, 0,
+                                             errbuf, errbuflen,
                                              opt_flags, &value_checked);
   if (errmsg == NULL) {
     did_set_option(opt_idx, opt_flags, true, value_checked);
@@ -1581,7 +1582,7 @@ static void do_spelllang_source(win_T *win)
     q += 4;
   }
 
-  // Source the spell/LANG.vim in 'runtimepath'.
+  // Source the spell/LANG.{vim,lua} in 'runtimepath'.
   // They could set 'spellcapcheck' depending on the language.
   // Use the first name in 'spelllang' up to '_region' or
   // '.encoding'.
@@ -1592,7 +1593,7 @@ static void do_spelllang_source(win_T *win)
     }
   }
   if (p > q) {
-    vim_snprintf(fname, sizeof(fname), "spell/%.*s.vim", (int)(p - q), q);
+    vim_snprintf(fname, sizeof(fname), "spell/%.*s.\\(vim\\|lua\\)", (int)(p - q), q);
     source_runtime(fname, DIP_ALL);
   }
 }

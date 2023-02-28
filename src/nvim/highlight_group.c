@@ -1124,6 +1124,9 @@ void do_highlight(const char *line, const bool forceit, const bool init)
           for (i = ARRAY_SIZE(hl_attr_table); --i >= 0;) {
             int len = (int)strlen(hl_name_table[i]);
             if (STRNICMP(arg + off, hl_name_table[i], len) == 0) {
+              if (hl_attr_table[i] & HL_UNDERLINE_MASK) {
+                attr &= ~HL_UNDERLINE_MASK;
+              }
               attr |= hl_attr_table[i];
               off += len;
               break;
@@ -1522,7 +1525,7 @@ Dictionary get_global_hl_defs(Arena *arena)
       char *link = hl_table[h->sg_link - 1].sg_name;
       PUT_C(attrs, "link", STRING_OBJ(cstr_as_string(link)));
     }
-    PUT_C(rv, (char *)h->sg_name, DICTIONARY_OBJ(attrs));
+    PUT_C(rv, h->sg_name, DICTIONARY_OBJ(attrs));
   }
 
   return rv;
@@ -1547,7 +1550,7 @@ static bool highlight_list_arg(const int id, bool didh, const int type, int iarg
   char buf[100];
   const char *ts = buf;
   if (type == LIST_INT) {
-    snprintf((char *)buf, sizeof(buf), "%d", iarg - 1);
+    snprintf(buf, sizeof(buf), "%d", iarg - 1);
   } else if (type == LIST_STRING) {
     ts = sarg;
   } else {    // type == LIST_ATTR

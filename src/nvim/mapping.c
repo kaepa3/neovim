@@ -323,7 +323,7 @@ static void set_maparg_rhs(const char *const orig_rhs, const size_t orig_rhs_len
     mapargs->orig_rhs_len = 0;
     // stores <lua>ref_no<cr> in map_str
     mapargs->rhs_len = (size_t)vim_snprintf(S_LEN(tmp_buf), "%c%c%c%d\r", K_SPECIAL,
-                                            (char_u)KS_EXTRA, KE_LUA, rhs_lua);
+                                            KS_EXTRA, KE_LUA, rhs_lua);
     mapargs->rhs = xstrdup(tmp_buf);
   }
 }
@@ -1162,12 +1162,12 @@ static bool expand_buffer = false;
 /// @param cpo_flags  Value of various flags present in &cpo
 ///
 /// @return  NULL when there is a problem.
-static char_u *translate_mapping(char_u *str, int cpo_flags)
+static char *translate_mapping(char_u *str, int cpo_flags)
 {
   garray_T ga;
   ga_init(&ga, 1, 40);
 
-  bool cpo_bslash = !(cpo_flags&FLAG_CPO_BSLASH);
+  bool cpo_bslash = cpo_flags & FLAG_CPO_BSLASH;
 
   for (; *str; str++) {
     int c = *str;
@@ -1194,7 +1194,7 @@ static char_u *translate_mapping(char_u *str, int cpo_flags)
     }
 
     if (c == ' ' || c == '\t' || c == Ctrl_J || c == Ctrl_V
-        || (c == '\\' && !cpo_bslash)) {
+        || c == '<' || (c == '\\' && !cpo_bslash)) {
       ga_append(&ga, cpo_bslash ? Ctrl_V : '\\');
     }
 
@@ -1203,7 +1203,7 @@ static char_u *translate_mapping(char_u *str, int cpo_flags)
     }
   }
   ga_append(&ga, NUL);
-  return (char_u *)(ga.ga_data);
+  return (char *)ga.ga_data;
 }
 
 /// Work out what to complete when doing command line completion of mapping
@@ -1212,8 +1212,8 @@ static char_u *translate_mapping(char_u *str, int cpo_flags)
 /// @param forceit  true if '!' given
 /// @param isabbrev  true if abbreviation
 /// @param isunmap  true if unmap/unabbrev command
-char_u *set_context_in_map_cmd(expand_T *xp, char *cmd, char *arg, bool forceit, bool isabbrev,
-                               bool isunmap, cmdidx_T cmdidx)
+char *set_context_in_map_cmd(expand_T *xp, char *cmd, char *arg, bool forceit, bool isabbrev,
+                             bool isunmap, cmdidx_T cmdidx)
 {
   if (forceit && cmdidx != CMD_map && cmdidx != CMD_unmap) {
     xp->xp_context = EXPAND_NOTHING;
@@ -1342,11 +1342,11 @@ int ExpandMappings(char *pat, regmatch_T *regmatch, int *numMatches, char ***mat
       mp = maphash[hash];
     }
     for (; mp; mp = mp->m_next) {
-      if (!(mp->m_mode & expand_mapmodes)) {
+      if (mp->m_simplified || !(mp->m_mode & expand_mapmodes)) {
         continue;
       }
 
-      char *p = (char *)translate_mapping((char_u *)mp->m_keys, CPO_TO_CPO_FLAGS);
+      char *p = translate_mapping((char_u *)mp->m_keys, CPO_TO_CPO_FLAGS);
       if (p == NULL) {
         continue;
       }
@@ -1434,15 +1434,11 @@ int ExpandMappings(char *pat, regmatch_T *regmatch, int *numMatches, char ***mat
 // Return true if there is an abbreviation, false if not.
 bool check_abbr(int c, char *ptr, int col, int mincol)
 {
-  int len;
   int scol;                     // starting column of the abbr.
-  int j;
-  char *s;
   char_u tb[MB_MAXBYTES + 4];
   mapblock_T *mp;
   mapblock_T *mp2;
   int clen = 0;                 // length in characters
-  bool is_id = true;
 
   if (typebuf.tb_no_abbr_cnt) {  // abbrev. are not recursive
     return false;
@@ -1462,6 +1458,7 @@ bool check_abbr(int c, char *ptr, int col, int mincol)
   }
 
   {
+    bool is_id = true;
     bool vim_abbr;
     char *p = mb_prevptr(ptr, ptr + col);
     if (!vim_iswordp(p)) {
@@ -1489,7 +1486,7 @@ bool check_abbr(int c, char *ptr, int col, int mincol)
   }
   if (scol < col) {             // there is a word in front of the cursor
     ptr += scol;
-    len = col - scol;
+    int len = col - scol;
     mp = curbuf->b_first_abbr;
     mp2 = first_abbr;
     if (mp == NULL) {
@@ -1506,7 +1503,7 @@ bool check_abbr(int c, char *ptr, int col, int mincol)
       if (strchr((const char *)mp->m_keys, K_SPECIAL) != NULL) {
         // Might have K_SPECIAL escaped mp->m_keys.
         q = xstrdup(mp->m_keys);
-        vim_unescape_ks((char_u *)q);
+        vim_unescape_ks(q);
         qlen = (int)strlen(q);
       }
       // find entries with right mode and keys
@@ -1532,7 +1529,7 @@ bool check_abbr(int c, char *ptr, int col, int mincol)
       //
       // Character CTRL-] is treated specially - it completes the
       // abbreviation, but is not inserted into the input stream.
-      j = 0;
+      int j = 0;
       if (c != Ctrl_RSB) {
         // special key code, split up
         if (IS_SPECIAL(c) || c == K_SPECIAL) {
@@ -1568,6 +1565,7 @@ bool check_abbr(int c, char *ptr, int col, int mincol)
       const bool silent = mp->m_silent;
       const bool expr = mp->m_expr;
 
+      char *s;
       if (expr) {
         s = eval_map_expr(mp, c);
       } else {
@@ -1609,7 +1607,7 @@ char *eval_map_expr(mapblock_T *mp, int c)
   // typeahead.
   if (mp->m_luaref == LUA_NOREF) {
     expr = xstrdup(mp->m_str);
-    vim_unescape_ks((char_u *)expr);
+    vim_unescape_ks(expr);
   }
 
   const bool replace_keycodes = mp->m_replace_keycodes;
@@ -1881,7 +1879,7 @@ int makemap(FILE *fd, buf_T *buf)
 // return FAIL for failure, OK otherwise
 int put_escstr(FILE *fd, char *strstart, int what)
 {
-  char_u *str = (char_u *)strstart;
+  uint8_t *str = (uint8_t *)strstart;
   int c;
 
   // :map xx <Nop>
@@ -1958,7 +1956,7 @@ int put_escstr(FILE *fd, char *strstart, int what)
       }
     } else if (c < ' ' || c > '~' || c == '|'
                || (what == 0 && c == ' ')
-               || (what == 1 && str == (char_u *)strstart && c == ' ')
+               || (what == 1 && str == (uint8_t *)strstart && c == ' ')
                || (what != 2 && c == '<')) {
       if (putc(Ctrl_V, fd) < 0) {
         return FAIL;
@@ -2385,7 +2383,7 @@ int langmap_adjust_mb(int c)
 void langmap_init(void)
 {
   for (int i = 0; i < 256; i++) {
-    langmap_mapchar[i] = (char_u)i;      // we init with a one-to-one map
+    langmap_mapchar[i] = (uint8_t)i;      // we init with a one-to-one map
   }
   ga_init(&langmap_mapga, sizeof(langmap_entry_T), 8);
 }
@@ -2449,7 +2447,7 @@ void langmap_set(void)
         langmap_set_entry(from, to);
       } else {
         assert(to <= UCHAR_MAX);
-        langmap_mapchar[from & 255] = (char_u)to;
+        langmap_mapchar[from & 255] = (uint8_t)to;
       }
 
       // Advance to next pair

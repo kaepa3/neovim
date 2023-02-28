@@ -12,6 +12,7 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
+#include "nvim/api/private/validate.h"
 #include "nvim/api/ui.h"
 #include "nvim/autocmd.h"
 #include "nvim/channel.h"
@@ -112,6 +113,10 @@ void remote_ui_disconnect(uint64_t channel_id)
   kv_destroy(data->call_buf);
   pmap_del(uint64_t)(&connected_uis, channel_id);
   ui_detach_impl(ui, channel_id);
+
+  // Destroy `ui`.
+  XFREE_CLEAR(ui->term_name);
+  XFREE_CLEAR(ui->term_background);
   xfree(ui);
 }
 
@@ -162,15 +167,9 @@ void nvim_ui_attach(uint64_t channel_id, Integer width, Integer height, Dictiona
   UI *ui = xcalloc(1, sizeof(UI));
   ui->width = (int)width;
   ui->height = (int)height;
-  ui->pum_nlines = 0;
-  ui->pum_pos = false;
-  ui->pum_width = 0.0;
-  ui->pum_height = 0.0;
   ui->pum_row = -1.0;
   ui->pum_col = -1.0;
   ui->rgb = true;
-  ui->override = false;
-
   CLEAR_FIELD(ui->ui_ext);
 
   for (size_t i = 0; i < options.size; i++) {
@@ -202,6 +201,7 @@ void nvim_ui_attach(uint64_t channel_id, Integer width, Integer height, Dictiona
   data->flushed_events = false;
   data->ncalls_pos = NULL;
   data->ncalls = 0;
+  data->ncells_pending = 0;
   data->buf_wptr = data->buf;
   data->temp_buf = NULL;
   data->wildmenu_active = false;
@@ -252,7 +252,7 @@ void nvim_ui_detach(uint64_t channel_id, Error *err)
   remote_ui_disconnect(channel_id);
 }
 
-// TODO(bfredl): use me to detach a specifc ui from the server
+// TODO(bfredl): use me to detach a specific ui from the server
 void remote_ui_stop(UI *ui)
 {}
 
@@ -290,22 +290,20 @@ void nvim_ui_set_option(uint64_t channel_id, String name, Object value, Error *e
   ui_set_option(ui, false, name, value, error);
 }
 
-static void ui_set_option(UI *ui, bool init, String name, Object value, Error *error)
+static void ui_set_option(UI *ui, bool init, String name, Object value, Error *err)
 {
   if (strequal(name.data, "override")) {
-    if (value.type != kObjectTypeBoolean) {
-      api_set_error(error, kErrorTypeValidation, "override must be a Boolean");
+    VALIDATE_T("override", kObjectTypeBoolean, value.type, {
       return;
-    }
+    });
     ui->override = value.data.boolean;
     return;
   }
 
   if (strequal(name.data, "rgb")) {
-    if (value.type != kObjectTypeBoolean) {
-      api_set_error(error, kErrorTypeValidation, "rgb must be a Boolean");
+    VALIDATE_T("rgb", kObjectTypeBoolean, value.type, {
       return;
-    }
+    });
     ui->rgb = value.data.boolean;
     // A little drastic, but only takes effect for legacy uis. For linegrid UI
     // only changes metadata for nvim_list_uis(), no refresh needed.
@@ -316,63 +314,62 @@ static void ui_set_option(UI *ui, bool init, String name, Object value, Error *e
   }
 
   if (strequal(name.data, "term_name")) {
-    if (value.type != kObjectTypeString) {
-      api_set_error(error, kErrorTypeValidation, "term_name must be a String");
+    VALIDATE_T("term_name", kObjectTypeString, value.type, {
       return;
-    }
+    });
     set_tty_option("term", string_to_cstr(value.data.string));
+    ui->term_name = string_to_cstr(value.data.string);
     return;
   }
 
   if (strequal(name.data, "term_colors")) {
-    if (value.type != kObjectTypeInteger) {
-      api_set_error(error, kErrorTypeValidation, "term_colors must be a Integer");
+    VALIDATE_T("term_colors", kObjectTypeInteger, value.type, {
       return;
-    }
+    });
     t_colors = (int)value.data.integer;
+    ui->term_colors = (int)value.data.integer;
     return;
   }
 
   if (strequal(name.data, "term_background")) {
-    if (value.type != kObjectTypeString) {
-      api_set_error(error, kErrorTypeValidation, "term_background must be a String");
+    VALIDATE_T("term_background", kObjectTypeString, value.type, {
       return;
-    }
+    });
     set_tty_background(value.data.string.data);
+    ui->term_background = string_to_cstr(value.data.string);
     return;
   }
 
   if (strequal(name.data, "stdin_fd")) {
-    if (value.type != kObjectTypeInteger || value.data.integer < 0) {
-      api_set_error(error, kErrorTypeValidation, "stdin_fd must be a non-negative Integer");
+    VALIDATE_T("stdin_fd", kObjectTypeInteger, value.type, {
       return;
-    }
-
-    if (starting != NO_SCREEN) {
-      api_set_error(error, kErrorTypeValidation,
-                    "stdin_fd can only be used with first attached ui");
+    });
+    VALIDATE_INT((value.data.integer >= 0), "stdin_fd", value.data.integer, {
       return;
-    }
+    });
+    VALIDATE((starting == NO_SCREEN), "%s", "stdin_fd can only be used with first attached UI", {
+      return;
+    });
 
     stdin_fd = (int)value.data.integer;
     return;
   }
 
   if (strequal(name.data, "stdin_tty")) {
-    if (value.type != kObjectTypeBoolean) {
-      api_set_error(error, kErrorTypeValidation, "stdin_tty must be a Boolean");
+    VALIDATE_T("stdin_tty", kObjectTypeBoolean, value.type, {
       return;
-    }
+    });
     stdin_isatty = value.data.boolean;
+    ui->stdin_tty = value.data.boolean;
     return;
   }
 
   if (strequal(name.data, "stdout_tty")) {
-    if (value.type != kObjectTypeBoolean) {
-      api_set_error(error, kErrorTypeValidation, "stdout_tty must be a Boolean");
+    VALIDATE_T("stdout_tty", kObjectTypeBoolean, value.type, {
       return;
-    }
+    });
     stdout_isatty = value.data.boolean;
+    ui->stdout_tty = value.data.boolean;
     return;
   }
 
@@ -382,17 +379,15 @@ static void ui_set_option(UI *ui, bool init, String name, Object value, Error *e
   for (UIExtension i = 0; i < kUIExtCount; i++) {
     if (strequal(name.data, ui_ext_names[i])
         || (i == kUIPopupmenu && is_popupmenu)) {
-      if (value.type != kObjectTypeBoolean) {
-        api_set_error(error, kErrorTypeValidation, "%s must be a Boolean",
-                      name.data);
+      VALIDATE_EXP((value.type == kObjectTypeBoolean), name.data, "Boolean",
+                   api_typename(value.type), {
         return;
-      }
+      });
       bool boolval = value.data.boolean;
       if (!init && i == kUILinegrid && boolval != ui->ui_ext[i]) {
-        // There shouldn't be a reason for an UI to do this ever
+        // There shouldn't be a reason for a UI to do this ever
         // so explicitly don't support this.
-        api_set_error(error, kErrorTypeValidation,
-                      "ext_linegrid option cannot be changed");
+        api_set_error(err, kErrorTypeValidation, "ext_linegrid option cannot be changed");
       }
       ui->ui_ext[i] = boolval;
       if (!init) {
@@ -402,8 +397,7 @@ static void ui_set_option(UI *ui, bool init, String name, Object value, Error *e
     }
   }
 
-  api_set_error(error, kErrorTypeValidation, "No such UI option: %s",
-                name.data);
+  api_set_error(err, kErrorTypeValidation, "No such UI option: %s", name.data);
 }
 
 /// Tell Nvim to resize a grid. Triggers a grid_resize event with the requested
@@ -644,6 +638,8 @@ void remote_ui_grid_resize(UI *ui, Integer grid, Integer width, Integer height)
   Array args = data->call_buf;
   if (ui->ui_ext[kUILinegrid]) {
     ADD_C(args, INTEGER_OBJ(grid));
+  } else {
+    data->client_col = -1;  // force cursor update
   }
   ADD_C(args, INTEGER_OBJ(width));
   ADD_C(args, INTEGER_OBJ(height));
@@ -854,18 +850,25 @@ void remote_ui_raw_line(UI *ui, Integer grid, Integer row, Integer startcol, Int
             mpack_uint(buf, repeat);
           }
         }
+        data->ncells_pending += MIN(repeat, 2);
         last_hl = attrs[i];
         repeat = 0;
       }
     }
     if (endcol < clearcol) {
       nelem++;
+      data->ncells_pending += 1;
       mpack_array(buf, 3);
       mpack_str(buf, " ");
       mpack_uint(buf, (uint32_t)clearattr);
       mpack_uint(buf, (uint32_t)(clearcol - endcol));
     }
     mpack_w2(&lenpos, nelem);
+
+    if (data->ncells_pending > 500) {
+      // pass of cells to UI to let it start processing them
+      remote_ui_flush_buf(ui);
+    }
   } else {
     for (int i = 0; i < endcol - startcol; i++) {
       remote_ui_cursor_goto(ui, row, startcol + i);
@@ -917,6 +920,8 @@ void remote_ui_flush_buf(UI *ui)
   // we have sent events to the client, but possibly not yet the final "flush"
   // event.
   data->flushed_events = true;
+
+  data->ncells_pending = 0;
 }
 
 /// An intentional flush (vsync) when Nvim is finished redrawing the screen

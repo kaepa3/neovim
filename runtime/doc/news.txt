@@ -13,7 +13,7 @@ BREAKING CHANGES                                                *news-breaking*
 
 The following changes may require adaptations in user config or plugins.
 
-• Cscope support is now removed (see |cscope| and |nvim-features-removed|):
+• Cscope support is now removed (see |cscope| and |nvim-removed|):
   - Commands removed:
     - `:cscope`
     - `:lcscope`
@@ -34,7 +34,7 @@ The following changes may require adaptations in user config or plugins.
 
   See https://github.com/neovim/neovim/pull/20545 for more information.
 
-• `:hardcopy` is now removed (see |hardcopy| and |nvim-features-removed|):
+• `:hardcopy` is now removed (see |hardcopy| and |nvim-removed|):
   - Commands removed:
     - `:hardcopy`
   - Options removed:
@@ -47,10 +47,17 @@ The following changes may require adaptations in user config or plugins.
 
 • libiconv is now a required build dependency.
 
+• Unsaved changes are now preserved rather than discarded when |channel-stdio|
+  is closed.
+
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
 The following new APIs or features were added.
+
+• A new environment variable named NVIM_APPNAME enables configuring the
+  directories where Neovim should find its configuration and state files. See
+  `:help $NVIM_APPNAME` .
 
 • |nvim_open_win()| now accepts a relative `mouse` option to open a floating win
   relative to the mouse. Note that the mouse doesn't update frequently without
@@ -63,7 +70,7 @@ The following new APIs or features were added.
 <
   (or the Vimscript equivalent) to their |config| file.
 
-• Run Lua scripts from your shell using |-l|. >
+• Added support for running Lua scripts from shell using |-l|. >
       nvim -l foo.lua --arg1 --arg2
 <  Also works with stdin: >
       echo "print(42)" | nvim -l -
@@ -151,6 +158,32 @@ The following new APIs or features were added.
 
 • |:highlight| now supports an additional attribute "altfont".
 
+• Treesitter captures can now be transformed by directives. This will allow
+  more complicated dynamic language injections.
+
+• |vim.treesitter.query.get_node_text()| now accepts a `metadata` option for
+  writing custom directives using |vim.treesitter.query.add_directive()|.
+
+• |vim.treesitter.language.add()| as a new replacement for
+  `vim.treesitter.language.require_language`.
+
+• `require'bit'` is now always available |lua-bit|
+
+• |vim.treesitter.foldexpr()| can be used for 'foldexpr' to use treesitter for folding.
+
+• Expanded the TSNode API with:
+  - |TSNode:tree()|
+  - |TSNode:has_changes()|
+  - |TSNode:extra()|
+  - |TSNode:equal()|
+
+  Additionally |TSNode:range()| now takes an optional {include_bytes} argument.
+
+• |nvim_list_uis()| reports all |ui-option| fields.
+
+• Vim's `has('gui_running')` is now supported as a way for plugins to check if
+  a GUI (not the |TUI|) is attached to Nvim. |has()|
+
 ==============================================================================
 CHANGED FEATURES                                                 *news-changes*
 
@@ -189,6 +222,10 @@ DEPRECATIONS                                                *news-deprecations*
 The following functions are now deprecated and will be removed in the next
 release.
 
+• `vim.treesitter.language.require_language()` has been deprecated in favour
+  of |vim.treesitter.language.add()|.
 
+• |vim.treesitter.get_node_at_pos()| and |vim.treesitter.get_node_at_cursor()|
+  are both deprecated in favor of |vim.treesitter.get_node()|.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

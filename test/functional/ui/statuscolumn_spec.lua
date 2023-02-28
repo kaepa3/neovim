@@ -456,7 +456,7 @@ describe('statuscolumn', function()
                14 aaaaa                                    |
                                                            |
     ]])
-    command('set stc=')  -- also for the default sign column
+    command('set stc=')  -- also for the default fold column
     screen:expect_unchanged()
     -- 'statuscolumn' is not too wide with custom (bogus) fold column
     command([[set stc=%{foldlevel(v:lnum)>0?repeat('-',foldlevel(v:lnum)):''}%=%l\ ]])
@@ -476,6 +476,26 @@ describe('statuscolumn', function()
       ~                                                    |
       ~                                                    |
                                                            |
+    ]])
+  end)
+
+  it('works with cmdwin', function()
+    feed(':set stc=%l<CR>q:k$')
+    screen:expect([[
+      7 aaaaa                                              |
+      8 aaaaa                                              |
+      9 aaaaa                                              |
+      10aaaaa                                              |
+      [No Name] [+]                                        |
+      :1set stc=%^l                                         |
+      :2                                                   |
+      ~                                                    |
+      ~                                                    |
+      ~                                                    |
+      ~                                                    |
+      ~                                                    |
+      [Command Line]                                       |
+      :                                                    |
     ]])
   end)
 end)

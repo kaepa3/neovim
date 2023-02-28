@@ -2254,61 +2254,63 @@ func Test_normal29_brace()
   " set cpo+={
   " 1
   " norm! 0d2}
-  " let expected =<< trim [DATA]
-  "   {
-  "   This is no paragraph
-  "   unless the '{' is set
-  "   in 'cpoptions'
-  "   }
-  "   .IP
-  "   The nroff macros IP separates a paragraph
-  "   That means, it must be a '.'
-  "   followed by IP
-  "   .LPIt does not matter, if afterwards some
-  "   more characters follow.
-  "   .SHAlso section boundaries from the nroff
-  "   macros terminate a paragraph. That means
-  "   a character like this:
-  "   .NH
-  "   End of text here
-  "
-  " [DATA]
+
+  let expected =<< trim [DATA]
+    {
+    This is no paragraph
+    unless the '{' is set
+    in 'cpoptions'
+    }
+    .IP
+    The nroff macros IP separates a paragraph
+    That means, it must be a '.'
+    followed by IP
+    .LPIt does not matter, if afterwards some
+    more characters follow.
+    .SHAlso section boundaries from the nroff
+    macros terminate a paragraph. That means
+    a character like this:
+    .NH
+    End of text here
+
+  [DATA]
   " call assert_equal(expected, getline(1, '$'))
-  "
+
   " $
   " norm! d}
-  " let expected =<< trim [DATA]
-  "   {
-  "   This is no paragraph
-  "   unless the '{' is set
-  "   in 'cpoptions'
-  "   }
-  "   .IP
-  "   The nroff macros IP separates a paragraph
-  "   That means, it must be a '.'
-  "   followed by IP
-  "   .LPIt does not matter, if afterwards some
-  "   more characters follow.
-  "   .SHAlso section boundaries from the nroff
-  "   macros terminate a paragraph. That means
-  "   a character like this:
-  "   .NH
-  "   End of text here
-  "
-  " [DATA]
+
+  let expected =<< trim [DATA]
+    {
+    This is no paragraph
+    unless the '{' is set
+    in 'cpoptions'
+    }
+    .IP
+    The nroff macros IP separates a paragraph
+    That means, it must be a '.'
+    followed by IP
+    .LPIt does not matter, if afterwards some
+    more characters follow.
+    .SHAlso section boundaries from the nroff
+    macros terminate a paragraph. That means
+    a character like this:
+    .NH
+    End of text here
+
+  [DATA]
   " call assert_equal(expected, getline(1, '$'))
-  "
+
   " norm! gg}
   " norm! d5}
-  "
-  " let expected =<< trim [DATA]
-  "   {
-  "   This is no paragraph
-  "   unless the '{' is set
-  "   in 'cpoptions'
-  "   }
 
-  " [DATA]
+  let expected =<< trim [DATA]
+    {
+    This is no paragraph
+    unless the '{' is set
+    in 'cpoptions'
+    }
+
+  [DATA]
   " call assert_equal(expected, getline(1, '$'))
 
   " Jumping to a fold should open the fold
@@ -3281,9 +3283,9 @@ func Test_delete_until_paragraph()
 endfunc
 
 " Test for the gr (virtual replace) command
-" Test for the bug fixed by 7.4.387
 func Test_gr_command()
   enew!
+  " Test for the bug fixed by 7.4.387
   let save_cpo = &cpo
   call append(0, ['First line', 'Second line', 'Third line'])
   exe "normal i\<C-G>u"
@@ -3296,10 +3298,12 @@ func Test_gr_command()
   normal 4gro
   call assert_equal('ooooecond line', getline(2))
   let &cpo = save_cpo
+
   normal! ggvegrx
   call assert_equal('xxxxx line', getline(1))
   exe "normal! gggr\<C-V>122"
   call assert_equal('zxxxx line', getline(1))
+
   set virtualedit=all
   normal! 15|grl
   call assert_equal('zxxxx line    l', getline(1))
@@ -3307,8 +3311,25 @@ func Test_gr_command()
   set nomodifiable
   call assert_fails('normal! grx', 'E21:')
   call assert_fails('normal! gRx', 'E21:')
+  call assert_nobeep("normal! gr\<Esc>")
   set modifiable&
-  enew!
+
+  call assert_nobeep("normal! gr\<Esc>")
+  call assert_beeps("normal! cgr\<Esc>")
+
+  call assert_equal('zxxxx line    l', getline(1))
+  exe "normal! 2|gr\<C-V>\<Esc>"
+  call assert_equal("z\<Esc>xx line    l", getline(1))
+
+  call setline(1, 'abcdef')
+  exe "normal! 0gr\<C-O>lx"
+  call assert_equal("\<C-O>def", getline(1))
+
+  call setline(1, 'abcdef')
+  exe "normal! 0gr\<C-G>lx"
+  call assert_equal("\<C-G>def", getline(1))
+
+  bwipe!
 endfunc
 
 func Test_nv_hat_count()

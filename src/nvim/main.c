@@ -182,6 +182,9 @@ void early_init(mparm_T *paramp)
 #ifdef MSWIN
   OSVERSIONINFO ovi;
   ovi.dwOSVersionInfoSize = sizeof(ovi);
+  // Disable warning about GetVersionExA being deprecated. There doesn't seem to be a convenient
+  // replacement that doesn't add a ton of extra code as of writing this.
+# pragma warning(suppress : 4996)
   GetVersionEx(&ovi);
   snprintf(windowsVersion, sizeof(windowsVersion), "%d.%d",
            (int)ovi.dwMajorVersion, (int)ovi.dwMinorVersion);
@@ -380,6 +383,7 @@ int main(int argc, char **argv)
   if (ui_client_channel_id) {
     ui_client_run(remote_ui);  // NORETURN
   }
+  assert(!ui_client_channel_id && !use_builtin_ui);
 
   // Wait for UIs to set up Nvim or show early messages
   // and prompts (--cmd, swapfile dialog, …).
@@ -404,19 +408,16 @@ int main(int argc, char **argv)
 
   open_script_files(&params);
 
-  // Default mappings (incl. menus)
+  // Default mappings (incl. menus) & autocommands
   Error err = ERROR_INIT;
-  Object o = NLUA_EXEC_STATIC("return vim._init_default_mappings()",
+  Object o = NLUA_EXEC_STATIC("return vim._init_defaults()",
                               (Array)ARRAY_DICT_INIT, &err);
   assert(!ERROR_SET(&err));
   api_clear_error(&err);
   assert(o.type == kObjectTypeNil);
   api_free_object(o);
 
-  TIME_MSG("init default mappings");
-
-  init_default_autocmds();
-  TIME_MSG("init default autocommands");
+  TIME_MSG("init default mappings & autocommands");
 
   bool vimrc_none = strequal(params.use_vimrc, "NONE");
 
@@ -583,13 +584,13 @@ int main(int argc, char **argv)
   set_vim_var_nr(VV_VIM_DID_ENTER, 1L);
   apply_autocmds(EVENT_VIMENTER, NULL, NULL, false, curbuf);
   TIME_MSG("VimEnter autocommands");
-  if (use_remote_ui || use_builtin_ui) {
-    do_autocmd_uienter(use_remote_ui ? CHAN_STDIO : 0, true);
+  if (use_remote_ui) {
+    do_autocmd_uienter(CHAN_STDIO, true);
     TIME_MSG("UIEnter autocommands");
   }
 
 #ifdef MSWIN
-  if (use_builtin_ui) {
+  if (use_remote_ui) {
     os_icon_init();
   }
   os_title_save();
@@ -671,6 +672,7 @@ void os_exit(int r)
 void getout(int exitval)
   FUNC_ATTR_NORETURN
 {
+  assert(!ui_client_channel_id);
   exiting = true;
 
   // On error during Ex mode, exit with a non-zero code.
@@ -790,10 +792,11 @@ void getout(int exitval)
   os_exit(exitval);
 }
 
-/// Preserve files, print contents of `IObuff`, and exit 1.
+/// Preserve files, print contents of `errmsg`, and exit 1.
+/// @param errmsg  If NULL, this function will not print anything.
 ///
 /// May be called from deadly_signal().
-void preserve_exit(void)
+void preserve_exit(const char *errmsg)
   FUNC_ATTR_NORETURN
 {
   // 'true' when we are sure to exit, e.g., after a deadly signal
@@ -813,19 +816,24 @@ void preserve_exit(void)
   signal_reject_deadly();
 
   if (ui_client_channel_id) {
+    // For TUI: exit alternate screen so that the error messages can be seen.
+    ui_client_stop();
+  }
+  if (errmsg != NULL) {
+    os_errmsg(errmsg);
+    os_errmsg("\n");
+  }
+  if (ui_client_channel_id) {
     os_exit(1);
   }
-
-  os_errmsg(IObuff);
-  os_errmsg("\n");
-  ui_flush();
 
   ml_close_notmod();                // close all not-modified buffers
 
   FOR_ALL_BUFFERS(buf) {
     if (buf->b_ml.ml_mfp != NULL && buf->b_ml.ml_mfp->mf_fname != NULL) {
-      os_errmsg("Vim: preserving files...\r\n");
-      ui_flush();
+      if (errmsg != NULL) {
+        os_errmsg("Vim: preserving files...\r\n");
+      }
       ml_sync_all(false, false, true);  // preserve all swap files
       break;
     }
@@ -833,7 +841,9 @@ void preserve_exit(void)
 
   ml_close_all(false);              // close all memfiles, without deleting
 
-  os_errmsg("Vim: Finished.\r\n");
+  if (errmsg != NULL) {
+    os_errmsg("Vim: Finished.\r\n");
+  }
 
   getout(1);
 }
@@ -908,9 +918,8 @@ static void remote_request(mparm_T *params, int remote_args, char *server_addr, 
   }
 
   Array args = ARRAY_DICT_INIT;
-  String arg_s;
   for (int t_argc = remote_args; t_argc < argc; t_argc++) {
-    arg_s = cstr_to_string(argv[t_argc]);
+    String arg_s = cstr_to_string(argv[t_argc]);
     ADD(args, STRING_OBJ(arg_s));
   }
 
@@ -1583,7 +1592,7 @@ static void open_script_files(mparm_T *parmp)
       scriptin[0] = file_open_new(&error, parmp->scriptin,
                                   kFileReadOnly|kFileNonBlocking, 0);
       if (scriptin[0] == NULL) {
-        vim_snprintf((char *)IObuff, IOSIZE,
+        vim_snprintf(IObuff, IOSIZE,
                      _("Cannot open for reading: \"%s\": %s\n"),
                      parmp->scriptin, os_strerror(error));
         os_errmsg(IObuff);
@@ -1608,9 +1617,6 @@ static void open_script_files(mparm_T *parmp)
 // Also does recovery if "recoverymode" set.
 static void create_windows(mparm_T *parmp)
 {
-  int dorewind;
-  int done = 0;
-
   // Create the number of windows that was requested.
   if (parmp->window_count == -1) {      // was not set
     parmp->window_count = 1;
@@ -1646,6 +1652,7 @@ static void create_windows(mparm_T *parmp)
     }
     do_modelines(0);                    // do modelines
   } else {
+    int done = 0;
     // Open a buffer for windows that don't have one yet.
     // Commands in the vimrc might have loaded a file or split the window.
     // Watch out for autocommands that delete a window.
@@ -1653,7 +1660,7 @@ static void create_windows(mparm_T *parmp)
     // Don't execute Win/Buf Enter/Leave autocommands here
     autocmd_no_enter++;
     autocmd_no_leave++;
-    dorewind = true;
+    int dorewind = true;
     while (done++ < 1000) {
       if (dorewind) {
         if (parmp->window_layout == WIN_TABS) {

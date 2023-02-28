@@ -1,6 +1,8 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
+/// Nvim's own UI client, which attaches to a child or remote Nvim server.
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,6 +24,10 @@
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 
+#ifdef MSWIN
+# include "nvim/os/os_win_console.h"
+#endif
+
 static TUIData *tui = NULL;
 static bool ui_client_is_remote = false;
 
@@ -31,7 +37,6 @@ static bool ui_client_is_remote = false;
 # include "ui_events_client.generated.h"
 #endif
 // uncrustify:on
-//
 
 uint64_t ui_client_start_server(int argc, char **argv)
 {
@@ -90,6 +95,7 @@ void ui_client_attach(int width, int height, char *term)
     PUT_C(opts, "stdout_tty", BOOLEAN_OBJ(stdout_isatty));
     if (ui_client_forward_stdin) {
       PUT_C(opts, "stdin_fd", INTEGER_OBJ(UI_CLIENT_STDIN_FD));
+      ui_client_forward_stdin = false;  // stdin shouldn't be forwarded again #22292
     }
   }
   ADD_C(args, DICTIONARY_OBJ(opts));
@@ -110,7 +116,7 @@ void ui_client_run(bool remote_ui)
   ui_client_is_remote = remote_ui;
   int width, height;
   char *term;
-  tui = tui_start(&width, &height, &term);
+  tui_start(&tui, &width, &height, &term);
 
   ui_client_attach(width, height, term);
 
@@ -122,7 +128,9 @@ void ui_client_run(bool remote_ui)
 
 void ui_client_stop(void)
 {
-  tui_stop(tui);
+  if (!tui_is_stopped(tui)) {
+    tui_stop(tui);
+  }
 }
 
 void ui_client_set_size(int width, int height)
@@ -147,7 +155,7 @@ UIClientHandler ui_client_get_redraw_handler(const char *name, size_t name_len, 
 
 /// Placeholder for _sync_ requests with 'redraw' method name
 ///
-/// async 'redraw' events, which are expected when nvim acts as an ui client.
+/// async 'redraw' events, which are expected when nvim acts as a ui client.
 /// get handled in msgpack_rpc/unpacker.c and directly dispatched to handlers
 /// of specific ui events, like ui_client_event_grid_resize and so on.
 Object handle_ui_client_redraw(uint64_t channel_id, Array args, Arena *arena, Error *error)

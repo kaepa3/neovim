@@ -369,14 +369,13 @@ bool msg_attr_keep(const char *s, int attr, bool keep, bool multiline)
 char *msg_strtrunc(char *s, int force)
 {
   char *buf = NULL;
-  int len;
-  int room;
 
   // May truncate message to avoid a hit-return prompt
   if ((!msg_scroll && !need_wait_return && shortmess(SHM_TRUNCALL)
        && !exmode_active && msg_silent == 0 && !ui_has(kUIMessages))
       || force) {
-    len = vim_strsize(s);
+    int room;
+    int len = vim_strsize(s);
     if (msg_scrolled != 0) {
       // Use all the columns.
       room = (Rows - msg_row) * Columns - 1;
@@ -774,7 +773,7 @@ bool emsg(const char *s)
 
 void emsg_invreg(int name)
 {
-  semsg(_("E354: Invalid register name: '%s'"), transchar(name));
+  semsg(_("E354: Invalid register name: '%s'"), transchar_buf(NULL, name));
 }
 
 /// Print an error message with unknown number of arguments
@@ -1033,7 +1032,6 @@ void ex_messages(void *const eap_p)
 {
   const exarg_T *const eap = (const exarg_T *)eap_p;
   struct msg_hist *p;
-  int c = 0;
 
   if (strcmp(eap->arg, "clear") == 0) {
     int keep = eap->addr_count == 0 ? 0 : eap->line2;
@@ -1052,6 +1050,7 @@ void ex_messages(void *const eap_p)
   p = first_msg_hist;
 
   if (eap->addr_count != 0) {
+    int c = 0;
     // Count total messages
     for (; p != NULL && !got_int; p = p->next) {
       c++;
@@ -1085,7 +1084,7 @@ void ex_messages(void *const eap_p)
         } else if (p->msg && p->msg[0]) {
           Array content_entry = ARRAY_DICT_INIT;
           ADD(content_entry, INTEGER_OBJ(p->attr));
-          ADD(content_entry, STRING_OBJ(cstr_to_string((char *)(p->msg))));
+          ADD(content_entry, STRING_OBJ(cstr_to_string(p->msg)));
           ADD(content, ARRAY_OBJ(content_entry));
         }
         ADD(entry, ARRAY_OBJ(content));
@@ -1470,9 +1469,9 @@ void msg_putchar_attr(int c, int attr)
     buf[2] = (char)K_THIRD(c);
     buf[3] = NUL;
   } else {
-    buf[utf_char2bytes(c, (char *)buf)] = NUL;
+    buf[utf_char2bytes(c, buf)] = NUL;
   }
-  msg_puts_attr((const char *)buf, attr);
+  msg_puts_attr(buf, attr);
 }
 
 void msg_outnum(long n)
@@ -1532,7 +1531,7 @@ char *msg_outtrans_one(char *p, int attr)
     msg_outtrans_len_attr(p, l, attr);
     return p + l;
   }
-  msg_puts_attr((const char *)transchar_byte((uint8_t)(*p)), attr);
+  msg_puts_attr((const char *)transchar_byte_buf(NULL, (uint8_t)(*p)), attr);
   return p + 1;
 }
 
@@ -1542,7 +1541,6 @@ int msg_outtrans_len_attr(const char *msgstr, int len, int attr)
   const char *str = msgstr;
   const char *plain_start = msgstr;
   char *s;
-  int mb_l;
   int c;
   int save_got_int = got_int;
 
@@ -1565,7 +1563,7 @@ int msg_outtrans_len_attr(const char *msgstr, int len, int attr)
   // Normal characters are printed several at a time.
   while (--len >= 0 && !got_int) {
     // Don't include composing chars after the end.
-    mb_l = utfc_ptr2len_len(str, len + 1);
+    int mb_l = utfc_ptr2len_len(str, len + 1);
     if (mb_l > 1) {
       c = utf_ptr2char(str);
       if (vim_isprintc(c)) {
@@ -1578,14 +1576,14 @@ int msg_outtrans_len_attr(const char *msgstr, int len, int attr)
           msg_puts_attr_len(plain_start, str - plain_start, attr);
         }
         plain_start = str + mb_l;
-        msg_puts_attr((const char *)transchar(c),
+        msg_puts_attr((const char *)transchar_buf(NULL, c),
                       (attr == 0 ? HL_ATTR(HLF_8) : attr));
         retval += char2cells(c);
       }
       len -= mb_l - 1;
       str += mb_l;
     } else {
-      s = (char *)transchar_byte((uint8_t)(*str));
+      s = (char *)transchar_byte_buf(NULL, (uint8_t)(*str));
       if (s[1] != NUL) {
         // Unprintable char: print the printable chars so far and the
         // translation of the unprintable char.
@@ -1667,7 +1665,7 @@ int msg_outtrans_special(const char *strstart, bool from, int maxlen)
     }
     if (text[0] != NUL && text[1] == NUL) {
       // single-byte character or illegal byte
-      text = (char *)transchar_byte((uint8_t)text[0]);
+      text = (char *)transchar_byte_buf(NULL, (uint8_t)text[0]);
     }
     const int len = vim_strsize((char *)text);
     if (maxlen > 0 && retval + len >= maxlen) {
@@ -1913,7 +1911,7 @@ void msg_prt_line(char *s, int list)
         s--;
       } else if (c != NUL && (n = byte2cells(c)) > 1) {
         n_extra = n - 1;
-        p_extra = (char *)transchar_byte(c);
+        p_extra = (char *)transchar_byte_buf(NULL, c);
         c_extra = NUL;
         c_final = NUL;
         c = (unsigned char)(*p_extra++);
@@ -2139,7 +2137,7 @@ static void msg_puts_display(const char *str, int maxlen, int attr, int recurse)
   int t_col = 0;  // Screen cells todo, 0 when "t_s" not used.
   int l;
   int cw;
-  const char *sb_str = (char *)str;
+  const char *sb_str = str;
   int sb_col = msg_col;
   int wrap;
   int did_last_char;
@@ -2153,7 +2151,7 @@ static void msg_puts_display(const char *str, int maxlen, int attr, int recurse)
     }
     // Concat pieces with the same highlight
     size_t len = strnlen(str, (size_t)maxlen);  // -V781
-    ga_concat_len(&msg_ext_last_chunk, (char *)str, len);
+    ga_concat_len(&msg_ext_last_chunk, str, len);
     msg_ext_cur_len += len;
     return;
   }
@@ -2652,12 +2650,11 @@ void msg_sb_eol(void)
 static msgchunk_T *disp_sb_line(int row, msgchunk_T *smp)
 {
   msgchunk_T *mp = smp;
-  char *p;
 
   for (;;) {
     msg_row = row;
     msg_col = mp->sb_msg_col;
-    p = mp->sb_text;
+    char *p = mp->sb_text;
     if (*p == '\n') {       // don't display the line break
       p++;
     }
@@ -2767,7 +2764,6 @@ static int do_more_prompt(int typed_char)
   int oldState = State;
   int c;
   int retval = false;
-  int toscroll;
   bool to_redraw = false;
   msgchunk_T *mp_last = NULL;
   msgchunk_T *mp;
@@ -2809,7 +2805,7 @@ static int do_more_prompt(int typed_char)
       c = get_keystroke(resize_events);
     }
 
-    toscroll = 0;
+    int toscroll = 0;
     switch (c) {
     case BS:                    // scroll one line back
     case K_BS:
@@ -3507,7 +3503,6 @@ int do_dialog(int type, char *title, char *message, char *buttons, int dfltbutto
 {
   int retval = 0;
   char *hotkeys;
-  int c;
   int i;
 
   if (silent_mode      // No dialogs in silent mode ("ex -s")
@@ -3530,7 +3525,7 @@ int do_dialog(int type, char *title, char *message, char *buttons, int dfltbutto
 
   for (;;) {
     // Get a typed character directly from the user.
-    c = get_keystroke(NULL);
+    int c = get_keystroke(NULL);
     switch (c) {
     case CAR:                 // User accepts default option
     case NL:

@@ -34,15 +34,17 @@
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
-#include "nvim/ui_client.h"
-#ifdef MSWIN
-# include "nvim/os/os_win_console.h"
-#endif
 #include "nvim/tui/input.h"
 #include "nvim/tui/terminfo.h"
 #include "nvim/tui/tui.h"
 #include "nvim/ugrid.h"
 #include "nvim/ui.h"
+#include "nvim/ui_client.h"
+
+#ifdef MSWIN
+# include "nvim/os/os_win_console.h"
+# include "nvim/os/tty.h"
+#endif
 
 // Space reserved in two output buffers to make the cursor normal or invisible
 // when flushing. No existing terminal will require 32 bytes to do that.
@@ -165,7 +167,7 @@ static bool cursor_style_enabled = false;
 # include "tui/tui.c.generated.h"
 #endif
 
-TUIData *tui_start(int *width, int *height, char **term)
+void tui_start(TUIData **tui_p, int *width, int *height, char **term)
 {
   TUIData *tui = xcalloc(1, sizeof(TUIData));
   tui->is_starting = true;
@@ -188,11 +190,11 @@ TUIData *tui_start(int *width, int *height, char **term)
   uv_timer_start(&tui->startup_delay_timer, after_startup_cb,
                  100, 0);
 
+  *tui_p = tui;
   loop_poll_events(&main_loop, 1);
   *width = tui->width;
   *height = tui->height;
   *term = tui->term;
-  return tui;
 }
 
 void tui_enable_extkeys(TUIData *tui)
@@ -357,12 +359,7 @@ static void terminfo_start(TUIData *tui)
     if (ret) {
       ELOG("uv_tty_init failed: %s", uv_strerror(ret));
     }
-#ifdef MSWIN
-    ret = uv_tty_set_mode(&tui->output_handle.tty, UV_TTY_MODE_RAW);
-    if (ret) {
-      ELOG("uv_tty_set_mode failed: %s", uv_strerror(ret));
-    }
-#else
+#ifndef MSWIN
     int retry_count = 10;
     // A signal may cause uv_tty_set_mode() to fail (e.g., SIGCONT). Retry a
     // few times. #12322
@@ -458,9 +455,6 @@ static void tui_terminal_stop(TUIData *tui)
 
 void tui_stop(TUIData *tui)
 {
-  if (tui->stopped) {
-    return;
-  }
   tui_terminal_stop(tui);
   stream_set_blocking(tui->input.in_fd, true);   // normalize stream (#2598)
   tinput_destroy(&tui->input);
@@ -470,7 +464,7 @@ void tui_stop(TUIData *tui)
 }
 
 /// Returns true if UI `ui` is stopped.
-static bool tui_is_stopped(TUIData *tui)
+bool tui_is_stopped(TUIData *tui)
 {
   return tui->stopped;
 }
@@ -1115,8 +1109,8 @@ void tui_set_mode(TUIData *tui, ModeShape mode)
       // Hopefully the user's default cursor color is inverse.
       unibi_out_ext(tui, tui->unibi_ext.reset_cursor_color);
     } else {
+      char hexbuf[8];
       if (tui->set_cursor_color_as_str) {
-        char hexbuf[8];
         snprintf(hexbuf, 7 + 1, "#%06x", aep.rgb_bg_color);
         UNIBI_SET_STR_VAR(tui->params[0], hexbuf);
       } else {
@@ -1153,7 +1147,7 @@ void tui_mode_change(TUIData *tui, String mode, Integer mode_idx)
   // If stdin is not a TTY, the LHS of pipe may change the state of the TTY
   // after calling uv_tty_set_mode. So, set the mode of the TTY again here.
   // #13073
-  if (tui->is_starting && tui->input.in_fd == STDERR_FILENO) {
+  if (tui->is_starting && !stdin_isatty) {
     int ret = uv_tty_set_mode(&tui->output_handle.tty, UV_TTY_MODE_NORMAL);
     if (ret) {
       ELOG("uv_tty_set_mode failed: %s", uv_strerror(ret));

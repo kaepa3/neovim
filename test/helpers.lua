@@ -1,5 +1,5 @@
 require('test.compat')
-local shared = require('vim.shared')
+local shared = vim
 local assert = require('luassert')
 local busted = require('busted')
 local luv = require('luv')
@@ -312,7 +312,7 @@ function module.is_os(s)
     or s == 'bsd') then
     error('unknown platform: '..tostring(s))
   end
-  return ((s == 'win' and module.sysname():find('windows'))
+  return not not ((s == 'win' and module.sysname():find('windows'))
     or (s == 'mac' and module.sysname() == 'darwin')
     or (s == 'freebsd' and module.sysname() == 'freebsd')
     or (s == 'openbsd' and module.sysname() == 'openbsd')

@@ -1,12 +1,13 @@
 local api = vim.api
 
-local M = {}
-
----@class Playground
+---@class TSPlayground
 ---@field ns number API namespace
 ---@field opts table Options table with the following keys:
 ---                  - anon (boolean): If true, display anonymous nodes
 ---                  - lang (boolean): If true, display the language alongside each node
+---@field nodes Node[]
+---@field named Node[]
+local TSPlayground = {}
 ---
 ---@class Node
 ---@field id number Node id
@@ -18,6 +19,7 @@ local M = {}
 ---@field end_lnum number Final line number of this node in the source buffer
 ---@field end_col number Final column number of this node in the source buffer
 ---@field lang string Source language of this node
+---@field root TSNode
 
 --- Traverse all child nodes starting at {node}.
 ---
@@ -31,10 +33,10 @@ local M = {}
 --- node of each of these trees is contained within a node in the primary tree. The {injections}
 --- table maps nodes in the primary tree to root nodes of injected trees.
 ---
----@param node userdata Starting node to begin traversal |tsnode|
+---@param node TSNode Starting node to begin traversal |tsnode|
 ---@param depth number Current recursion depth
 ---@param lang string Language of the tree currently being traversed
----@param injections table Mapping of node ids to root nodes of injected language trees (see
+---@param injections table<integer,Node> Mapping of node ids to root nodes of injected language trees (see
 ---                        explanation above)
 ---@param tree Node[] Output table containing a list of tables each representing a node in the tree
 ---@private
@@ -48,7 +50,7 @@ local function traverse(node, depth, lang, injections, tree)
     local type = child:type()
     local lnum, col, end_lnum, end_col = child:range()
     local named = child:named()
-    local text
+    local text ---@type string
     if named then
       if field then
         text = string.format('%s: (%s)', field, type)
@@ -79,14 +81,14 @@ end
 
 --- Create a new Playground object.
 ---
----@param bufnr number Source buffer number
+---@param bufnr integer Source buffer number
 ---@param lang string|nil Language of source buffer
 ---
----@return Playground|nil
+---@return TSPlayground|nil
 ---@return string|nil Error message, if any
 ---
 ---@private
-function M.new(self, bufnr, lang)
+function TSPlayground:new(bufnr, lang)
   local ok, parser = pcall(vim.treesitter.get_parser, bufnr or 0, lang)
   if not ok then
     return nil, 'No parser available for the given buffer'
@@ -96,7 +98,7 @@ function M.new(self, bufnr, lang)
   -- the primary tree that contains that root. Add a mapping from the node in the primary tree to
   -- the root in the child tree to the {injections} table.
   local root = parser:parse()[1]:root()
-  local injections = {}
+  local injections = {} ---@type table<integer,table>
   parser:for_each_child(function(child, lang_)
     child:for_each_tree(function(tree)
       local r = tree:root()
@@ -112,7 +114,7 @@ function M.new(self, bufnr, lang)
 
   local nodes = traverse(root, 0, parser:lang(), injections, {})
 
-  local named = {}
+  local named = {} ---@type Node[]
   for _, v in ipairs(nodes) do
     if v.named then
       named[#named + 1] = v
@@ -134,30 +136,56 @@ function M.new(self, bufnr, lang)
   return t
 end
 
+local decor_ns = api.nvim_create_namespace('ts.playground')
+
+---@private
+---@param lnum integer
+---@param col integer
+---@param end_lnum integer
+---@param end_col integer
+---@return string
+local function get_range_str(lnum, col, end_col, end_lnum)
+  if lnum == end_lnum then
+    return string.format('[%d:%d-%d]', lnum + 1, col + 1, end_col)
+  end
+  return string.format('[%d:%d-%d:%d]', lnum + 1, col + 1, end_lnum + 1, end_col)
+end
+
 --- Write the contents of this Playground into {bufnr}.
 ---
 ---@param bufnr number Buffer number to write into.
 ---@private
-function M.draw(self, bufnr)
+function TSPlayground:draw(bufnr)
   vim.bo[bufnr].modifiable = true
-  local lines = {}
+  local lines = {} ---@type string[]
+  local lang_hl_marks = {} ---@type table[]
+
   for _, item in self:iter() do
-    lines[#lines + 1] = table.concat({
-      string.rep(' ', item.depth),
-      item.text,
-      item.lnum == item.end_lnum
-          and string.format(' [%d:%d-%d]', item.lnum + 1, item.col + 1, item.end_col)
-        or string.format(
-          ' [%d:%d-%d:%d]',
-          item.lnum + 1,
-          item.col + 1,
-          item.end_lnum + 1,
-          item.end_col
-        ),
-      self.opts.lang and string.format(' %s', item.lang) or '',
+    local range_str = get_range_str(item.lnum, item.col, item.end_lnum, item.end_col)
+    local lang_str = self.opts.lang and string.format(' %s', item.lang) or ''
+    local line = string.rep(' ', item.depth) .. item.text .. '; ' .. range_str .. lang_str
+
+    if self.opts.lang then
+      lang_hl_marks[#lang_hl_marks + 1] = {
+        col = #line - #lang_str,
+        end_col = #line,
+      }
+    end
+
+    lines[#lines + 1] = line
+  end
+
+  api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
+  api.nvim_buf_clear_namespace(bufnr, decor_ns, 0, -1)
+
+  for i, m in ipairs(lang_hl_marks) do
+    api.nvim_buf_set_extmark(bufnr, decor_ns, i - 1, m.col, {
+      hl_group = 'Title',
+      end_col = m.end_col,
     })
   end
-  api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+
   vim.bo[bufnr].modifiable = false
 end
 
@@ -168,19 +196,19 @@ end
 ---@param i number Node number to get
 ---@return Node
 ---@private
-function M.get(self, i)
+function TSPlayground:get(i)
   local t = self.opts.anon and self.nodes or self.named
   return t[i]
 end
 
 --- Iterate over all of the nodes in this Playground object.
 ---
----@return function Iterator over all nodes in this Playground
+---@return (fun(): integer, Node) Iterator over all nodes in this Playground
 ---@return table
 ---@return number
 ---@private
-function M.iter(self)
+function TSPlayground:iter()
   return ipairs(self.opts.anon and self.nodes or self.named)
 end
 
-return M
+return TSPlayground

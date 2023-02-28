@@ -11,7 +11,7 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      VIM_SOURCE_DIR: ${{ format('{0}/vim-src', github.workspace) }}
+      VIM_SOURCE_DIR: ${{ github.workspace }}/vim-src
       VERSION_BRANCH: marvim/ci-version-update
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
@@ -34,7 +34,7 @@ jobs:
           mv nvim.appimage $HOME/.local/bin/nvim
           printf '%s\n' "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Setup git config
+      - name: Set up git config
         run: |
           git config --global user.name 'marvim'
           git config --global user.email 'marvim@users.noreply.github.com'

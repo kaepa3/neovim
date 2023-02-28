@@ -109,15 +109,7 @@ static hashtab_T compat_hashtab;
 /// Used for checking if local variables or arguments used in a lambda.
 bool *eval_lavars_used = NULL;
 
-/// Array to hold the hashtab with variables local to each sourced script.
-/// Each item holds a variable (nameless) that points to the dict_T.
-typedef struct {
-  ScopeDictDictItem sv_var;
-  dict_T sv_dict;
-} scriptvar_T;
-
-static garray_T ga_scripts = { 0, 0, sizeof(scriptvar_T *), 4, NULL };
-#define SCRIPT_SV(id) (((scriptvar_T **)ga_scripts.ga_data)[(id) - 1])
+#define SCRIPT_SV(id) (SCRIPT_ITEM(id)->sn_vars)
 #define SCRIPT_VARS(id) (SCRIPT_SV(id)->sv_dict.dv_hashtab)
 
 static int echo_attr = 0;   // attributes used for ":echo"
@@ -473,7 +465,7 @@ void eval_init(void)
 }
 
 #if defined(EXITFREE)
-void eval_clear(void)
+static void evalvars_clear(void)
 {
   for (size_t i = 0; i < ARRAY_SIZE(vimvars); i++) {
     struct vimvar *p = &vimvars[i];
@@ -488,27 +480,28 @@ void eval_clear(void)
   hash_init(&vimvarht);    // garbage_collect() will access it
   hash_clear(&compat_hashtab);
 
-  free_scriptnames();
+  // global variables
+  vars_clear(&globvarht);
+
+  // Script-local variables. Clear all the variables here.
+  // The scriptvar_T is cleared later in free_scriptnames(), because a
+  // variable in one script might hold a reference to the whole scope of
+  // another script.
+  for (int i = 1; i <= script_items.ga_len; i++) {
+    vars_clear(&SCRIPT_VARS(i));
+  }
+}
+
+void eval_clear(void)
+{
+  evalvars_clear();
+  free_scriptnames();  // must come after evalvars_clear().
 # ifdef HAVE_WORKING_LIBINTL
   free_locales();
 # endif
 
-  // global variables
-  vars_clear(&globvarht);
-
   // autoloaded script names
   ga_clear_strings(&ga_loaded);
-
-  // Script-local variables. First clear all the variables and in a second
-  // loop free the scriptvar_T, because a variable in one script might hold
-  // a reference to the whole scope of another script.
-  for (int i = 1; i <= ga_scripts.ga_len; i++) {
-    vars_clear(&SCRIPT_VARS(i));
-  }
-  for (int i = 1; i <= ga_scripts.ga_len; i++) {
-    xfree(SCRIPT_SV(i));
-  }
-  ga_clear(&ga_scripts);
 
   // unreferenced lists and dicts
   (void)garbage_collect(false);
@@ -970,7 +963,7 @@ void list_vim_vars(int *first)
 /// List script-local variables, if there is a script.
 void list_script_vars(int *first)
 {
-  if (current_sctx.sc_sid > 0 && current_sctx.sc_sid <= ga_scripts.ga_len) {
+  if (current_sctx.sc_sid > 0 && current_sctx.sc_sid <= script_items.ga_len) {
     list_hashtable_vars(&SCRIPT_VARS(current_sctx.sc_sid), "s:", false, first);
   }
 }
@@ -1505,21 +1498,14 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
       tv_clear(&var1);
 
       const int bloblen = tv_blob_len(lp->ll_tv->vval.v_blob);
-      if (lp->ll_n1 < 0 || lp->ll_n1 > bloblen
-          || (lp->ll_range && lp->ll_n1 == bloblen)) {
-        if (!quiet) {
-          semsg(_(e_blobidx), (int64_t)lp->ll_n1);
-        }
+      if (tv_blob_check_index(bloblen, lp->ll_n1, quiet) == FAIL) {
         tv_clear(&var2);
         return NULL;
       }
       if (lp->ll_range && !lp->ll_empty2) {
         lp->ll_n2 = (long)tv_get_number(&var2);
         tv_clear(&var2);
-        if (lp->ll_n2 < 0 || lp->ll_n2 >= bloblen || lp->ll_n2 < lp->ll_n1) {
-          if (!quiet) {
-            semsg(_(e_blobidx), (int64_t)lp->ll_n2);
-          }
+        if (tv_blob_check_range(bloblen, lp->ll_n1, lp->ll_n2, quiet) == FAIL) {
           return NULL;
         }
       }
@@ -1627,33 +1613,14 @@ void set_var_lval(lval_T *lp, char *endp, typval_T *rettv, int copy, const bool 
           lp->ll_n2 = tv_blob_len(lp->ll_blob) - 1;
         }
 
-        if (lp->ll_n2 - lp->ll_n1 + 1 != tv_blob_len(rettv->vval.v_blob)) {
-          emsg(_("E972: Blob value does not have the right number of bytes"));
+        if (tv_blob_set_range(lp->ll_blob, (int)lp->ll_n1, (int)lp->ll_n2, rettv) == FAIL) {
           return;
-        }
-        if (lp->ll_empty2) {
-          lp->ll_n2 = tv_blob_len(lp->ll_blob);
-        }
-
-        for (int il = (int)lp->ll_n1, ir = 0; il <= (int)lp->ll_n2; il++) {
-          tv_blob_set(lp->ll_blob, il, tv_blob_get(rettv->vval.v_blob, ir++));
         }
       } else {
         bool error = false;
         const char val = (char)tv_get_number_chk(rettv, &error);
         if (!error) {
-          garray_T *const gap = &lp->ll_blob->bv_ga;
-
-          // Allow for appending a byte.  Setting a byte beyond
-          // the end is an error otherwise.
-          if (lp->ll_n1 < gap->ga_len || lp->ll_n1 == gap->ga_len) {
-            ga_grow(&lp->ll_blob->bv_ga, 1);
-            tv_blob_set(lp->ll_blob, (int)lp->ll_n1, (uint8_t)val);
-            if (lp->ll_n1 == gap->ga_len) {
-              gap->ga_len++;
-            }
-          }
-          // error for invalid range was already given in get_lval()
+          tv_blob_set_append(lp->ll_blob, (int)lp->ll_n1, (uint8_t)val);
         }
       }
     } else if (op != NULL && *op != '=') {
@@ -1949,7 +1916,6 @@ void set_context_for_expression(expand_T *xp, char *arg, cmdidx_T cmdidx)
   FUNC_ATTR_NONNULL_ALL
 {
   bool got_eq = false;
-  int c;
   char *p;
 
   if (cmdidx == CMD_let || cmdidx == CMD_const) {
@@ -1970,7 +1936,7 @@ void set_context_for_expression(expand_T *xp, char *arg, cmdidx_T cmdidx)
                                         : EXPAND_EXPRESSION;
   }
   while ((xp->xp_pattern = strpbrk(arg, "\"'+-*/%.=!?~|&$([<>,#")) != NULL) {
-    c = (uint8_t)(*xp->xp_pattern);
+    int c = (uint8_t)(*xp->xp_pattern);
     if (c == '&') {
       c = (uint8_t)xp->xp_pattern[1];
       if (c == '&') {
@@ -2310,7 +2276,6 @@ int eval0(char *arg, typval_T *rettv, char **nextcmd, int evaluate)
 /// @return  OK or FAIL.
 int eval1(char **arg, typval_T *rettv, int evaluate)
 {
-  bool result;
   typval_T var2;
 
   // Get the first variable.
@@ -2319,7 +2284,7 @@ int eval1(char **arg, typval_T *rettv, int evaluate)
   }
 
   if ((*arg)[0] == '?') {
-    result = false;
+    bool result = false;
     if (evaluate) {
       bool error = false;
 
@@ -2499,7 +2464,6 @@ static int eval4(char **arg, typval_T *rettv, int evaluate)
   char *p;
   exprtype_T type = EXPR_UNKNOWN;
   int len = 2;
-  bool ic;
 
   // Get the first variable.
   if (eval5(arg, rettv, evaluate) == FAIL) {
@@ -2552,6 +2516,7 @@ static int eval4(char **arg, typval_T *rettv, int evaluate)
 
   // If there is a comparative operator, use it.
   if (type != EXPR_UNKNOWN) {
+    bool ic;
     // extra question mark appended: ignore case
     if (p[len] == '?') {
       ic = true;
@@ -2580,8 +2545,41 @@ static int eval4(char **arg, typval_T *rettv, int evaluate)
   return OK;
 }
 
+/// Make a copy of blob "tv1" and append blob "tv2".
+static void eval_addblob(typval_T *tv1, typval_T *tv2)
+{
+  const blob_T *const b1 = tv1->vval.v_blob;
+  const blob_T *const b2 = tv2->vval.v_blob;
+  blob_T *const b = tv_blob_alloc();
+
+  for (int i = 0; i < tv_blob_len(b1); i++) {
+    ga_append(&b->bv_ga, tv_blob_get(b1, i));
+  }
+  for (int i = 0; i < tv_blob_len(b2); i++) {
+    ga_append(&b->bv_ga, tv_blob_get(b2, i));
+  }
+
+  tv_clear(tv1);
+  tv_blob_set_ret(tv1, b);
+}
+
+/// Make a copy of list "tv1" and append list "tv2".
+static int eval_addlist(typval_T *tv1, typval_T *tv2)
+{
+  typval_T var3;
+  // Concatenate Lists.
+  if (tv_list_concat(tv1->vval.v_list, tv2->vval.v_list, &var3) == FAIL) {
+    tv_clear(tv1);
+    tv_clear(tv2);
+    return FAIL;
+  }
+  tv_clear(tv1);
+  *tv1 = var3;
+  return OK;
+}
+
 /// Handle fourth level expression:
-///      +       number addition
+///      +       number addition, concatenation of list or blob
 ///      -       number subtraction
 ///      .       string concatenation
 ///      ..      string concatenation
@@ -2593,8 +2591,6 @@ static int eval4(char **arg, typval_T *rettv, int evaluate)
 static int eval5(char **arg, typval_T *rettv, int evaluate)
 {
   typval_T var2;
-  typval_T var3;
-  int op;
   varnumber_T n1, n2;
   float_T f1 = 0, f2 = 0;
   char *p;
@@ -2606,13 +2602,13 @@ static int eval5(char **arg, typval_T *rettv, int evaluate)
 
   // Repeat computing, until no '+', '-' or '.' is following.
   for (;;) {
-    op = (char_u)(**arg);
+    int op = (char_u)(**arg);
     if (op != '+' && op != '-' && op != '.') {
       break;
     }
 
     if ((op != '+' || (rettv->v_type != VAR_LIST && rettv->v_type != VAR_BLOB))
-        && (op == '.' || rettv->v_type != VAR_FLOAT)) {
+        && (op == '.' || rettv->v_type != VAR_FLOAT) && evaluate) {
       // For "list + ...", an illegal use of the first operand as
       // a number cannot be determined before evaluating the 2nd
       // operand: if this is also a list, all is ok.
@@ -2620,7 +2616,7 @@ static int eval5(char **arg, typval_T *rettv, int evaluate)
       // we know that the first operand needs to be a string or number
       // without evaluating the 2nd operand.  So check before to avoid
       // side effects after an error.
-      if (evaluate && !tv_check_str(rettv)) {
+      if ((op == '.' && !tv_check_str(rettv)) || (op != '.' && !tv_check_num(rettv))) {
         tv_clear(rettv);
         return FAIL;
       }
@@ -2653,32 +2649,12 @@ static int eval5(char **arg, typval_T *rettv, int evaluate)
         tv_clear(rettv);
         rettv->v_type = VAR_STRING;
         rettv->vval.v_string = p;
-      } else if (op == '+' && rettv->v_type == VAR_BLOB
-                 && var2.v_type == VAR_BLOB) {
-        const blob_T *const b1 = rettv->vval.v_blob;
-        const blob_T *const b2 = var2.vval.v_blob;
-        blob_T *const b = tv_blob_alloc();
-
-        for (int i = 0; i < tv_blob_len(b1); i++) {
-          ga_append(&b->bv_ga, tv_blob_get(b1, i));
-        }
-        for (int i = 0; i < tv_blob_len(b2); i++) {
-          ga_append(&b->bv_ga, tv_blob_get(b2, i));
-        }
-
-        tv_clear(rettv);
-        tv_blob_set_ret(rettv, b);
-      } else if (op == '+' && rettv->v_type == VAR_LIST
-                 && var2.v_type == VAR_LIST) {
-        // Concatenate Lists.
-        if (tv_list_concat(rettv->vval.v_list, var2.vval.v_list, &var3)
-            == FAIL) {
-          tv_clear(rettv);
-          tv_clear(&var2);
+      } else if (op == '+' && rettv->v_type == VAR_BLOB && var2.v_type == VAR_BLOB) {
+        eval_addblob(rettv, &var2);
+      } else if (op == '+' && rettv->v_type == VAR_LIST && var2.v_type == VAR_LIST) {
+        if (eval_addlist(rettv, &var2) == FAIL) {
           return FAIL;
         }
-        tv_clear(rettv);
-        *rettv = var3;
       } else {
         bool error = false;
 
@@ -3276,7 +3252,6 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
 {
   bool empty1 = false;
   bool empty2 = false;
-  long n1, n2 = 0;
   ptrdiff_t len = -1;
   int range = false;
   char *key = NULL;
@@ -3373,16 +3348,17 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
   }
 
   if (evaluate) {
-    n1 = 0;
+    int n2 = 0;
+    int n1 = 0;
     if (!empty1 && rettv->v_type != VAR_DICT && !tv_is_luafunc(rettv)) {
-      n1 = tv_get_number(&var1);
+      n1 = (int)tv_get_number(&var1);
       tv_clear(&var1);
     }
     if (range) {
       if (empty2) {
         n2 = -1;
       } else {
-        n2 = tv_get_number(&var2);
+        n2 = (int)tv_get_number(&var2);
         tv_clear(&var2);
       }
     }
@@ -3397,20 +3373,20 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
         // The resulting variable is a substring.  If the indexes
         // are out of range the result is empty.
         if (n1 < 0) {
-          n1 = len + n1;
+          n1 = (int)len + n1;
           if (n1 < 0) {
             n1 = 0;
           }
         }
         if (n2 < 0) {
-          n2 = len + n2;
+          n2 = (int)len + n2;
         } else if (n2 >= len) {
-          n2 = len;
+          n2 = (int)len;
         }
         if (n1 >= len || n2 < 0 || n1 > n2) {
           v = NULL;
         } else {
-          v = xmemdupz(s + n1, (size_t)(n2 - n1 + 1));
+          v = xmemdupz(s + n1, (size_t)n2 - (size_t)n1 + 1);
         }
       } else {
         // The resulting variable is a string of a single
@@ -3433,15 +3409,15 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
         // The resulting variable is a sub-blob.  If the indexes
         // are out of range the result is empty.
         if (n1 < 0) {
-          n1 = len + n1;
+          n1 = (int)len + n1;
           if (n1 < 0) {
             n1 = 0;
           }
         }
         if (n2 < 0) {
-          n2 = len + n2;
+          n2 = (int)len + n2;
         } else if (n2 >= len) {
-          n2 = len - 1;
+          n2 = (int)len - 1;
         }
         if (n1 >= len || n2 < 0 || n1 > n2) {
           tv_clear(rettv);
@@ -3449,8 +3425,8 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
           rettv->vval.v_blob = NULL;
         } else {
           blob_T *const blob = tv_blob_alloc();
-          ga_grow(&blob->bv_ga, (int)(n2 - n1 + 1));
-          blob->bv_ga.ga_len = (int)(n2 - n1 + 1);
+          ga_grow(&blob->bv_ga, n2 - n1 + 1);
+          blob->bv_ga.ga_len = n2 - n1 + 1;
           for (long i = n1; i <= n2; i++) {
             tv_blob_set(blob, (int)(i - n1), tv_blob_get(rettv->vval.v_blob, (int)i));
           }
@@ -3461,10 +3437,10 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
         // The resulting variable is a byte value.
         // If the index is too big or negative that is an error.
         if (n1 < 0) {
-          n1 = len + n1;
+          n1 = (int)len + n1;
         }
         if (n1 < len && n1 >= 0) {
-          const int v = (int)tv_blob_get(rettv->vval.v_blob, (int)n1);
+          const int v = (int)tv_blob_get(rettv->vval.v_blob, n1);
           tv_clear(rettv);
           rettv->v_type = VAR_NUMBER;
           rettv->vval.v_number = v;
@@ -3476,7 +3452,7 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
     case VAR_LIST:
       len = tv_list_len(rettv->vval.v_list);
       if (n1 < 0) {
-        n1 = len + n1;
+        n1 = (int)len + n1;
       }
       if (!empty1 && (n1 < 0 || n1 >= len)) {
         // For a range we allow invalid values and return an empty
@@ -3487,22 +3463,22 @@ static int eval_index(char **arg, typval_T *rettv, int evaluate, int verbose)
           }
           return FAIL;
         }
-        n1 = len;
+        n1 = (int)len;
       }
       if (range) {
         list_T *l;
         listitem_T *item;
 
         if (n2 < 0) {
-          n2 = len + n2;
+          n2 = (int)len + n2;
         } else if (n2 >= len) {
-          n2 = len - 1;
+          n2 = (int)len - 1;
         }
         if (!empty2 && (n2 < 0 || n2 + 1 < n1)) {
           n2 = -1;
         }
         l = tv_list_alloc(n2 - n1 + 1);
-        item = tv_list_find(rettv->vval.v_list, (int)n1);
+        item = tv_list_find(rettv->vval.v_list, n1);
         while (n1++ <= n2) {
           tv_list_append_tv(l, TV_LIST_ITEM_TV(item));
           item = TV_LIST_ITEM_NEXT(rettv->vval.v_list, item);
@@ -3915,7 +3891,7 @@ char *partial_name(partial_T *pt)
   if (pt->pt_name != NULL) {
     return pt->pt_name;
   }
-  return (char *)pt->pt_func->uf_name;
+  return pt->pt_func->uf_name;
 }
 
 static void partial_free(partial_T *pt)
@@ -4119,7 +4095,7 @@ bool garbage_collect(bool testing)
   ABORTING(set_ref_in_previous_funccal)(copyID);
 
   // script-local variables
-  for (int i = 1; i <= ga_scripts.ga_len; i++) {
+  for (int i = 1; i <= script_items.ga_len; i++) {
     ABORTING(set_ref_in_ht)(&SCRIPT_VARS(i), copyID, NULL);
   }
 
@@ -4784,8 +4760,6 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
   const char *const arg_errmsg = (map
                                   ? N_("map() argument")
                                   : N_("filter() argument"));
-  int save_did_emsg;
-  int idx = 0;
 
   // Always return the first argument, also on failure.
   tv_copy(&argvars[0], rettv);
@@ -4815,12 +4789,13 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
   // message.  Avoid a misleading error message for an empty string that
   // was not passed as argument.
   if (expr->v_type != VAR_UNKNOWN) {
+    int idx = 0;
     typval_T save_val;
     prepare_vimvar(VV_VAL, &save_val);
 
     // We reset "did_emsg" to be able to detect whether an error
     // occurred during evaluation of the expression.
-    save_did_emsg = did_emsg;
+    int save_did_emsg = did_emsg;
     did_emsg = false;
 
     typval_T save_key;
@@ -4875,7 +4850,7 @@ void filter_map(typval_T *argvars, typval_T *rettv, int map)
         if (filter_map_one(&tv, expr, map, &rem) == FAIL || did_emsg) {
           break;
         }
-        if (tv.v_type != VAR_NUMBER) {
+        if (tv.v_type != VAR_NUMBER && tv.v_type != VAR_BOOL) {
           emsg(_(e_invalblob));
           return;
         }
@@ -4963,6 +4938,8 @@ theend:
   return retval;
 }
 
+/// "function()" function
+/// "funcref()" function
 void common_function(typval_T *argvars, typval_T *rettv, bool is_funcref)
 {
   char *s;
@@ -5052,7 +5029,7 @@ void common_function(typval_T *argvars, typval_T *rettv, bool is_funcref)
         if (tv_list_len(list) == 0) {
           arg_idx = 0;
         } else if (tv_list_len(list) > MAX_FUNC_ARGS) {
-          emsg_funcname((char *)e_toomanyarg, s);
+          emsg_funcname(e_toomanyarg, s);
           xfree(name);
           goto theend;
         }
@@ -5379,13 +5356,14 @@ void get_xdg_var_list(const XDGVarType xdg, typval_T *rettv)
     return;
   }
   const void *iter = NULL;
+  const char *appname = get_appname();
   do {
     size_t dir_len;
     const char *dir;
     iter = vim_env_iter(ENV_SEPCHAR, dirs, iter, &dir, &dir_len);
     if (dir != NULL && dir_len > 0) {
       char *dir_with_nvim = xmemdupz(dir, dir_len);
-      dir_with_nvim = concat_fnames_realloc(dir_with_nvim, "nvim", true);
+      dir_with_nvim = concat_fnames_realloc(dir_with_nvim, appname, true);
       tv_list_append_string(list, dir_with_nvim, (ssize_t)strlen(dir_with_nvim));
       xfree(dir_with_nvim);
     }
@@ -5883,27 +5861,63 @@ write_blob_error:
   return false;
 }
 
-/// Read a blob from a file `fd`.
+/// Read blob from file "fd".
+/// Caller has allocated a blob in "rettv".
 ///
 /// @param[in]  fd  File to read from.
-/// @param[in,out]  blob  Blob to write to.
+/// @param[in,out]  rettv  Blob to write to.
+/// @param[in]  offset  Read the file from the specified offset.
+/// @param[in]  size  Read the specified size, or -1 if no limit.
 ///
-/// @return true on success, or false on failure.
-bool read_blob(FILE *const fd, blob_T *const blob)
+/// @return  OK on success, or FAIL on failure.
+int read_blob(FILE *const fd, typval_T *rettv, off_T offset, off_T size_arg)
   FUNC_ATTR_NONNULL_ALL
 {
+  blob_T *const blob = rettv->vval.v_blob;
   FileInfo file_info;
   if (!os_fileinfo_fd(fileno(fd), &file_info)) {
-    return false;
+    return FAIL;  // can't read the file, error
   }
-  const int size = (int)os_fileinfo_size(&file_info);
-  ga_grow(&blob->bv_ga, size);
-  blob->bv_ga.ga_len = size;
+
+  int whence;
+  off_T size = size_arg;
+  const off_T file_size = (off_T)os_fileinfo_size(&file_info);
+  if (offset >= 0) {
+    // The size defaults to the whole file.  If a size is given it is
+    // limited to not go past the end of the file.
+    if (size == -1 || (size > file_size - offset && !S_ISCHR(file_info.stat.st_mode))) {
+      // size may become negative, checked below
+      size = (off_T)os_fileinfo_size(&file_info) - offset;
+    }
+    whence = SEEK_SET;
+  } else {
+    // limit the offset to not go before the start of the file
+    if (-offset > file_size && !S_ISCHR(file_info.stat.st_mode)) {
+      offset = -file_size;
+    }
+    // Size defaults to reading until the end of the file.
+    if (size == -1 || size > -offset) {
+      size = -offset;
+    }
+    whence = SEEK_END;
+  }
+  if (size <= 0) {
+    return OK;
+  }
+  if (offset != 0 && vim_fseek(fd, offset, whence) != 0) {
+    return OK;
+  }
+
+  ga_grow(&blob->bv_ga, (int)size);
+  blob->bv_ga.ga_len = (int)size;
   if (fread(blob->bv_ga.ga_data, 1, (size_t)blob->bv_ga.ga_len, fd)
       < (size_t)blob->bv_ga.ga_len) {
-    return false;
+    // An empty blob is returned on error.
+    tv_blob_free(rettv->vval.v_blob);
+    rettv->vval.v_blob = NULL;
+    return FAIL;
   }
-  return true;
+  return OK;
 }
 
 /// Saves a typval_T as a string.
@@ -6220,25 +6234,25 @@ int list2fpos(typval_T *arg, pos_T *posp, int *fnump, colnr_T *curswantp, bool c
   }
 
   int i = 0;
-  long n;
+  int n;
   if (fnump != NULL) {
-    n = tv_list_find_nr(l, i++, NULL);  // fnum
+    n = (int)tv_list_find_nr(l, i++, NULL);  // fnum
     if (n < 0) {
       return FAIL;
     }
     if (n == 0) {
       n = curbuf->b_fnum;  // Current buffer.
     }
-    *fnump = (int)n;
+    *fnump = n;
   }
 
-  n = tv_list_find_nr(l, i++, NULL);  // lnum
+  n = (int)tv_list_find_nr(l, i++, NULL);  // lnum
   if (n < 0) {
     return FAIL;
   }
-  posp->lnum = (linenr_T)n;
+  posp->lnum = n;
 
-  n = tv_list_find_nr(l, i++, NULL);  // col
+  n = (int)tv_list_find_nr(l, i++, NULL);  // col
   if (n < 0) {
     return FAIL;
   }
@@ -6252,15 +6266,15 @@ int list2fpos(typval_T *arg, pos_T *posp, int *fnump, colnr_T *curswantp, bool c
     }
     n = buf_charidx_to_byteidx(buf,
                                posp->lnum == 0 ? curwin->w_cursor.lnum : posp->lnum,
-                               (int)n) + 1;
+                               n) + 1;
   }
-  posp->col = (colnr_T)n;
+  posp->col = n;
 
-  n = tv_list_find_nr(l, i, NULL);  // off
+  n = (int)tv_list_find_nr(l, i, NULL);  // off
   if (n < 0) {
     posp->coladd = 0;
   } else {
-    posp->coladd = (colnr_T)n;
+    posp->coladd = n;
   }
 
   if (curswantp != NULL) {
@@ -7135,7 +7149,7 @@ hashtab_T *find_var_ht_dict(const char *name, const size_t name_len, const char 
   } else if (*name == 's'  // script variable
              && (current_sctx.sc_sid > 0 || current_sctx.sc_sid == SID_STR
                  || current_sctx.sc_sid == SID_LUA)
-             && current_sctx.sc_sid <= ga_scripts.ga_len) {
+             && current_sctx.sc_sid <= script_items.ga_len) {
     // For anonymous scripts without a script item, create one now so script vars can be used
     if (current_sctx.sc_sid == SID_LUA) {
       // try to resolve lua filename & line no so it can be shown in lastset messages.
@@ -7186,27 +7200,9 @@ hashtab_T *find_var_ht(const char *name, const size_t name_len, const char **var
 /// sourcing this script and when executing functions defined in the script.
 void new_script_vars(scid_T id)
 {
-  scriptvar_T *sv;
-
-  ga_grow(&ga_scripts, id - ga_scripts.ga_len);
-
-  // Re-allocating ga_data means that an ht_array pointing to
-  // ht_smallarray becomes invalid.  We can recognize this: ht_mask is
-  // at its init value.  Also reset "v_dict", it's always the same.
-  for (int i = 1; i <= ga_scripts.ga_len; i++) {
-    hashtab_T *ht = &SCRIPT_VARS(i);
-    if (ht->ht_mask == HT_INIT_SIZE - 1) {
-      ht->ht_array = ht->ht_smallarray;
-    }
-    sv = SCRIPT_SV(i);
-    sv->sv_var.di_tv.vval.v_dict = &sv->sv_dict;
-  }
-
-  while (ga_scripts.ga_len < id) {
-    sv = SCRIPT_SV(ga_scripts.ga_len + 1) = xcalloc(1, sizeof(scriptvar_T));
-    init_var_dict(&sv->sv_dict, &sv->sv_var, VAR_SCOPE);
-    ga_scripts.ga_len++;
-  }
+  scriptvar_T *sv = xcalloc(1, sizeof(scriptvar_T));
+  init_var_dict(&sv->sv_dict, &sv->sv_var, VAR_SCOPE);
+  SCRIPT_ITEM(id)->sn_vars = sv;
 }
 
 /// Initialize dictionary "dict" as a scope and set variable "dict_var" to
@@ -7469,7 +7465,6 @@ void ex_execute(exarg_T *eap)
     if (eap->cmdidx == CMD_echomsg) {
       msg_ext_set_kind("echomsg");
       msg_attr(ga.ga_data, echo_attr);
-      ui_flush();
     } else if (eap->cmdidx == CMD_echoerr) {
       // We don't want to abort following commands, restore did_emsg.
       int save_did_emsg = did_emsg;
@@ -8065,7 +8060,6 @@ repeat:
 /// @return  an allocated string, NULL for error.
 char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, const char *flags)
 {
-  int sublen;
   regmatch_T regmatch;
   garray_T ga;
   char *zero_width = NULL;
@@ -8081,6 +8075,7 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, const char 
   regmatch.rm_ic = p_ic;
   regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
   if (regmatch.regprog != NULL) {
+    int sublen;
     char *tail = str;
     char *end = str + strlen(str);
     while (vim_regexec_nl(&regmatch, str, (colnr_T)(tail - str))) {

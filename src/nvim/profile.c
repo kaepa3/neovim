@@ -232,7 +232,7 @@ void profile_reset(void)
 {
   // Reset sourced files.
   for (int id = 1; id <= script_items.ga_len; id++) {
-    scriptitem_T *si = &SCRIPT_ITEM(id);
+    scriptitem_T *si = SCRIPT_ITEM(id);
     if (si->sn_prof_on) {
       si->sn_prof_on      = false;
       si->sn_pr_force     = false;
@@ -407,7 +407,7 @@ bool prof_def_func(void)
   FUNC_ATTR_PURE
 {
   if (current_sctx.sc_sid > 0) {
-    return SCRIPT_ITEM(current_sctx.sc_sid).sn_pr_force;
+    return SCRIPT_ITEM(current_sctx.sc_sid)->sn_pr_force;
   }
   return false;
 }
@@ -689,10 +689,8 @@ void profile_init(scriptitem_T *si)
 /// @param tm  place to store wait time
 void script_prof_save(proftime_T *tm)
 {
-  scriptitem_T *si;
-
   if (current_sctx.sc_sid > 0 && current_sctx.sc_sid <= script_items.ga_len) {
-    si = &SCRIPT_ITEM(current_sctx.sc_sid);
+    scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
     if (si->sn_prof_on && si->sn_pr_nest++ == 0) {
       si->sn_pr_child = profile_start();
     }
@@ -707,7 +705,7 @@ void script_prof_restore(const proftime_T *tm)
     return;
   }
 
-  scriptitem_T *si = &SCRIPT_ITEM(current_sctx.sc_sid);
+  scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
   if (si->sn_prof_on && --si->sn_pr_nest == 0) {
     si->sn_pr_child = profile_end(si->sn_pr_child);
     // don't count wait time
@@ -720,12 +718,11 @@ void script_prof_restore(const proftime_T *tm)
 /// Dump the profiling results for all scripts in file "fd".
 static void script_dump_profile(FILE *fd)
 {
-  scriptitem_T *si;
   FILE *sfd;
   sn_prl_T *pp;
 
   for (int id = 1; id <= script_items.ga_len; id++) {
-    si = &SCRIPT_ITEM(id);
+    scriptitem_T *si = SCRIPT_ITEM(id);
     if (si->sn_prof_on) {
       fprintf(fd, "SCRIPT  %s\n", si->sn_name);
       if (si->sn_pr_count == 1) {
@@ -807,13 +804,10 @@ void profile_dump(void)
 /// until later and we need to store the time now.
 void script_line_start(void)
 {
-  scriptitem_T *si;
-  sn_prl_T *pp;
-
   if (current_sctx.sc_sid <= 0 || current_sctx.sc_sid > script_items.ga_len) {
     return;
   }
-  si = &SCRIPT_ITEM(current_sctx.sc_sid);
+  scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
   if (si->sn_prof_on && SOURCING_LNUM >= 1) {
     // Grow the array before starting the timer, so that the time spent
     // here isn't counted.
@@ -822,7 +816,7 @@ void script_line_start(void)
     while (si->sn_prl_ga.ga_len <= si->sn_prl_idx
            && si->sn_prl_ga.ga_len < si->sn_prl_ga.ga_maxlen) {
       // Zero counters for a line that was not used before.
-      pp = &PRL_ITEM(si, si->sn_prl_ga.ga_len);
+      sn_prl_T *pp = &PRL_ITEM(si, si->sn_prl_ga.ga_len);
       pp->snp_count = 0;
       pp->sn_prl_total = profile_zero();
       pp->sn_prl_self = profile_zero();
@@ -838,12 +832,10 @@ void script_line_start(void)
 /// Called when actually executing a function line.
 void script_line_exec(void)
 {
-  scriptitem_T *si;
-
   if (current_sctx.sc_sid <= 0 || current_sctx.sc_sid > script_items.ga_len) {
     return;
   }
-  si = &SCRIPT_ITEM(current_sctx.sc_sid);
+  scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
   if (si->sn_prof_on && si->sn_prl_idx >= 0) {
     si->sn_prl_execed = true;
   }
@@ -852,17 +844,14 @@ void script_line_exec(void)
 /// Called when done with a function line.
 void script_line_end(void)
 {
-  scriptitem_T *si;
-  sn_prl_T *pp;
-
   if (current_sctx.sc_sid <= 0 || current_sctx.sc_sid > script_items.ga_len) {
     return;
   }
-  si = &SCRIPT_ITEM(current_sctx.sc_sid);
+  scriptitem_T *si = SCRIPT_ITEM(current_sctx.sc_sid);
   if (si->sn_prof_on && si->sn_prl_idx >= 0
       && si->sn_prl_idx < si->sn_prl_ga.ga_len) {
     if (si->sn_prl_execed) {
-      pp = &PRL_ITEM(si, si->sn_prl_idx);
+      sn_prl_T *pp = &PRL_ITEM(si, si->sn_prl_idx);
       pp->snp_count++;
       si->sn_prl_start = profile_end(si->sn_prl_start);
       si->sn_prl_start = profile_sub_wait(si->sn_prl_wait, si->sn_prl_start);

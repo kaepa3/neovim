@@ -31,6 +31,7 @@
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
+#include "nvim/extmark.h"
 #include "nvim/extmark_defs.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
@@ -2652,8 +2653,7 @@ bool diff_find_change(win_T *wp, linenr_T lnum, int *startp, int *endp)
   bool added = true;
 
   linenr_T off = lnum - dp->df_lnum[idx];
-  int i;
-  for (i = 0; i < DB_COUNT; i++) {
+  for (int i = 0; i < DB_COUNT; i++) {
     if ((curtab->tp_diffbuf[i] != NULL) && (i != idx)) {
       // Skip lines that are not in the other change (filler lines).
       if (off >= dp->df_count[i]) {
@@ -3103,6 +3103,9 @@ static void diffgetput(const int addr_count, const int idx_cur, const int idx_fr
         if (buf_empty && (curbuf->b_ml.ml_line_count == 2)) {
           // Added the first line into an empty buffer, need to
           // delete the dummy empty line.
+          // This has a side effect of incrementing curbuf->deleted_bytes,
+          // which results in inaccurate reporting of the byte count of
+          // previous contents in buffer-update events.
           buf_empty = false;
           ml_delete((linenr_T)2, false);
         }
@@ -3144,6 +3147,7 @@ static void diffgetput(const int addr_count, const int idx_cur, const int idx_fr
           }
         }
       }
+      extmark_adjust(curbuf, lnum, lnum + count - 1, (long)MAXLNUM, added, kExtmarkUndo);
       changed_lines(lnum, 0, lnum + count, added, true);
 
       if (did_free) {
@@ -3409,7 +3413,7 @@ static int parse_diff_ed(char *line, diffhunk_T *hunk)
   linenr_T f1 = getdigits_int32(&p, true, 0);
   if (*p == ',') {
     p++;
-    l1 = getdigits(&p, true, 0);
+    l1 = getdigits_long(&p, true, 0);
   } else {
     l1 = f1;
   }
@@ -3417,10 +3421,10 @@ static int parse_diff_ed(char *line, diffhunk_T *hunk)
     return FAIL;        // invalid diff format
   }
   int difftype = (uint8_t)(*p++);
-  long f2 = getdigits(&p, true, 0);
+  long f2 = getdigits_long(&p, true, 0);
   if (*p == ',') {
     p++;
-    l2 = getdigits(&p, true, 0);
+    l2 = getdigits_long(&p, true, 0);
   } else {
     l2 = f2;
   }
@@ -3458,18 +3462,18 @@ static int parse_diff_unified(char *line, diffhunk_T *hunk)
     long oldcount;
     long newline;
     long newcount;
-    long oldline = getdigits(&p, true, 0);
+    long oldline = getdigits_long(&p, true, 0);
     if (*p == ',') {
       p++;
-      oldcount = getdigits(&p, true, 0);
+      oldcount = getdigits_long(&p, true, 0);
     } else {
       oldcount = 1;
     }
     if (*p++ == ' ' && *p++ == '+') {
-      newline = getdigits(&p, true, 0);
+      newline = getdigits_long(&p, true, 0);
       if (*p == ',') {
         p++;
-        newcount = getdigits(&p, true, 0);
+        newcount = getdigits_long(&p, true, 0);
       } else {
         newcount = 1;
       }

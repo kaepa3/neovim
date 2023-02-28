@@ -44,10 +44,22 @@ static char e_string_required_for_argument_nr[]
   = N_("E1174: String required for argument %d");
 static char e_non_empty_string_required_for_argument_nr[]
   = N_("E1175: Non-empty string required for argument %d");
+static char e_dict_required_for_argument_nr[]
+  = N_("E1206: Dictionary required for argument %d");
 static char e_number_required_for_argument_nr[]
   = N_("E1210: Number required for argument %d");
+static char e_list_required_for_argument_nr[]
+  = N_("E1211: List required for argument %d");
 static char e_string_or_list_required_for_argument_nr[]
   = N_("E1222: String or List required for argument %d");
+static char e_list_or_blob_required_for_argument_nr[]
+  = N_("E1226: List or Blob required for argument %d");
+static char e_blob_required_for_argument_nr[]
+  = N_("E1238: Blob required for argument %d");
+static char e_invalid_value_for_blob_nr[]
+  = N_("E1239: Invalid value for blob: %d");
+static char e_string_or_function_required_for_argument_nr[]
+  = N_("E1256: String or function required for argument %d");
 
 bool tv_in_free_unref_items = false;
 
@@ -647,55 +659,54 @@ tv_list_copy_error:
   return NULL;
 }
 
-/// Flatten "list" in place to depth "maxdepth".
+/// Flatten up to "maxitems" in "list", starting at "first" to depth "maxdepth".
+/// When "first" is NULL use the first item.
 /// Does nothing if "maxdepth" is 0.
 ///
 /// @param[in,out] list   List to flatten
 /// @param[in] maxdepth   Maximum depth that will be flattened
 ///
 /// @return OK or FAIL
-int tv_list_flatten(list_T *list, long maxdepth)
-  FUNC_ATTR_NONNULL_ARG(1) FUNC_ATTR_WARN_UNUSED_RESULT
+void tv_list_flatten(list_T *list, listitem_T *first, long maxitems, long maxdepth)
+  FUNC_ATTR_NONNULL_ARG(1)
 {
   listitem_T *item;
-  listitem_T *to_free;
-  int n;
+  int done = 0;
   if (maxdepth == 0) {
-    return OK;
+    return;
   }
 
-  n = 0;
-  item = list->lv_first;
-  while (item != NULL) {
+  if (first == NULL) {
+    item = list->lv_first;
+  } else {
+    item = first;
+  }
+
+  while (item != NULL && done < maxitems) {
+    listitem_T *next = item->li_next;
+
     fast_breakcheck();
     if (got_int) {
-      return FAIL;
+      return;
     }
     if (item->li_tv.v_type == VAR_LIST) {
-      listitem_T *next = item->li_next;
+      list_T *itemlist = item->li_tv.vval.v_list;
 
       tv_list_drop_items(list, item, item);
-      tv_list_extend(list, item->li_tv.vval.v_list, next);
+      tv_list_extend(list, itemlist, next);
+
+      if (maxdepth > 0) {
+        tv_list_flatten(list,
+                        item->li_prev == NULL ? list->lv_first : item->li_prev->li_next,
+                        itemlist->lv_len, maxdepth - 1);
+      }
       tv_clear(&item->li_tv);
-      to_free = item;
-
-      if (item->li_prev == NULL) {
-        item = list->lv_first;
-      } else {
-        item = item->li_prev->li_next;
-      }
-      xfree(to_free);
-
-      if (++n >= maxdepth) {
-        n = 0;
-        item = next;
-      }
-    } else {
-      n = 0;
-      item = item->li_next;
+      xfree(item);
     }
+
+    done++;
+    item = next;
   }
-  return OK;
 }
 
 /// Extend first list with the second
@@ -751,8 +762,8 @@ int tv_list_concat(list_T *const l1, list_T *const l2, typval_T *const tv)
 }
 
 typedef struct {
-  char_u *s;
-  char_u *tofree;
+  char *s;
+  char *tofree;
 } Join;
 
 /// Join list into a string, helper function
@@ -785,7 +796,7 @@ static int list_join_inner(garray_T *const gap, list_T *const l, const char *con
     sumlen += len;
 
     Join *const p = GA_APPEND_VIA_PTR(Join, join_gap);
-    p->tofree = p->s = (char_u *)s;
+    p->tofree = p->s = s;
 
     line_breakcheck();
   });
@@ -806,7 +817,7 @@ static int list_join_inner(garray_T *const gap, list_T *const l, const char *con
     const Join *const p = ((const Join *)join_gap->ga_data) + i;
 
     if (p->s != NULL) {
-      ga_concat(gap, (char *)p->s);
+      ga_concat(gap, p->s);
     }
     line_breakcheck();
   }
@@ -905,14 +916,14 @@ void tv_list_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
     return;
   }
 
-  long idx = tv_get_number_chk(&argvars[1], &error);
+  int64_t idx = tv_get_number_chk(&argvars[1], &error);
 
   listitem_T *item;
 
   if (error) {
     // Type error: do nothing, errmsg already given.
   } else if ((item = tv_list_find(l, (int)idx)) == NULL) {
-    semsg(_(e_listidx), (int64_t)idx);
+    semsg(_(e_listidx), idx);
   } else {
     if (argvars[2].v_type == VAR_UNKNOWN) {
       // Remove one item, return its value.
@@ -922,11 +933,11 @@ void tv_list_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
     } else {
       listitem_T *item2;
       // Remove range of items, return list with values.
-      long end = tv_get_number_chk(&argvars[2], &error);
+      int64_t end = tv_get_number_chk(&argvars[2], &error);
       if (error) {
         // Type error: do nothing.
       } else if ((item2 = tv_list_find(l, (int)end)) == NULL) {
-        semsg(_(e_listidx), (int64_t)end);
+        semsg(_(e_listidx), end);
       } else {
         int cnt = 0;
 
@@ -1140,7 +1151,7 @@ static void do_sort_uniq(typval_T *argvars, typval_T *rettv, bool sort)
 {
   ListSortItem *ptrs;
   long len;
-  long i;
+  int i;
 
   // Pointer to current info struct used in compare function. Save and restore
   // the current one for nested calls.
@@ -1184,7 +1195,7 @@ static void do_sort_uniq(typval_T *argvars, typval_T *rettv, bool sort)
       } else {
         bool error = false;
 
-        i = tv_get_number_chk(&argvars[1], &error);
+        i = (int)tv_get_number_chk(&argvars[1], &error);
         if (error) {
           goto theend;  // type error; errmsg already given
         }
@@ -1673,7 +1684,7 @@ char *callback_to_string(Callback *cb)
   }
 
   const size_t msglen = 100;
-  char *msg = (char *)xmallocz(msglen);
+  char *msg = xmallocz(msglen);
 
   switch (cb->type) {
   case kCallbackFuncref:
@@ -2705,6 +2716,63 @@ bool tv_blob_equal(const blob_T *const b1, const blob_T *const b2)
   return true;
 }
 
+/// Check if "n1" is a valid index for a blob with length "bloblen".
+int tv_blob_check_index(int bloblen, varnumber_T n1, bool quiet)
+{
+  if (n1 < 0 || n1 > bloblen) {
+    if (!quiet) {
+      semsg(_(e_blobidx), n1);
+    }
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Check if "n1"-"n2" is a valid range for a blob with length "bloblen".
+int tv_blob_check_range(int bloblen, varnumber_T n1, varnumber_T n2, bool quiet)
+{
+  if (n2 < 0 || n2 >= bloblen || n2 < n1) {
+    if (!quiet) {
+      semsg(_(e_blobidx), n2);
+    }
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Set bytes "n1" to "n2" (inclusive) in "dest" to the value of "src".
+/// Caller must make sure "src" is a blob.
+/// Returns FAIL if the number of bytes does not match.
+int tv_blob_set_range(blob_T *dest, int n1, int n2, typval_T *src)
+{
+  if (n2 - n1 + 1 != tv_blob_len(src->vval.v_blob)) {
+    emsg(_("E972: Blob value does not have the right number of bytes"));
+    return FAIL;
+  }
+
+  for (int il = n1, ir = 0; il <= n2; il++) {
+    tv_blob_set(dest, il, tv_blob_get(src->vval.v_blob, ir++));
+  }
+  return OK;
+}
+
+/// Store one byte "byte" in blob "blob" at "idx".
+/// Append one byte if needed.
+void tv_blob_set_append(blob_T *blob, int idx, uint8_t byte)
+{
+  garray_T *gap = &blob->bv_ga;
+
+  // Allow for appending a byte.  Setting a byte beyond
+  // the end is an error otherwise.
+  if (idx <= gap->ga_len) {
+    if (idx == gap->ga_len) {
+      ga_grow(gap, 1);
+      gap->ga_len++;
+    }
+    tv_blob_set(blob, idx, byte);
+  }
+}
+
 /// "remove({blob})" function
 void tv_blob_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
 {
@@ -2715,7 +2783,7 @@ void tv_blob_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
   }
 
   bool error = false;
-  long idx = tv_get_number_chk(&argvars[1], &error);
+  int64_t idx = tv_get_number_chk(&argvars[1], &error);
 
   if (!error) {
     const int len = tv_blob_len(b);
@@ -2725,7 +2793,7 @@ void tv_blob_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
       idx = len + idx;
     }
     if (idx < 0 || idx >= len) {
-      semsg(_(e_blobidx), (int64_t)idx);
+      semsg(_(e_blobidx), idx);
       return;
     }
     if (argvars[2].v_type == VAR_UNKNOWN) {
@@ -2736,7 +2804,7 @@ void tv_blob_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
       b->bv_ga.ga_len--;
     } else {
       // Remove range of items, return blob with values.
-      long end = tv_get_number_chk(&argvars[2], &error);
+      int64_t end = tv_get_number_chk(&argvars[2], &error);
       if (error) {
         return;
       }
@@ -2745,7 +2813,7 @@ void tv_blob_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
         end = len + end;
       }
       if (end >= len || idx > end) {
-        semsg(_(e_blobidx), (int64_t)end);
+        semsg(_(e_blobidx), end);
         return;
       }
       blob_T *const blob = tv_blob_alloc();
@@ -2762,6 +2830,51 @@ void tv_blob_remove(typval_T *argvars, typval_T *rettv, const char *arg_errmsg)
       b->bv_ga.ga_len -= (int)(end - idx + 1);
     }
   }
+}
+
+/// blob2list() function
+void f_blob2list(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  tv_list_alloc_ret(rettv, kListLenMayKnow);
+
+  if (tv_check_for_blob_arg(argvars, 0) == FAIL) {
+    return;
+  }
+
+  blob_T *const blob = argvars->vval.v_blob;
+  list_T *const l = rettv->vval.v_list;
+  for (int i = 0; i < tv_blob_len(blob); i++) {
+    tv_list_append_number(l, tv_blob_get(blob, i));
+  }
+}
+
+/// list2blob() function
+void f_list2blob(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  tv_blob_alloc_ret(rettv);
+  blob_T *const blob = rettv->vval.v_blob;
+
+  if (tv_check_for_list_arg(argvars, 0) == FAIL) {
+    return;
+  }
+
+  list_T *const l = argvars->vval.v_list;
+  if (l == NULL) {
+    return;
+  }
+
+  TV_LIST_ITER_CONST(l, li, {
+    bool error = false;
+    varnumber_T n = tv_get_number_chk(TV_LIST_ITEM_TV(li), &error);
+    if (error || n < 0 || n > 255) {
+      if (!error) {
+        semsg(_(e_invalid_value_for_blob_nr), n);
+      }
+      ga_clear(&blob->bv_ga);
+      return;
+    }
+    ga_append(&blob->bv_ga, (uint8_t)n);
+  });
 }
 
 //{{{1 Generic typval operations
@@ -3906,12 +4019,78 @@ int tv_check_for_opt_number_arg(const typval_T *const args, const int idx)
           || tv_check_for_number_arg(args, idx) != FAIL) ? OK : FAIL;
 }
 
+/// Give an error and return FAIL unless "args[idx]" is a blob.
+int tv_check_for_blob_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_BLOB) {
+    semsg(_(e_blob_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a list.
+int tv_check_for_list_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_LIST) {
+    semsg(_(e_list_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a dict.
+int tv_check_for_dict_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_DICT) {
+    semsg(_(e_dict_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Check for an optional dict argument at "idx"
+int tv_check_for_opt_dict_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  return (args[idx].v_type == VAR_UNKNOWN
+          || tv_check_for_dict_arg(args, idx) != FAIL) ? OK : FAIL;
+}
+
 /// Give an error and return FAIL unless "args[idx]" is a string or a list.
 int tv_check_for_string_or_list_arg(const typval_T *const args, const int idx)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
 {
   if (args[idx].v_type != VAR_STRING && args[idx].v_type != VAR_LIST) {
     semsg(_(e_string_or_list_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a string
+/// or a function reference.
+int tv_check_for_string_or_func_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_PARTIAL
+      && args[idx].v_type != VAR_FUNC
+      && args[idx].v_type != VAR_STRING) {
+    semsg(_(e_string_or_function_required_for_argument_nr), idx + 1);
+    return FAIL;
+  }
+  return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a list or a blob.
+int tv_check_for_list_or_blob_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  if (args[idx].v_type != VAR_LIST && args[idx].v_type != VAR_BLOB) {
+    semsg(_(e_list_or_blob_required_for_argument_nr), idx + 1);
     return FAIL;
   }
   return OK;

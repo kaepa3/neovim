@@ -358,14 +358,13 @@ newwindow:
       msg(_(m_onlyone));
     } else {
       tabpage_T *oldtab = curtab;
-      tabpage_T *newtab;
 
       // First create a new tab with the window, then go back to
       // the old tab and close the window there.
       win_T *wp = curwin;
       if (win_new_tabpage((int)Prenum, NULL) == OK
           && valid_tabpage(oldtab)) {
-        newtab = curtab;
+        tabpage_T *newtab = curtab;
         goto_tabpage_tp(oldtab, true, true);
         if (curwin == wp) {
           win_close(curwin, false, false);
@@ -1001,7 +1000,7 @@ void ui_ext_win_viewport(win_T *wp)
   }
 }
 
-/// If "split_disallowed" is set given an error and return FAIL.
+/// If "split_disallowed" is set give an error and return FAIL.
 /// Otherwise return OK.
 static int check_split_disallowed(void)
 {
@@ -1900,8 +1899,8 @@ static void win_rotate(bool upwards, int count)
     }
   }
 
-  win_T *wp1;
-  win_T *wp2;
+  win_T *wp1 = NULL;
+  win_T *wp2 = NULL;
 
   while (count--) {
     if (upwards) {              // first window becomes last window
@@ -4814,7 +4813,7 @@ static void win_enter_ext(win_T *const wp, const int flags)
 
   // Might need to scroll the old window before switching, e.g., when the
   // cursor was moved.
-  if (*p_spk == 'c') {
+  if (*p_spk == 'c' && !curwin_invalid) {
     update_topline(curwin);
   }
 
@@ -4836,7 +4835,9 @@ static void win_enter_ext(win_T *const wp, const int flags)
   if (*p_spk == 'c') {
     changed_line_abv_curs();      // assume cursor position needs updating
   } else {
-    win_fix_cursor(true);
+    // Make sure the cursor position is valid, either by moving the cursor
+    // or by scrolling the text.
+    win_fix_cursor(get_real_state() & (MODE_NORMAL|MODE_CMDLINE|MODE_TERMINAL));
   }
 
   fix_current_dir();
@@ -6408,7 +6409,8 @@ void win_fix_scroll(int resize)
 
 /// Make sure the cursor position is valid for 'splitkeep'.
 /// If it is not, put the cursor position in the jumplist and move it.
-/// If we are not in normal mode, scroll to make valid instead.
+/// If we are not in normal mode ("normal" is zero), make it valid by scrolling
+/// instead.
 static void win_fix_cursor(int normal)
 {
   win_T *wp = curwin;

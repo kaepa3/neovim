@@ -3,7 +3,7 @@
 #   best practices (3.0+): https://gist.github.com/mbinna/c61dbb39bca0e4fb7d1f73b0d66a4fd1
 #   pitfalls: https://izzys.casa/2019/02/everything-you-never-wanted-to-know-about-cmake/
 
-# Version should match the tested CMAKE_URL in .github/workflows/ci.yml.
+# Version should match the tested CMAKE_URL in .github/workflows/build.yml.
 cmake_minimum_required(VERSION 3.10)
 
 # Can be removed once minimum version is at least 3.15
@@ -38,23 +38,9 @@ endif()
 
 # Prefer our bundled versions of dependencies.
 if(DEFINED ENV{DEPS_BUILD_DIR})
-  if(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
-    # pkg-config 29.2 has a bug on OpenBSD which causes it to drop any paths that
-    # *contain* system include paths. To avoid this, we prefix what would be
-    # "/usr/include" as "/_usr/include".
-    # This check is also performed in the cmake.deps/CMakeLists.txt and in the
-    # else clause following here.
-    # https://github.com/neovim/neovim/pull/14745#issuecomment-860201794
-    set(DEPS_PREFIX "$ENV{DEPS_BUILD_DIR}/_usr" CACHE PATH "Path prefix for finding dependencies")
-  else()
-    set(DEPS_PREFIX "$ENV{DEPS_BUILD_DIR}/usr" CACHE PATH "Path prefix for finding dependencies")
-  endif()
+  set(DEPS_PREFIX "$ENV{DEPS_BUILD_DIR}/usr" CACHE PATH "Path prefix for finding dependencies")
 else()
-  if(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
-    set(DEPS_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/.deps/_usr" CACHE PATH "Path prefix for finding dependencies")
-  else()
-    set(DEPS_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/.deps/usr" CACHE PATH "Path prefix for finding dependencies")
-  endif()
+  set(DEPS_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/.deps/usr" CACHE PATH "Path prefix for finding dependencies")
   # When running from within CLion or Visual Studio,
   # build bundled dependencies automatically.
   if(NOT EXISTS ${DEPS_PREFIX}
@@ -65,15 +51,15 @@ else()
     file(MAKE_DIRECTORY ${DEPS_BUILD_DIR})
     execute_process(
       COMMAND ${CMAKE_COMMAND} -G ${CMAKE_GENERATOR}
-        -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-        -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-        -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-        -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-        -DCMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
-        -DCMAKE_C_FLAGS_MINSIZEREL=${CMAKE_C_FLAGS_MINSIZEREL}
-        -DCMAKE_C_FLAGS_RELWITHDEBINFO=${CMAKE_C_FLAGS_RELWITHDEBINFO}
-        -DCMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
-        -DCMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
+        -D CMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+        -D CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+        -D CMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+        -D CMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+        -D CMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
+        -D CMAKE_C_FLAGS_MINSIZEREL=${CMAKE_C_FLAGS_MINSIZEREL}
+        -D CMAKE_C_FLAGS_RELWITHDEBINFO=${CMAKE_C_FLAGS_RELWITHDEBINFO}
+        -D CMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
+        -D CMAKE_MAKE_PROGRAM=${CMAKE_MAKE_PROGRAM}
         ${PROJECT_SOURCE_DIR}/cmake.deps
       WORKING_DIRECTORY ${DEPS_BUILD_DIR})
     execute_process(
@@ -84,7 +70,6 @@ else()
 endif()
 
 list(INSERT CMAKE_PREFIX_PATH 0 ${DEPS_PREFIX})
-set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${DEPS_PREFIX}/lib/pkgconfig")
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
   # If the macOS deployment target is not set manually (via $MACOSX_DEPLOYMENT_TARGET),
@@ -151,6 +136,7 @@ endif()
 # We _want_ assertions in RelWithDebInfo build-type.
 if(CMAKE_C_FLAGS_RELWITHDEBINFO MATCHES DNDEBUG)
   string(REPLACE "-DNDEBUG" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
+  string(REPLACE "/DNDEBUG" "" CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO}")
 endif()
 
 option(LOG_LIST_ACTIONS "Add list actions logging" OFF)
@@ -244,9 +230,9 @@ endif()
 # Lint
 #
 find_program(LUACHECK_PRG luacheck)
+find_program(SHELLCHECK_PRG shellcheck)
 find_program(STYLUA_PRG stylua)
 find_program(UNCRUSTIFY_PRG uncrustify)
-find_program(SHELLCHECK_PRG shellcheck)
 
 add_glob_target(
   REQUIRED
@@ -276,8 +262,6 @@ add_glob_target(
   GLOB_PAT *.sh
   EXCLUDE
     scripts/pvscheck.sh
-    ci/common
-    ci/snap
   TOUCH_STRATEGY SINGLE)
 
 add_custom_target(lintcommit
@@ -287,7 +271,7 @@ add_custom_target(lintcommit
 add_dependencies(lintcommit nvim)
 
 add_custom_target(lint)
-add_dependencies(lint check-single-includes lintc lintlua lintsh lintcommit)
+add_dependencies(lint clang-tidy lintc lintlua lintsh lintcommit)
 
 #
 # Format
@@ -306,111 +290,20 @@ install_helper(
   FILES ${CMAKE_SOURCE_DIR}/src/man/nvim.1
   DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
-#
-# Go down the tree.
-#
+if(EXISTS "${DEPS_PREFIX}/share/nvim-qt")
+  option(USE_BUNDLED_NVIMQT "Bundle neovim-qt" ON)
+else()
+  option(USE_BUNDLED_NVIMQT "Bundle neovim-qt" OFF)
+endif()
 
 add_subdirectory(src/nvim)
 add_subdirectory(cmake.config)
-add_subdirectory(test/functional/fixtures)  # compile test programs
 add_subdirectory(runtime)
-get_directory_property(GENERATED_HELP_TAGS DIRECTORY runtime DEFINITION GENERATED_HELP_TAGS)
-if(WIN32)
+add_subdirectory(test)
+if(WIN32 AND USE_BUNDLED_NVIMQT)
   install_helper(
     FILES ${DEPS_PREFIX}/share/nvim-qt/runtime/plugin/nvim_gui_shim.vim
     DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/nvim-qt/runtime/plugin)
-endif()
-
-# Setup busted.
-find_program(BUSTED_PRG NAMES busted busted.bat)
-find_program(BUSTED_LUA_PRG busted-lua)
-if(NOT BUSTED_OUTPUT_TYPE)
-  set(BUSTED_OUTPUT_TYPE "nvim")
-endif()
-
-# Setup some test-related bits.  We do this after going down the tree because we
-# need some of the targets.
-if(BUSTED_PRG)
-  get_target_property(TEST_INCLUDE_DIRS main_lib INTERFACE_INCLUDE_DIRECTORIES)
-
-  set(UNITTEST_PREREQS nvim)
-  set(FUNCTIONALTEST_PREREQS nvim printenv-test printargs-test shell-test pwsh-test streams-test tty-test ${GENERATED_HELP_TAGS})
-  set(BENCHMARK_PREREQS nvim tty-test)
-
-  check_lua_module(${LUA_PRG} "ffi" LUA_HAS_FFI)
-  if(LUA_HAS_FFI)
-    add_custom_target(unittest
-      COMMAND ${CMAKE_COMMAND}
-        -DBUSTED_PRG=${BUSTED_PRG}
-        -DLUA_PRG=${LUA_PRG}
-        -DNVIM_PRG=$<TARGET_FILE:nvim>
-        -DWORKING_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-        -DBUSTED_OUTPUT_TYPE=${BUSTED_OUTPUT_TYPE}
-        -DTEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test
-        -DBUILD_DIR=${CMAKE_BINARY_DIR}
-        -DTEST_TYPE=unit
-        -DCIRRUS_CI=$ENV{CIRRUS_CI}
-        -P ${PROJECT_SOURCE_DIR}/cmake/RunTests.cmake
-      DEPENDS ${UNITTEST_PREREQS}
-      USES_TERMINAL)
-    set_target_properties(unittest PROPERTIES FOLDER test)
-  else()
-    message(WARNING "disabling unit tests: no Luajit FFI in ${LUA_PRG}")
-  endif()
-
-  configure_file(
-    ${CMAKE_SOURCE_DIR}/test/cmakeconfig/paths.lua.in
-    ${CMAKE_BINARY_DIR}/test/cmakeconfig/paths.lua)
-
-  add_custom_target(functionaltest
-    COMMAND ${CMAKE_COMMAND}
-      -DBUSTED_PRG=${BUSTED_PRG}
-      -DLUA_PRG=${LUA_PRG}
-      -DNVIM_PRG=$<TARGET_FILE:nvim>
-      -DWORKING_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-      -DBUSTED_OUTPUT_TYPE=${BUSTED_OUTPUT_TYPE}
-      -DTEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test
-      -DBUILD_DIR=${CMAKE_BINARY_DIR}
-      -DTEST_TYPE=functional
-      -DCIRRUS_CI=$ENV{CIRRUS_CI}
-      -P ${PROJECT_SOURCE_DIR}/cmake/RunTests.cmake
-    DEPENDS ${FUNCTIONALTEST_PREREQS}
-    USES_TERMINAL)
-  set_target_properties(functionaltest PROPERTIES FOLDER test)
-
-  add_custom_target(benchmark
-    COMMAND ${CMAKE_COMMAND}
-      -DBUSTED_PRG=${BUSTED_PRG}
-      -DLUA_PRG=${LUA_PRG}
-      -DNVIM_PRG=$<TARGET_FILE:nvim>
-      -DWORKING_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-      -DBUSTED_OUTPUT_TYPE=${BUSTED_OUTPUT_TYPE}
-      -DTEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test
-      -DBUILD_DIR=${CMAKE_BINARY_DIR}
-      -DTEST_TYPE=benchmark
-      -DCIRRUS_CI=$ENV{CIRRUS_CI}
-      -P ${PROJECT_SOURCE_DIR}/cmake/RunTests.cmake
-    DEPENDS ${BENCHMARK_PREREQS}
-    USES_TERMINAL)
-  set_target_properties(benchmark PROPERTIES FOLDER test)
-endif()
-
-if(BUSTED_LUA_PRG)
-  add_custom_target(functionaltest-lua
-    COMMAND ${CMAKE_COMMAND}
-      -DBUSTED_PRG=${BUSTED_LUA_PRG}
-      -DLUA_PRG=${LUA_PRG}
-      -DNVIM_PRG=$<TARGET_FILE:nvim>
-      -DWORKING_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-      -DBUSTED_OUTPUT_TYPE=${BUSTED_OUTPUT_TYPE}
-      -DTEST_DIR=${CMAKE_CURRENT_SOURCE_DIR}/test
-      -DBUILD_DIR=${CMAKE_BINARY_DIR}
-      -DTEST_TYPE=functional
-      -DCIRRUS_CI=$ENV{CIRRUS_CI}
-      -P ${PROJECT_SOURCE_DIR}/cmake/RunTests.cmake
-    DEPENDS ${FUNCTIONALTEST_PREREQS}
-    USES_TERMINAL)
-    set_target_properties(functionaltest-lua PROPERTIES FOLDER test)
 endif()
 
 add_custom_target(uninstall

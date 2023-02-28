@@ -470,11 +470,6 @@ static InbufPollResult inbuf_poll(int ms, MultiQueue *events)
   return input_eof ? kInputEof : kInputNone;
 }
 
-void input_done(void)
-{
-  input_eof = true;
-}
-
 bool input_available(void)
 {
   return rbuffer_size(input_buffer) != 0;
@@ -483,7 +478,7 @@ bool input_available(void)
 static void input_read_cb(Stream *stream, RBuffer *buf, size_t c, void *data, bool at_eof)
 {
   if (at_eof) {
-    input_done();
+    input_eof = true;
   }
 
   assert(rbuffer_space(input_buffer) >= rbuffer_size(buf));
@@ -550,8 +545,7 @@ static void read_error_exit(void)
   if (silent_mode) {  // Normal way to exit for "nvim -es".
     getout(0);
   }
-  STRCPY(IObuff, _("Vim: Error reading input, exiting...\n"));
-  preserve_exit();
+  preserve_exit(_("Vim: Error reading input, exiting...\n"));
 }
 
 static bool pending_events(MultiQueue *events)
