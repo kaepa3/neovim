@@ -375,6 +375,28 @@ describe('statuscolumn', function()
       {1:wrapped 1 9}aaaaaaaa                                  |
                                                            |
     ]])
+    -- Also test virt_lines at the end of buffer
+    exec_lua([[
+      local ns = vim.api.nvim_create_namespace("ns")
+      vim.api.nvim_buf_set_extmark(0, ns, 15, 0, { virt_lines = {{{"END", ""}}} })
+    ]])
+    feed('Gzz')
+    screen:expect([[
+      {1:buffer  0 13}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 13}aaaaaaaaa                                |
+      {1:buffer  0 14}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 14}aaaaaaaaa                                |
+      {1:buffer  0 15}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 15}aaaaaaaaa                                |
+      {4:buffer  0 16}{5:^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {4:wrapped 1 16}{5:aaaaaaaaa                                }|
+      {1:virtual-1 16}END                                      |
+      {0:~                                                    }|
+      {0:~                                                    }|
+      {0:~                                                    }|
+      {0:~                                                    }|
+                                                           |
+    ]])
   end)
 
   it("works with 'statuscolumn' clicks", function()
@@ -496,6 +518,44 @@ describe('statuscolumn', function()
       ~                                                    |
       [Command Line]                                       |
       :                                                    |
+    ]])
+  end)
+
+  it("has correct width when toggling '(relative)number'", function()
+    screen:try_resize(screen._width, 6)
+    command('call setline(1, repeat(["aaaaa"], 100))')
+    command('set relativenumber')
+    command([[set stc=%{!&nu&&!&rnu?'':&rnu?v:relnum?v:relnum:&nu?v:lnum:'0':v:lnum}]])
+    screen:expect([[
+      1  aaaaa                                             |
+      8  ^aaaaa                                             |
+      1  aaaaa                                             |
+      2  aaaaa                                             |
+      3  aaaaa                                             |
+                                                           |
+    ]])
+    -- width correctly estimated with "w_nrwidth_line_count" when setting 'stc'
+    command([[set stc=%{!&nu&&!&rnu?'':&rnu?v:relnum?v:relnum:&nu?v:lnum:'0':v:lnum}]])
+    screen:expect_unchanged()
+    -- zero width when disabling 'number'
+    command('set norelativenumber nonumber')
+    screen:expect([[
+      aaaaa                                                |
+      ^aaaaa                                                |
+      aaaaa                                                |
+      aaaaa                                                |
+      aaaaa                                                |
+                                                           |
+    ]])
+    -- width correctly estimated with "w_nrwidth_line_count" when setting 'nu'
+    command('set number')
+    screen:expect([[
+      7  aaaaa                                             |
+      8  ^aaaaa                                             |
+      9  aaaaa                                             |
+      10 aaaaa                                             |
+      11 aaaaa                                             |
+                                                           |
     ]])
   end)
 end)

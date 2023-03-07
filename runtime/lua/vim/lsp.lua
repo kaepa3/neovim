@@ -46,6 +46,8 @@ lsp._request_name_to_capability = {
   ['textDocument/typeDefinition'] = { 'typeDefinitionProvider' },
   ['textDocument/documentSymbol'] = { 'documentSymbolProvider' },
   ['textDocument/prepareCallHierarchy'] = { 'callHierarchyProvider' },
+  ['callHierarchy/incomingCalls'] = { 'callHierarchyProvider' },
+  ['callHierarchy/outgoingCalls'] = { 'callHierarchyProvider' },
   ['textDocument/rename'] = { 'renameProvider' },
   ['textDocument/prepareRename'] = { 'renameProvider', 'prepareProvider' },
   ['textDocument/codeAction'] = { 'codeActionProvider' },
@@ -361,23 +363,23 @@ do
   --- smallest debounce interval is used and we don't group clients by different intervals.
   ---
   --- @class CTGroup
-  --- @field sync_kind number TextDocumentSyncKind, considers config.flags.allow_incremental_sync
+  --- @field sync_kind integer TextDocumentSyncKind, considers config.flags.allow_incremental_sync
   --- @field offset_encoding "utf-8"|"utf-16"|"utf-32"
   ---
   --- @class CTBufferState
-  --- @field name string name of the buffer
+  --- @field uri string uri of the buffer
   --- @field lines string[] snapshot of buffer lines from last didChange
   --- @field lines_tmp string[]
   --- @field pending_changes table[] List of debounced changes in incremental sync mode
   --- @field timer nil|uv.uv_timer_t uv_timer
   --- @field last_flush nil|number uv.hrtime of the last flush/didChange-notification
   --- @field needs_flush boolean true if buffer updates haven't been sent to clients/servers yet
-  --- @field refs number how many clients are using this group
+  --- @field refs integer how many clients are using this group
   ---
   --- @class CTGroupState
-  --- @field buffers table<number, CTBufferState>
-  --- @field debounce number debounce duration in ms
-  --- @field clients table<number, table> clients using this state. {client_id, client}
+  --- @field buffers table<integer, CTBufferState>
+  --- @field debounce integer debounce duration in ms
+  --- @field clients table<integer, table> clients using this state. {client_id, client}
 
   ---@private
   ---@param group CTGroup
@@ -484,8 +486,12 @@ do
     if buf_state then
       buf_state.refs = buf_state.refs + 1
     else
+      local uri = vim.uri_from_bufnr(bufnr)
+      if not uv.fs_stat(api.nvim_buf_get_name(bufnr)) then
+        uri = uri:gsub('^file://', 'buffer://')
+      end
       buf_state = {
-        name = api.nvim_buf_get_name(bufnr),
+        uri = uri,
         lines = {},
         lines_tmp = {},
         pending_changes = {},
@@ -500,12 +506,26 @@ do
   end
 
   ---@private
-  function changetracking._get_and_set_name(client, bufnr, name)
+  ---@param client table
+  ---@param bufnr integer
+  ---@return string uri
+  function changetracking._get_uri(client, bufnr)
     local state = state_by_group[get_group(client)] or {}
     local buf_state = (state.buffers or {})[bufnr]
-    local old_name = buf_state.name
-    buf_state.name = name
-    return old_name
+    return assert(buf_state.uri, 'Must have an URI set')
+  end
+
+  ---@private
+  ---@param client table
+  ---@param bufnr integer
+  ---@param uri string
+  ---@return string uri
+  function changetracking._get_and_set_uri(client, bufnr, uri)
+    local state = state_by_group[get_group(client)] or {}
+    local buf_state = (state.buffers or {})[bufnr]
+    local old_uri = buf_state.uri
+    buf_state.uri = uri
+    return old_uri
   end
 
   ---@private
@@ -548,7 +568,7 @@ do
   --
   -- This turns the debounce into a kind of client rate limiting
   --
-  ---@param debounce number
+  ---@param debounce integer
   ---@param buf_state CTBufferState
   ---@return number
   local function next_debounce(debounce, buf_state)
@@ -565,8 +585,8 @@ do
   end
 
   ---@private
-  ---@param bufnr number
-  ---@param sync_kind number protocol.TextDocumentSyncKind
+  ---@param bufnr integer
+  ---@param sync_kind integer protocol.TextDocumentSyncKind
   ---@param state CTGroupState
   ---@param buf_state CTBufferState
   local function send_changes(bufnr, sync_kind, state, buf_state)
@@ -592,7 +612,7 @@ do
         { text = buf_get_full_text(bufnr) },
       }
     end
-    local uri = vim.uri_from_bufnr(bufnr)
+    local uri = buf_state.uri
     for _, client in pairs(state.clients) do
       if not client.is_stopped() and lsp.buf_is_attached(bufnr, client.id) then
         client.notify('textDocument/didChange', {
@@ -694,7 +714,7 @@ end
 ---@private
 --- Default handler for the 'textDocument/didOpen' LSP notification.
 ---
----@param bufnr number Number of the buffer, or 0 for current
+---@param bufnr integer Number of the buffer, or 0 for current
 ---@param client table Client object
 local function text_document_did_open_handler(bufnr, client)
   changetracking.init(client, bufnr)
@@ -705,11 +725,14 @@ local function text_document_did_open_handler(bufnr, client)
     return
   end
   local filetype = nvim_buf_get_option(bufnr, 'filetype')
-
+  local uri = vim.uri_from_bufnr(bufnr)
+  if not uv.fs_stat(api.nvim_buf_get_name(bufnr)) then
+    uri = uri:gsub('^file://', 'buffer://')
+  end
   local params = {
     textDocument = {
       version = 0,
-      uri = vim.uri_from_bufnr(bufnr),
+      uri = uri,
       languageId = client.config.get_language_id(bufnr, filetype),
       text = buf_get_full_text(bufnr),
     },
@@ -1072,7 +1095,7 @@ function lsp.start_client(config)
   ---@private
   --- Invoked when the client operation throws an error.
   ---
-  ---@param code (number) Error code
+  ---@param code (integer) Error code
   ---@param err (...) Other arguments may be passed depending on the error kind
   ---@see `vim.lsp.rpc.client_errors` for possible errors. Use
   ---`vim.lsp.rpc.client_errors[code]` to get a human-friendly name.
@@ -1125,21 +1148,26 @@ function lsp.start_client(config)
   ---@private
   --- Invoked on client exit.
   ---
-  ---@param code (number) exit code of the process
-  ---@param signal (number) the signal used to terminate (if any)
+  ---@param code (integer) exit code of the process
+  ---@param signal (integer) the signal used to terminate (if any)
   function dispatch.on_exit(code, signal)
     if config.on_exit then
       pcall(config.on_exit, code, signal, client_id)
     end
 
+    local client = active_clients[client_id] and active_clients[client_id]
+      or uninitialized_clients[client_id]
+
     for bufnr, client_ids in pairs(all_buffer_active_clients) do
       if client_ids[client_id] then
         vim.schedule(function()
-          nvim_exec_autocmds('LspDetach', {
-            buffer = bufnr,
-            modeline = false,
-            data = { client_id = client_id },
-          })
+          if client and client.attached_buffers[bufnr] then
+            nvim_exec_autocmds('LspDetach', {
+              buffer = bufnr,
+              modeline = false,
+              data = { client_id = client_id },
+            })
+          end
 
           local namespace = vim.lsp.diagnostic.get_namespace(client_id)
           vim.diagnostic.reset(namespace, bufnr)
@@ -1155,8 +1183,6 @@ function lsp.start_client(config)
     -- Schedule the deletion of the client object so that it exists in the execution of LspDetach
     -- autocommands
     vim.schedule(function()
-      local client = active_clients[client_id] and active_clients[client_id]
-        or uninitialized_clients[client_id]
       active_clients[client_id] = nil
       uninitialized_clients[client_id] = nil
 
@@ -1388,9 +1414,9 @@ function lsp.start_client(config)
   ---
   ---@param method (string) LSP method name.
   ---@param params (table) LSP request params.
-  ---@param timeout_ms (number|nil) Maximum time in milliseconds to wait for
+  ---@param timeout_ms (integer|nil) Maximum time in milliseconds to wait for
   ---                               a result. Defaults to 1000
-  ---@param bufnr (number) Buffer handle (0 for current).
+  ---@param bufnr (integer) Buffer handle (0 for current).
   ---@return {err: lsp.ResponseError|nil, result:any}|nil, string|nil err # a dictionary, where
   --- `err` and `result` come from the |lsp-handler|.
   --- On timeout, cancel or error, returns `(nil, err)` where `err` is a
@@ -1439,7 +1465,7 @@ function lsp.start_client(config)
   ---@private
   --- Cancels a request with a given request id.
   ---
-  ---@param id (number) id of request to cancel
+  ---@param id (integer) id of request to cancel
   ---@return boolean status true if notification was successful. false otherwise
   ---@see |vim.lsp.client.notify()|
   function client.cancel_request(id)
@@ -1558,8 +1584,13 @@ local function text_document_did_save_handler(bufnr)
   local text = once(buf_get_full_text)
   for_each_buffer_client(bufnr, function(client)
     local name = api.nvim_buf_get_name(bufnr)
-    local old_name = changetracking._get_and_set_name(client, bufnr, name)
-    if old_name and name ~= old_name then
+    local old_uri = changetracking._get_and_set_uri(client, bufnr, uri)
+    if old_uri and name ~= old_uri then
+      client.notify('textDocument/didClose', {
+        textDocument = {
+          uri = old_uri,
+        },
+      })
       client.notify('textDocument/didOpen', {
         textDocument = {
           version = 0,
@@ -1591,8 +1622,8 @@ end
 ---
 --- Without calling this, the server won't be notified of changes to a buffer.
 ---
----@param bufnr (number) Buffer handle, or 0 for current
----@param client_id (number) Client id
+---@param bufnr (integer) Buffer handle, or 0 for current
+---@param client_id (integer) Client id
 function lsp.buf_attach_client(bufnr, client_id)
   validate({
     bufnr = { bufnr, 'n', true },
@@ -1662,8 +1693,12 @@ function lsp.buf_attach_client(bufnr, client_id)
         end)
       end,
       on_detach = function()
-        local params = { textDocument = { uri = uri } }
         for_each_buffer_client(bufnr, function(client, _)
+          local params = {
+            textDocument = {
+              uri = changetracking._get_uri(client, bufnr),
+            },
+          }
           changetracking.reset_buf(client, bufnr)
           if vim.tbl_get(client.server_capabilities, 'textDocumentSync', 'openClose') then
             client.notify('textDocument/didClose', params)
@@ -1699,8 +1734,8 @@ end
 --- Note: While the server is notified that the text document (buffer)
 --- was closed, it is still able to send notifications should it ignore this notification.
 ---
----@param bufnr number Buffer handle, or 0 for current
----@param client_id number Client id
+---@param bufnr integer Buffer handle, or 0 for current
+---@param client_id integer Client id
 function lsp.buf_detach_client(bufnr, client_id)
   validate({
     bufnr = { bufnr, 'n', true },
@@ -1750,8 +1785,8 @@ end
 
 --- Checks if a buffer is attached for a particular client.
 ---
----@param bufnr (number) Buffer handle, or 0 for current
----@param client_id (number) the client id
+---@param bufnr (integer) Buffer handle, or 0 for current
+---@param client_id (integer) the client id
 function lsp.buf_is_attached(bufnr, client_id)
   return (all_buffer_active_clients[resolve_bufnr(bufnr)] or {})[client_id] == true
 end
@@ -1759,7 +1794,7 @@ end
 --- Gets a client by id, or nil if the id is invalid.
 --- The returned client may not yet be fully initialized.
 ---
----@param client_id number client id
+---@param client_id integer client id
 ---
 ---@returns |vim.lsp.client| object, or nil
 function lsp.get_client_by_id(client_id)
@@ -1786,7 +1821,7 @@ end
 --- By default asks the server to shutdown, unless stop was requested
 --- already for this client, then force-shutdown is attempted.
 ---
----@param client_id number|table id or |vim.lsp.client| object, or list thereof
+---@param client_id integer|table id or |vim.lsp.client| object, or list thereof
 ---@param force boolean|nil shutdown forcefully
 function lsp.stop_client(client_id, force)
   local ids = type(client_id) == 'table' and client_id or { client_id }
@@ -1802,8 +1837,8 @@ function lsp.stop_client(client_id, force)
 end
 
 ---@class vim.lsp.get_active_clients.filter
----@field id number|nil Match clients by id
----@field bufnr number|nil match clients attached to the given buffer
+---@field id integer|nil Match clients by id
+---@field bufnr integer|nil match clients attached to the given buffer
 ---@field name string|nil match clients by name
 
 --- Get active clients.
@@ -1897,7 +1932,7 @@ api.nvim_create_autocmd('VimLeavePre', {
 --- Sends an async request for all active clients attached to the
 --- buffer.
 ---
----@param bufnr (number) Buffer handle, or 0 for current.
+---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
 ---@param params table|nil Parameters to send to the server
 ---@param handler function|nil See |lsp-handler|
@@ -1957,7 +1992,7 @@ end
 ---Parameters are the same as |vim.lsp.buf_request()| but the return result and callback are
 ---different.
 ---
----@param bufnr (number) Buffer handle, or 0 for current.
+---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
 ---@param params (table|nil) Parameters to send to the server
 ---@param callback (function) The callback to call when all requests are finished.
@@ -1999,10 +2034,10 @@ end
 --- Parameters are the same as |vim.lsp.buf_request()| but the return result is
 --- different. Wait maximum of {timeout_ms} (default 1000) ms.
 ---
----@param bufnr (number) Buffer handle, or 0 for current.
+---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
 ---@param params (table|nil) Parameters to send to the server
----@param timeout_ms (number|nil) Maximum time in milliseconds to wait for a
+---@param timeout_ms (integer|nil) Maximum time in milliseconds to wait for a
 ---                               result. Defaults to 1000
 ---
 ---@return table<integer, any>|nil result, string|nil err Map of client_id:request_result.
@@ -2071,10 +2106,10 @@ end
 ---@see |complete-items|
 ---@see |CompleteDone|
 ---
----@param findstart number 0 or 1, decides behavior
----@param base number findstart=0, text to match against
+---@param findstart integer 0 or 1, decides behavior
+---@param base integer findstart=0, text to match against
 ---
----@returns (number) Decided by {findstart}:
+---@returns (integer) Decided by {findstart}:
 --- - findstart=0: column where the completion starts, or -2 or -3
 --- - findstart=1: list of matches (actually just calls |complete()|)
 function lsp.omnifunc(findstart, base)
@@ -2211,7 +2246,7 @@ end
 
 ---Checks whether a client is stopped.
 ---
----@param client_id (number)
+---@param client_id (integer)
 ---@return boolean stopped true if client is stopped, false otherwise.
 function lsp.client_is_stopped(client_id)
   return active_clients[client_id] == nil
@@ -2220,7 +2255,7 @@ end
 --- Gets a map of client_id:client pairs for the given buffer, where each value
 --- is a |vim.lsp.client| object.
 ---
----@param bufnr (number|nil): Buffer handle, or 0 for current
+---@param bufnr (integer|nil): Buffer handle, or 0 for current
 ---@returns (table) Table of (client_id, client) pairs
 ---@deprecated Use |vim.lsp.get_active_clients()| instead.
 function lsp.buf_get_clients(bufnr)
@@ -2249,7 +2284,7 @@ lsp.log_levels = log.levels
 ---
 ---@see |vim.lsp.log_levels|
 ---
----@param level (number|string) the case insensitive level name or number
+---@param level (integer|string) the case insensitive level name or number
 function lsp.set_log_level(level)
   if type(level) == 'string' or type(level) == 'number' then
     log.set_level(level)
@@ -2266,7 +2301,7 @@ end
 
 --- Invokes a function for each LSP client attached to a buffer.
 ---
----@param bufnr number Buffer number
+---@param bufnr integer Buffer number
 ---@param fn function Function to run on each client attached to buffer
 ---                   {bufnr}. The function takes the client, client ID, and
 ---                   buffer number as arguments. Example:

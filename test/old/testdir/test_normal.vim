@@ -921,7 +921,7 @@ func Test_normal14_page()
   set nostartofline
   exe "norm! $\<c-b>"
   call assert_equal('92', getline('.'))
-  call assert_equal([0, 92, 2, 0, 2147483647], getcurpos())
+  call assert_equal([0, 92, 2, 0, v:maxcol], getcurpos())
   " cleanup
   set startofline
   bw!
@@ -966,7 +966,7 @@ func Test_normal15_z_scroll_vert()
   norm! >>$ztzb
   call assert_equal('	30', getline('.'))
   call assert_equal(30, winsaveview()['topline']+winheight(0)-1)
-  call assert_equal([0, 30, 3, 0, 2147483647], getcurpos())
+  call assert_equal([0, 30, 3, 0, v:maxcol], getcurpos())
 
   " Test for z-
   1
@@ -2540,6 +2540,11 @@ func Test_normal33_g_cmd2()
   norm! g'a
   call assert_equal('>', a[-1:])
   call assert_equal(1, line('.'))
+  let v:errmsg = ''
+  call assert_nobeep("normal! g`\<Esc>")
+  call assert_equal('', v:errmsg)
+  call assert_nobeep("normal! g'\<Esc>")
+  call assert_equal('', v:errmsg)
 
   " Test for g; and g,
   norm! g;
@@ -2912,7 +2917,7 @@ func Test_normal36_g_cmd5()
   call assert_equal([0, 14, 1, 0, 1], getcurpos())
   " count > buffer content
   norm! 120go
-  call assert_equal([0, 14, 1, 0, 2147483647], getcurpos())
+  call assert_equal([0, 14, 1, 0, v:maxcol], getcurpos())
   " clean up
   bw!
 endfunc
@@ -3092,7 +3097,7 @@ func Test_normal42_halfpage()
   set nostartofline
   exe "norm! $\<c-u>"
   call assert_equal('95', getline('.'))
-  call assert_equal([0, 95, 2, 0, 2147483647], getcurpos())
+  call assert_equal([0, 95, 2, 0, v:maxcol], getcurpos())
   " cleanup
   set startofline
   bw!
@@ -3315,7 +3320,8 @@ func Test_gr_command()
   set modifiable&
 
   call assert_nobeep("normal! gr\<Esc>")
-  call assert_beeps("normal! cgr\<Esc>")
+  call assert_nobeep("normal! cgr\<Esc>")
+  call assert_beeps("normal! cgrx")
 
   call assert_equal('zxxxx line    l', getline(1))
   exe "normal! 2|gr\<C-V>\<Esc>"
@@ -3891,6 +3897,38 @@ func Test_mouse_shape_after_failed_change()
   call RunVim([], [], "-g -S Xmouseshape.vim")
   sleep 300m
   call assert_equal(['busy', 'arrow'], readfile('Xmouseshapes'))
+
+  call delete('Xmouseshapes')
+endfunc
+
+" Test that mouse shape is restored to Normal mode after cancelling "gr".
+func Test_mouse_shape_after_cancelling_gr()
+  CheckFeature mouseshape
+  CheckCanRunGui
+
+  let lines =<< trim END
+    vim9script
+    var mouse_shapes = []
+
+    feedkeys('gr')
+    timer_start(50, (_) => {
+      mouse_shapes += [getmouseshape()]
+      timer_start(50, (_) => {
+        feedkeys("\<Esc>")
+        timer_start(50, (_) => {
+          mouse_shapes += [getmouseshape()]
+          timer_start(50, (_) => {
+            writefile(mouse_shapes, 'Xmouseshapes')
+            quit
+          })
+        })
+      })
+    })
+  END
+  call writefile(lines, 'Xmouseshape.vim', 'D')
+  call RunVim([], [], "-g -S Xmouseshape.vim")
+  sleep 300m
+  call assert_equal(['beam', 'arrow'], readfile('Xmouseshapes'))
 
   call delete('Xmouseshapes')
 endfunc

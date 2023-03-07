@@ -37,9 +37,22 @@ for k, v in pairs({
   health = true,
   fs = true,
   secure = true,
+  _watch = true,
 }) do
   vim._submodules[k] = v
 end
+
+-- There are things which have special rules in vim._init_packages
+-- for legacy reasons (uri) or for performance (_inspector).
+-- most new things should go into a submodule namespace ( vim.foobar.do_thing() )
+vim._extra = {
+  uri_from_fname = true,
+  uri_from_bufnr = true,
+  uri_to_fname = true,
+  uri_to_bufnr = true,
+  show_pos = true,
+  inspect_pos = true,
+}
 
 vim.log = {
   levels = {
@@ -386,7 +399,7 @@ end
 
 --- Get a table of lines with start, end columns for a region marked by two points
 ---
----@param bufnr number of buffer
+---@param bufnr integer number of buffer
 ---@param pos1 integer[] (line, column) tuple marking beginning of region
 ---@param pos2 integer[] (line, column) tuple marking end of region
 ---@param regtype string type of selection, see |setreg()|
@@ -471,7 +484,7 @@ end
 --- writes to |:messages|.
 ---
 ---@param msg string Content of the notification to show to the user.
----@param level number|nil One of the values from |vim.log.levels|.
+---@param level integer|nil One of the values from |vim.log.levels|.
 ---@param opts table|nil Optional parameters. Unused by default.
 function vim.notify(msg, level, opts) -- luacheck: no unused args
   if level == vim.log.levels.ERROR then
@@ -492,7 +505,7 @@ do
   --- display a notification.
   ---
   ---@param msg string Content of the notification to show to the user.
-  ---@param level number|nil One of the values from |vim.log.levels|.
+  ---@param level integer|nil One of the values from |vim.log.levels|.
   ---@param opts table|nil Optional parameters. Unused by default.
   ---@return boolean true if message was displayed, else false
   function vim.notify_once(msg, level, opts)
@@ -521,10 +534,10 @@ local on_key_cbs = {}
 ---@param fn function: Callback function. It should take one string argument.
 ---                   On each key press, Nvim passes the key char to fn(). |i_CTRL-V|
 ---                   If {fn} is nil, it removes the callback for the associated {ns_id}
----@param ns_id number? Namespace ID. If nil or 0, generates and returns a new
+---@param ns_id integer? Namespace ID. If nil or 0, generates and returns a new
 ---                    |nvim_create_namespace()| id.
 ---
----@return number Namespace id associated with {fn}. Or count of all callbacks
+---@return integer Namespace id associated with {fn}. Or count of all callbacks
 ---if on_key() is called without arguments.
 ---
 ---@note {fn} will be removed if an error occurs while calling.
@@ -574,14 +587,12 @@ function vim._on_key(char)
 end
 
 --- Generate a list of possible completions for the string.
---- String starts with ^ and then has the pattern.
+--- String has the pattern.
 ---
 ---     1. Can we get it to just return things in the global namespace with that name prefix
 ---     2. Can we get it to return things from global namespace even with `print(` in front.
 function vim._expand_pat(pat, env)
   env = env or _G
-
-  pat = string.sub(pat, 2, #pat)
 
   if pat == '' then
     local result = vim.tbl_keys(env)
@@ -643,7 +654,7 @@ function vim._expand_pat(pat, env)
       local mt = getmetatable(final_env)
       if mt and type(mt.__index) == 'table' then
         field = rawget(mt.__index, key)
-      elseif final_env == vim and vim._submodules[key] then
+      elseif final_env == vim and (vim._submodules[key] or vim._extra[key]) then
         field = vim[key]
       end
     end
@@ -673,6 +684,7 @@ function vim._expand_pat(pat, env)
   end
   if final_env == vim then
     insert_keys(vim._submodules)
+    insert_keys(vim._extra)
   end
 
   keys = vim.tbl_keys(keys)
@@ -742,6 +754,28 @@ vim._expand_pat_get_parts = function(lua_string)
   end, parts)
 
   return parts, search_index
+end
+
+do
+  -- Ideally we should just call complete() inside omnifunc, though there are
+  -- some bugs, so fake the two-step dance for now.
+  local matches
+
+  --- Omnifunc for completing lua values from from the runtime lua interpreter,
+  --- similar to the builtin completion for the `:lua` command.
+  ---
+  --- Activate using `set omnifunc=v:lua.vim.lua_omnifunc` in a lua buffer.
+  function vim.lua_omnifunc(find_start, _)
+    if find_start == 1 then
+      local line = vim.api.nvim_get_current_line()
+      local prefix = string.sub(line, 1, vim.api.nvim_win_get_cursor(0)[2])
+      local pos
+      matches, pos = vim._expand_pat(prefix)
+      return (#matches > 0 and pos) or -1
+    else
+      return matches
+    end
+  end
 end
 
 ---Prints given arguments in human-readable format.
