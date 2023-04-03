@@ -72,7 +72,6 @@
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/shada.h"
 #include "nvim/state.h"
@@ -5659,17 +5658,19 @@ static void ex_pwd(exarg_T *eap)
 /// ":=".
 static void ex_equal(exarg_T *eap)
 {
-  smsg("%" PRId64, (int64_t)eap->line2);
-  ex_may_print(eap);
+  if (*eap->arg != NUL && *eap->arg != '|') {
+    // equivalent to :lua= expr
+    ex_lua(eap);
+  } else {
+    eap->nextcmd = find_nextcmd(eap->arg);
+    smsg("%" PRId64, (int64_t)eap->line2);
+  }
 }
 
 static void ex_sleep(exarg_T *eap)
 {
   if (cursor_valid()) {
-    int n = curwin->w_winrow + curwin->w_wrow - msg_scrolled;
-    if (n >= 0) {
-      ui_cursor_goto(n, curwin->w_wincol + curwin->w_wcol);
-    }
+    setcursor_mayforce(true);
   }
 
   long len = eap->line2;
@@ -6330,6 +6331,11 @@ void restore_current_state(save_state_T *sst)
   ui_cursor_shape();  // may show different cursor shape
 }
 
+bool expr_map_locked(void)
+{
+  return expr_map_lock > 0 && !(curbuf->b_flags & BF_DUMMY);
+}
+
 /// ":normal[!] {commands}": Execute normal mode commands.
 static void ex_normal(exarg_T *eap)
 {
@@ -6339,10 +6345,11 @@ static void ex_normal(exarg_T *eap)
   }
   char *arg = NULL;
 
-  if (ex_normal_lock > 0) {
+  if (expr_map_locked()) {
     emsg(_(e_secure));
     return;
   }
+
   if (ex_normal_busy >= p_mmd) {
     emsg(_("E192: Recursive use of :normal too deep"));
     return;

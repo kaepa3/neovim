@@ -1189,7 +1189,7 @@ static char *translate_mapping(char *str_in, int cpo_flags)
         str += 2;
       }
       if (IS_SPECIAL(c) || modifiers) {         // special key
-        ga_concat(&ga, (char *)get_special_key_name(c, modifiers));
+        ga_concat(&ga, get_special_key_name(c, modifiers));
         continue;         // for (str)
       }
     }
@@ -1436,7 +1436,7 @@ int ExpandMappings(char *pat, regmatch_T *regmatch, int *numMatches, char ***mat
 bool check_abbr(int c, char *ptr, int col, int mincol)
 {
   int scol;                     // starting column of the abbr.
-  char_u tb[MB_MAXBYTES + 4];
+  uint8_t tb[MB_MAXBYTES + 4];
   mapblock_T *mp;
   mapblock_T *mp2;
   int clen = 0;                 // length in characters
@@ -1535,8 +1535,8 @@ bool check_abbr(int c, char *ptr, int col, int mincol)
         // special key code, split up
         if (IS_SPECIAL(c) || c == K_SPECIAL) {
           tb[j++] = K_SPECIAL;
-          tb[j++] = (char_u)K_SECOND(c);
-          tb[j++] = (char_u)K_THIRD(c);
+          tb[j++] = (uint8_t)K_SECOND(c);
+          tb[j++] = (uint8_t)K_THIRD(c);
         } else {
           if (c < ABBR_OFF && (c < ' ' || c > '~')) {
             tb[j++] = Ctrl_V;                   // special char needs CTRL-V
@@ -1615,8 +1615,7 @@ char *eval_map_expr(mapblock_T *mp, int c)
 
   // Forbid changing text or using ":normal" to avoid most of the bad side
   // effects.  Also restore the cursor position.
-  textlock++;
-  ex_normal_lock++;
+  expr_map_lock++;
   set_vim_var_char(c);    // set v:char to the typed character
   const pos_T save_cursor = curwin->w_cursor;
   const int save_msg_col = msg_col;
@@ -1637,8 +1636,7 @@ char *eval_map_expr(mapblock_T *mp, int c)
     p = eval_to_string(expr, NULL, false);
     xfree(expr);
   }
-  textlock--;
-  ex_normal_lock--;
+  expr_map_lock--;
   curwin->w_cursor = save_cursor;
   msg_col = save_msg_col;
   msg_row = save_msg_row;
@@ -1920,7 +1918,7 @@ int put_escstr(FILE *fd, char *strstart, int what)
         str += 2;
       }
       if (IS_SPECIAL(c) || modifiers) {         // special key
-        if (fputs((char *)get_special_key_name(c, modifiers), fd) < 0) {
+        if (fputs(get_special_key_name(c, modifiers), fd) < 0) {
           return FAIL;
         }
         continue;

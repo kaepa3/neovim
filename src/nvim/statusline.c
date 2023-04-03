@@ -15,6 +15,7 @@
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/digraph.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
@@ -36,7 +37,6 @@
 #include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/pos.h"
-#include "nvim/screen.h"
 #include "nvim/sign.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
@@ -162,7 +162,7 @@ void win_redr_status(win_T *wp)
                 (int)((size_t)this_ru_col - strlen(NameBuff) - 1), attr);
     }
 
-    win_redr_ruler(wp, true);
+    win_redr_ruler(wp);
 
     // Draw the 'showcmd' information if 'showcmdloc' == "statusline".
     if (p_sc && *p_sloc == 's') {
@@ -180,11 +180,44 @@ void win_redr_status(win_T *wp)
     if (stl_connected(wp)) {
       fillchar = fillchar_status(&attr, wp);
     } else {
-      fillchar = fillchar_vsep(wp, &attr);
+      attr = win_hl_attr(wp, HLF_C);
+      fillchar = wp->w_p_fcs_chars.vert;
     }
     grid_putchar(&default_grid, fillchar, W_ENDROW(wp), W_ENDCOL(wp), attr);
   }
   busy = false;
+}
+
+void get_trans_bufname(buf_T *buf)
+{
+  if (buf_spname(buf) != NULL) {
+    xstrlcpy(NameBuff, buf_spname(buf), MAXPATHL);
+  } else {
+    home_replace(buf, buf->b_fname, NameBuff, MAXPATHL, true);
+  }
+  trans_characters(NameBuff, MAXPATHL);
+}
+
+/// Only call if (wp->w_vsep_width != 0).
+///
+/// @return  true if the status line of window "wp" is connected to the status
+/// line of the window right of it.  If not, then it's a vertical separator.
+bool stl_connected(win_T *wp)
+{
+  frame_T *fr = wp->w_frame;
+  while (fr->fr_parent != NULL) {
+    if (fr->fr_parent->fr_layout == FR_COL) {
+      if (fr->fr_next != NULL) {
+        break;
+      }
+    } else {
+      if (fr->fr_next != NULL) {
+        return true;
+      }
+    }
+    fr = fr->fr_parent;
+  }
+  return false;
 }
 
 /// Clear status line, window bar or tab page line click definition table
@@ -443,7 +476,7 @@ void win_redr_winbar(win_T *wp)
   entered = false;
 }
 
-void win_redr_ruler(win_T *wp, bool always)
+void win_redr_ruler(win_T *wp)
 {
   bool is_stl_global = global_stl_height() > 0;
   static bool did_show_ext_ruler = false;
@@ -473,138 +506,116 @@ void win_redr_ruler(win_T *wp, bool always)
   }
 
   // Check if not in Insert mode and the line is empty (will show "0-1").
-  int empty_line = false;
-  if ((State & MODE_INSERT) == 0 && *ml_get_buf(wp->w_buffer, wp->w_cursor.lnum, false) == NUL) {
-    empty_line = true;
+  int empty_line = (State & MODE_INSERT) == 0
+                   && *ml_get_buf(curwin->w_buffer, curwin->w_cursor.lnum, false) == NUL;
+
+  int width;
+  int row;
+  int fillchar;
+  int attr;
+  int off;
+  bool part_of_status = false;
+
+  if (wp->w_status_height) {
+    row = W_ENDROW(wp);
+    fillchar = fillchar_status(&attr, wp);
+    off = wp->w_wincol;
+    width = wp->w_width;
+    part_of_status = true;
+  } else if (is_stl_global) {
+    row = Rows - (int)p_ch - 1;
+    fillchar = fillchar_status(&attr, wp);
+    off = 0;
+    width = Columns;
+    part_of_status = true;
+  } else {
+    row = Rows - 1;
+    fillchar = ' ';
+    attr = HL_ATTR(HLF_MSG);
+    width = Columns;
+    off = 0;
   }
 
-  // Only draw the ruler when something changed.
-  validate_virtcol_win(wp);
-  if (redraw_cmdline
-      || always
-      || wp->w_cursor.lnum != wp->w_ru_cursor.lnum
-      || wp->w_cursor.col != wp->w_ru_cursor.col
-      || wp->w_virtcol != wp->w_ru_virtcol
-      || wp->w_cursor.coladd != wp->w_ru_cursor.coladd
-      || wp->w_topline != wp->w_ru_topline
-      || wp->w_buffer->b_ml.ml_line_count != wp->w_ru_line_count
-      || wp->w_topfill != wp->w_ru_topfill
-      || empty_line != wp->w_ru_empty) {
-    int width;
-    int row;
-    int fillchar;
-    int attr;
-    int off;
-    bool part_of_status = false;
+  if (!part_of_status && p_ch == 0 && !ui_has(kUIMessages)) {
+    return;
+  }
 
-    if (wp->w_status_height) {
-      row = W_ENDROW(wp);
-      fillchar = fillchar_status(&attr, wp);
-      off = wp->w_wincol;
-      width = wp->w_width;
-      part_of_status = true;
-    } else if (is_stl_global) {
-      row = Rows - (int)p_ch - 1;
-      fillchar = fillchar_status(&attr, wp);
-      off = 0;
-      width = Columns;
-      part_of_status = true;
-    } else {
-      row = Rows - 1;
-      fillchar = ' ';
-      attr = HL_ATTR(HLF_MSG);
-      width = Columns;
-      off = 0;
-    }
-
-    if (!part_of_status && p_ch == 0 && !ui_has(kUIMessages)) {
-      return;
-    }
-
-    // In list mode virtcol needs to be recomputed
-    colnr_T virtcol = wp->w_virtcol;
-    if (wp->w_p_list && wp->w_p_lcs_chars.tab1 == NUL) {
-      wp->w_p_list = false;
-      getvvcol(wp, &wp->w_cursor, NULL, &virtcol, NULL);
-      wp->w_p_list = true;
-    }
+  // In list mode virtcol needs to be recomputed
+  colnr_T virtcol = wp->w_virtcol;
+  if (wp->w_p_list && wp->w_p_lcs_chars.tab1 == NUL) {
+    wp->w_p_list = false;
+    getvvcol(wp, &wp->w_cursor, NULL, &virtcol, NULL);
+    wp->w_p_list = true;
+  }
 
 #define RULER_BUF_LEN 70
-    char buffer[RULER_BUF_LEN];
+  char buffer[RULER_BUF_LEN];
 
-    // Some sprintfs return the length, some return a pointer.
-    // To avoid portability problems we use strlen() here.
-    vim_snprintf(buffer, RULER_BUF_LEN, "%" PRId64 ",",
-                 (wp->w_buffer->b_ml.ml_flags &
-                  ML_EMPTY) ? (int64_t)0L : (int64_t)wp->w_cursor.lnum);
-    size_t len = strlen(buffer);
-    col_print(buffer + len, RULER_BUF_LEN - len,
-              empty_line ? 0 : (int)wp->w_cursor.col + 1,
-              (int)virtcol + 1);
+  // Some sprintfs return the length, some return a pointer.
+  // To avoid portability problems we use strlen() here.
+  vim_snprintf(buffer, RULER_BUF_LEN, "%" PRId64 ",",
+               (wp->w_buffer->b_ml.ml_flags &
+                ML_EMPTY) ? (int64_t)0L : (int64_t)wp->w_cursor.lnum);
+  size_t len = strlen(buffer);
+  col_print(buffer + len, RULER_BUF_LEN - len,
+            empty_line ? 0 : (int)wp->w_cursor.col + 1,
+            (int)virtcol + 1);
 
-    // Add a "50%" if there is room for it.
-    // On the last line, don't print in the last column (scrolls the
-    // screen up on some terminals).
-    int i = (int)strlen(buffer);
-    get_rel_pos(wp, buffer + i + 1, RULER_BUF_LEN - i - 1);
-    int o = i + vim_strsize(buffer + i + 1);
-    if (wp->w_status_height == 0 && !is_stl_global) {  // can't use last char of screen
+  // Add a "50%" if there is room for it.
+  // On the last line, don't print in the last column (scrolls the
+  // screen up on some terminals).
+  int i = (int)strlen(buffer);
+  get_rel_pos(wp, buffer + i + 1, RULER_BUF_LEN - i - 1);
+  int o = i + vim_strsize(buffer + i + 1);
+  if (wp->w_status_height == 0 && !is_stl_global) {  // can't use last char of screen
+    o++;
+  }
+  int this_ru_col = ru_col - (Columns - width);
+  if (this_ru_col < 0) {
+    this_ru_col = 0;
+  }
+  // Never use more than half the window/screen width, leave the other half
+  // for the filename.
+  if (this_ru_col < (width + 1) / 2) {
+    this_ru_col = (width + 1) / 2;
+  }
+  if (this_ru_col + o < width) {
+    // Need at least 3 chars left for get_rel_pos() + NUL.
+    while (this_ru_col + o < width && RULER_BUF_LEN > i + 4) {
+      i += utf_char2bytes(fillchar, buffer + i);
       o++;
     }
-    int this_ru_col = ru_col - (Columns - width);
-    if (this_ru_col < 0) {
-      this_ru_col = 0;
+    get_rel_pos(wp, buffer + i, RULER_BUF_LEN - i);
+  }
+
+  if (ui_has(kUIMessages) && !part_of_status) {
+    MAXSIZE_TEMP_ARRAY(content, 1);
+    MAXSIZE_TEMP_ARRAY(chunk, 2);
+    ADD_C(chunk, INTEGER_OBJ(attr));
+    ADD_C(chunk, STRING_OBJ(cstr_as_string(buffer)));
+    ADD_C(content, ARRAY_OBJ(chunk));
+    ui_call_msg_ruler(content);
+    did_show_ext_ruler = true;
+  } else {
+    if (did_show_ext_ruler) {
+      ui_call_msg_ruler((Array)ARRAY_DICT_INIT);
+      did_show_ext_ruler = false;
     }
-    // Never use more than half the window/screen width, leave the other half
-    // for the filename.
-    if (this_ru_col < (width + 1) / 2) {
-      this_ru_col = (width + 1) / 2;
-    }
-    if (this_ru_col + o < width) {
-      // Need at least 3 chars left for get_rel_pos() + NUL.
-      while (this_ru_col + o < width && RULER_BUF_LEN > i + 4) {
-        i += utf_char2bytes(fillchar, buffer + i);
-        o++;
+    // Truncate at window boundary.
+    o = 0;
+    for (i = 0; buffer[i] != NUL; i += utfc_ptr2len(buffer + i)) {
+      o += utf_ptr2cells(buffer + i);
+      if (this_ru_col + o > width) {
+        buffer[i] = NUL;
+        break;
       }
-      get_rel_pos(wp, buffer + i, RULER_BUF_LEN - i);
     }
 
-    if (ui_has(kUIMessages) && !part_of_status) {
-      MAXSIZE_TEMP_ARRAY(content, 1);
-      MAXSIZE_TEMP_ARRAY(chunk, 2);
-      ADD_C(chunk, INTEGER_OBJ(attr));
-      ADD_C(chunk, STRING_OBJ(cstr_as_string(buffer)));
-      ADD_C(content, ARRAY_OBJ(chunk));
-      ui_call_msg_ruler(content);
-      did_show_ext_ruler = true;
-    } else {
-      if (did_show_ext_ruler) {
-        ui_call_msg_ruler((Array)ARRAY_DICT_INIT);
-        did_show_ext_ruler = false;
-      }
-      // Truncate at window boundary.
-      o = 0;
-      for (i = 0; buffer[i] != NUL; i += utfc_ptr2len(buffer + i)) {
-        o += utf_ptr2cells(buffer + i);
-        if (this_ru_col + o > width) {
-          buffer[i] = NUL;
-          break;
-        }
-      }
-
-      ScreenGrid *grid = part_of_status ? &default_grid : &msg_grid_adj;
-      grid_puts(grid, buffer, row, this_ru_col + off, attr);
-      grid_fill(grid, row, row + 1,
-                this_ru_col + off + (int)strlen(buffer), off + width, fillchar,
-                fillchar, attr);
-    }
-
-    wp->w_ru_cursor = wp->w_cursor;
-    wp->w_ru_virtcol = wp->w_virtcol;
-    wp->w_ru_empty = (char)empty_line;
-    wp->w_ru_topline = wp->w_topline;
-    wp->w_ru_line_count = wp->w_buffer->b_ml.ml_line_count;
-    wp->w_ru_topfill = wp->w_topfill;
+    ScreenGrid *grid = part_of_status ? &default_grid : &msg_grid_adj;
+    grid_puts(grid, buffer, row, this_ru_col + off, attr);
+    grid_fill(grid, row, row + 1,
+              this_ru_col + off + (int)strlen(buffer), off + width, fillchar,
+              fillchar, attr);
   }
 }
 

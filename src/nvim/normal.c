@@ -62,7 +62,6 @@
 #include "nvim/plines.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
@@ -1306,16 +1305,20 @@ static void normal_redraw(NormalState *s)
   update_topline(curwin);
   validate_cursor();
 
+  show_cursor_info_later(false);
+
   if (VIsual_active) {
     redraw_curbuf_later(UPD_INVERTED);  // update inverted part
-    update_screen();
-  } else if (must_redraw) {
-    update_screen();
-  } else if (redraw_cmdline || clear_cmdline || redraw_mode) {
-    showmode();
   }
 
-  redraw_statuslines();
+  if (must_redraw) {
+    update_screen();
+  } else {
+    redraw_statuslines();
+    if (redraw_cmdline || clear_cmdline || redraw_mode) {
+      showmode();
+    }
+  }
 
   if (need_maketitle) {
     maketitle();
@@ -1348,7 +1351,6 @@ static void normal_redraw(NormalState *s)
   did_emsg = false;
   msg_didany = false;  // reset lines_left in msg_start()
   may_clear_sb_text();  // clear scroll-back text on next msg
-  show_cursor_info(false);
 
   setcursor();
 }
@@ -1375,6 +1377,7 @@ static int normal_check(VimState *state)
   // update cursor and redraw.
   if (skip_redraw || exmode_active) {
     skip_redraw = false;
+    setcursor();
   } else if (do_redraw || stuff_empty()) {
     // Ensure curwin->w_topline and curwin->w_leftcol are up to date
     // before triggering a WinScrolled autocommand.

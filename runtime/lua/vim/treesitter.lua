@@ -1,6 +1,4 @@
 local a = vim.api
-local query = require('vim.treesitter.query')
-local language = require('vim.treesitter.language')
 local LanguageTree = require('vim.treesitter.languagetree')
 local Range = require('vim.treesitter._range')
 
@@ -9,12 +7,9 @@ local parsers = setmetatable({}, { __mode = 'v' })
 
 ---@class TreesitterModule
 ---@field highlighter TSHighlighter
-local M = vim.tbl_extend('error', query, language)
-
-M.language_version = vim._ts_get_language_version()
-M.minimum_language_version = vim._ts_get_minimum_language_version()
-
-setmetatable(M, {
+---@field query TSQueryModule
+---@field language TSLanguageModule
+local M = setmetatable({}, {
   __index = function(t, k)
     ---@diagnostic disable:no-unknown
     if k == 'highlighter' then
@@ -27,10 +22,25 @@ setmetatable(M, {
       t[k] = require('vim.treesitter.query')
       return t[k]
     end
+
+    local query = require('vim.treesitter.query')
+    if query[k] then
+      vim.deprecate('vim.treesitter.' .. k .. '()', 'vim.treesitter.query.' .. k .. '()', '0.10')
+      t[k] = query[k]
+      return t[k]
+    end
+
+    local language = require('vim.treesitter.language')
+    if language[k] then
+      vim.deprecate('vim.treesitter.' .. k .. '()', 'vim.treesitter.language.' .. k .. '()', '0.10')
+      t[k] = language[k]
+      return t[k]
+    end
   end,
 })
 
----@diagnostic disable:invisible
+M.language_version = vim._ts_get_language_version()
+M.minimum_language_version = vim._ts_get_minimum_language_version()
 
 --- Creates a new parser
 ---
@@ -47,9 +57,6 @@ function M._create_parser(bufnr, lang, opts)
   end
 
   vim.fn.bufload(bufnr)
-
-  local ft = vim.bo[bufnr].filetype
-  language.add(lang, { filetype = ft ~= '' and ft or nil })
 
   local self = LanguageTree.new(bufnr, lang, opts)
 
@@ -84,7 +91,12 @@ function M._create_parser(bufnr, lang, opts)
   return self
 end
 
---- Returns the parser for a specific buffer and filetype and attaches it to the buffer
+--- @private
+local function valid_lang(lang)
+  return lang and lang ~= ''
+end
+
+--- Returns the parser for a specific buffer and attaches it to the buffer
 ---
 --- If needed, this will create the parser.
 ---
@@ -99,16 +111,23 @@ function M.get_parser(bufnr, lang, opts)
   if bufnr == nil or bufnr == 0 then
     bufnr = a.nvim_get_current_buf()
   end
-  if lang == nil then
-    local ft = vim.bo[bufnr].filetype
-    lang = language.get_lang(ft) or ft
-    -- TODO(lewis6991): we should error here and not default to ft
-    -- if not lang then
-    --   error(string.format('filetype %s of buffer %d is not associated with any lang', ft, bufnr))
-    -- end
+
+  if not valid_lang(lang) then
+    lang = M.language.get_lang(vim.bo[bufnr].filetype) or vim.bo[bufnr].filetype
   end
 
-  if parsers[bufnr] == nil or parsers[bufnr]:lang() ~= lang then
+  if not valid_lang(lang) then
+    if not parsers[bufnr] then
+      error(
+        string.format(
+          'There is no parser available for buffer %d and one could not be'
+            .. ' created because lang could not be determined. Either pass lang'
+            .. ' or set the buffer filetype',
+          bufnr
+        )
+      )
+    end
+  elseif parsers[bufnr] == nil or parsers[bufnr]:lang() ~= lang then
     parsers[bufnr] = M._create_parser(bufnr, lang, opts)
   end
 
@@ -117,7 +136,7 @@ function M.get_parser(bufnr, lang, opts)
   return parsers[bufnr]
 end
 
----@private
+---@package
 ---@param bufnr (integer|nil) Buffer number
 ---@return boolean
 function M._has_parser(bufnr)
@@ -139,7 +158,6 @@ function M.get_string_parser(str, lang, opts)
     str = { str, 'string' },
     lang = { lang, 'string' },
   })
-  language.add(lang)
 
   return LanguageTree.new(str, lang, opts)
 end
@@ -183,6 +201,61 @@ function M.get_node_range(node_or_range)
   end
 end
 
+---Get the range of a |TSNode|. Can also supply {source} and {metadata}
+---to get the range with directives applied.
+---@param node TSNode
+---@param source integer|string|nil Buffer or string from which the {node} is extracted
+---@param metadata TSMetadata|nil
+---@return Range6
+function M.get_range(node, source, metadata)
+  if metadata and metadata.range then
+    assert(source)
+    return Range.add_bytes(source, metadata.range)
+  end
+  return { node:range(true) }
+end
+
+---@private
+---@param buf integer
+---@param range Range
+---@returns string
+local function buf_range_get_text(buf, range)
+  local start_row, start_col, end_row, end_col = Range.unpack4(range)
+  if end_col == 0 then
+    if start_row == end_row then
+      start_col = -1
+      start_row = start_row - 1
+    end
+    end_col = -1
+    end_row = end_row - 1
+  end
+  local lines = a.nvim_buf_get_text(buf, start_row, start_col, end_row, end_col, {})
+  return table.concat(lines, '\n')
+end
+
+--- Gets the text corresponding to a given node
+---
+---@param node TSNode
+---@param source (integer|string) Buffer or string from which the {node} is extracted
+---@param opts (table|nil) Optional parameters.
+---          - metadata (table) Metadata of a specific capture. This would be
+---            set to `metadata[capture_id]` when using |vim.treesitter.query.add_directive()|.
+---@return string
+function M.get_node_text(node, source, opts)
+  opts = opts or {}
+  local metadata = opts.metadata or {}
+
+  if metadata.text then
+    return metadata.text
+  elseif type(source) == 'number' then
+    local range = vim.treesitter.get_range(node, source, metadata)
+    return buf_range_get_text(source, range)
+  end
+
+  ---@cast source string
+  return source:sub(select(3, node:start()) + 1, select(3, node:end_()))
+end
+
 --- Determines whether (line, col) position is in node range
 ---
 ---@param node TSNode defining the range
@@ -191,7 +264,7 @@ end
 ---
 ---@return boolean True if the position is in node range
 function M.is_in_node_range(node, line, col)
-  return M.node_contains(node, { line, col, line, col })
+  return M.node_contains(node, { line, col, line, col + 1 })
 end
 
 --- Determines if a node contains a range
@@ -202,7 +275,8 @@ end
 ---@return boolean True if the {node} contains the {range}
 function M.node_contains(node, range)
   vim.validate({
-    node = { node, 'userdata' },
+    -- allow a table so nodes can be mocked
+    node = { node, { 'userdata', 'table' } },
     range = { range, Range.validate, 'integer list with 4 or 6 elements' },
   })
   return Range.contains({ node:range() }, range)
@@ -260,7 +334,7 @@ function M.get_captures_at_pos(bufnr, row, col)
         end
       end
     end
-  end, true)
+  end)
   return matches
 end
 
@@ -423,7 +497,7 @@ end
 ---                      - winid (integer|nil): Window id to display the tree buffer in. If omitted,
 ---                        a new window is created with {command}.
 ---                      - command (string|nil): Vimscript command to create the window. Default
----                        value is "topleft 60vnew". Only used when {winid} is nil.
+---                        value is "60vnew". Only used when {winid} is nil.
 ---                      - title (string|fun(bufnr:integer):string|nil): Title of the window. If a
 ---                        function, it accepts the buffer number of the source buffer as its only
 ---                        argument and should return a string.
@@ -449,7 +523,7 @@ function M.inspect_tree(opts)
 
   local w = opts.winid
   if not w then
-    vim.cmd(opts.command or 'topleft 60vnew')
+    vim.cmd(opts.command or '60vnew')
     w = a.nvim_get_current_win()
   end
 
@@ -630,12 +704,6 @@ function M.inspect_tree(opts)
       end
     end,
   })
-end
-
----@deprecated
----@private
-function M.show_tree()
-  vim.deprecate('show_tree', 'inspect_tree', '0.9', nil, false)
 end
 
 --- Returns the fold level for {lnum} in the current buffer. Can be set directly to 'foldexpr':

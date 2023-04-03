@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible
 local default_handlers = require('vim.lsp.handlers')
 local log = require('vim.lsp.log')
 local lsp_rpc = require('vim.lsp.rpc')
@@ -154,6 +155,8 @@ local all_buffer_active_clients = {}
 local uninitialized_clients = {}
 
 ---@private
+---@param bufnr? integer
+---@param fn fun(client: lsp.Client, client_id: integer, bufnr: integer)
 local function for_each_buffer_client(bufnr, fn, restrict_client_ids)
   validate({
     fn = { fn, 'f' },
@@ -367,7 +370,7 @@ do
   --- @field offset_encoding "utf-8"|"utf-16"|"utf-32"
   ---
   --- @class CTBufferState
-  --- @field uri string uri of the buffer
+  --- @field name string name of the buffer
   --- @field lines string[] snapshot of buffer lines from last didChange
   --- @field lines_tmp string[]
   --- @field pending_changes table[] List of debounced changes in incremental sync mode
@@ -486,12 +489,8 @@ do
     if buf_state then
       buf_state.refs = buf_state.refs + 1
     else
-      local uri = vim.uri_from_bufnr(bufnr)
-      if not uv.fs_stat(api.nvim_buf_get_name(bufnr)) then
-        uri = uri:gsub('^file://', 'buffer://')
-      end
       buf_state = {
-        uri = uri,
+        name = api.nvim_buf_get_name(bufnr),
         lines = {},
         lines_tmp = {},
         pending_changes = {},
@@ -506,26 +505,12 @@ do
   end
 
   ---@private
-  ---@param client table
-  ---@param bufnr integer
-  ---@return string uri
-  function changetracking._get_uri(client, bufnr)
+  function changetracking._get_and_set_name(client, bufnr, name)
     local state = state_by_group[get_group(client)] or {}
     local buf_state = (state.buffers or {})[bufnr]
-    return assert(buf_state.uri, 'Must have an URI set')
-  end
-
-  ---@private
-  ---@param client table
-  ---@param bufnr integer
-  ---@param uri string
-  ---@return string uri
-  function changetracking._get_and_set_uri(client, bufnr, uri)
-    local state = state_by_group[get_group(client)] or {}
-    local buf_state = (state.buffers or {})[bufnr]
-    local old_uri = buf_state.uri
-    buf_state.uri = uri
-    return old_uri
+    local old_name = buf_state.name
+    buf_state.name = name
+    return old_name
   end
 
   ---@private
@@ -612,7 +597,7 @@ do
         { text = buf_get_full_text(bufnr) },
       }
     end
-    local uri = buf_state.uri
+    local uri = vim.uri_from_bufnr(bufnr)
     for _, client in pairs(state.clients) do
       if not client.is_stopped() and lsp.buf_is_attached(bufnr, client.id) then
         client.notify('textDocument/didChange', {
@@ -725,14 +710,11 @@ local function text_document_did_open_handler(bufnr, client)
     return
   end
   local filetype = nvim_buf_get_option(bufnr, 'filetype')
-  local uri = vim.uri_from_bufnr(bufnr)
-  if not uv.fs_stat(api.nvim_buf_get_name(bufnr)) then
-    uri = uri:gsub('^file://', 'buffer://')
-  end
+
   local params = {
     textDocument = {
       version = 0,
-      uri = uri,
+      uri = vim.uri_from_bufnr(bufnr),
       languageId = client.config.get_language_id(bufnr, filetype),
       text = buf_get_full_text(bufnr),
     },
@@ -1056,7 +1038,7 @@ function lsp.start_client(config)
   --- Returns the default handler if the user hasn't set a custom one.
   ---
   ---@param method (string) LSP method name
-  ---@return function|nil The handler for the given method, if defined, or the default from |vim.lsp.handlers|
+  ---@return lsp-handler|nil The handler for the given method, if defined, or the default from |vim.lsp.handlers|
   local function resolve_handler(method)
     return handlers[method] or default_handlers[method]
   end
@@ -1113,18 +1095,42 @@ function lsp.start_client(config)
   end
 
   ---@private
+  -- Determines whether the given option can be set by `set_defaults`.
+  local function is_empty_or_default(bufnr, option)
+    if vim.bo[bufnr][option] == '' then
+      return true
+    end
+
+    local last_set_from = vim.fn.gettext('\n\tLast set from ')
+    local line = vim.fn.gettext(' line ')
+    local scriptname
+
+    vim.api.nvim_buf_call(bufnr, function()
+      scriptname = vim.fn
+        .execute('verbose set ' .. option .. '?')
+        :match(last_set_from .. '(.*)' .. line .. '%d+')
+    end)
+
+    if not scriptname then
+      return false
+    end
+
+    return vim.startswith(vim.fn.expand(scriptname), vim.fn.expand('$VIMRUNTIME'))
+  end
+
+  ---@private
   local function set_defaults(client, bufnr)
     local capabilities = client.server_capabilities
-    if capabilities.definitionProvider and vim.bo[bufnr].tagfunc == '' then
+    if capabilities.definitionProvider and is_empty_or_default(bufnr, 'tagfunc') then
       vim.bo[bufnr].tagfunc = 'v:lua.vim.lsp.tagfunc'
     end
-    if capabilities.completionProvider and vim.bo[bufnr].omnifunc == '' then
+    if capabilities.completionProvider and is_empty_or_default(bufnr, 'omnifunc') then
       vim.bo[bufnr].omnifunc = 'v:lua.vim.lsp.omnifunc'
     end
     if
       capabilities.documentRangeFormattingProvider
-      and vim.bo[bufnr].formatprg == ''
-      and vim.bo[bufnr].formatexpr == ''
+      and is_empty_or_default(bufnr, 'formatprg')
+      and is_empty_or_default(bufnr, 'formatexpr')
     then
       vim.bo[bufnr].formatexpr = 'v:lua.vim.lsp.formatexpr()'
     end
@@ -1216,6 +1222,7 @@ function lsp.start_client(config)
     return
   end
 
+  ---@class lsp.Client
   local client = {
     id = client_id,
     name = name,
@@ -1366,7 +1373,7 @@ function lsp.start_client(config)
   --- checks for capabilities and handler availability.
   ---
   ---@param method string LSP method name.
-  ---@param params table LSP request params.
+  ---@param params table|nil LSP request params.
   ---@param handler lsp-handler|nil Response |lsp-handler| for this method.
   ---@param bufnr integer Buffer handle (0 for current).
   ---@return boolean status, integer|nil request_id {status} is a bool indicating
@@ -1584,11 +1591,11 @@ local function text_document_did_save_handler(bufnr)
   local text = once(buf_get_full_text)
   for_each_buffer_client(bufnr, function(client)
     local name = api.nvim_buf_get_name(bufnr)
-    local old_uri = changetracking._get_and_set_uri(client, bufnr, uri)
-    if old_uri and name ~= old_uri then
+    local old_name = changetracking._get_and_set_name(client, bufnr, name)
+    if old_name and name ~= old_name then
       client.notify('textDocument/didClose', {
         textDocument = {
-          uri = old_uri,
+          uri = vim.uri_from_fname(old_name),
         },
       })
       client.notify('textDocument/didOpen', {
@@ -1693,12 +1700,8 @@ function lsp.buf_attach_client(bufnr, client_id)
         end)
       end,
       on_detach = function()
+        local params = { textDocument = { uri = uri } }
         for_each_buffer_client(bufnr, function(client, _)
-          local params = {
-            textDocument = {
-              uri = changetracking._get_uri(client, bufnr),
-            },
-          }
           changetracking.reset_buf(client, bufnr)
           if vim.tbl_get(client.server_capabilities, 'textDocumentSync', 'openClose') then
             client.notify('textDocument/didClose', params)
@@ -1935,7 +1938,7 @@ api.nvim_create_autocmd('VimLeavePre', {
 ---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
 ---@param params table|nil Parameters to send to the server
----@param handler function|nil See |lsp-handler|
+---@param handler lsp-handler|nil See |lsp-handler|
 ---       If nil, follows resolution strategy defined in |lsp-handler-configuration|
 ---
 ---@return table<integer, integer>, fun() 2-tuple:
@@ -1995,9 +1998,10 @@ end
 ---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
 ---@param params (table|nil) Parameters to send to the server
----@param callback (function) The callback to call when all requests are finished.
+---@param callback fun(request_results: table<integer, {error: lsp.ResponseError, result: any}>) (function)
+--- The callback to call when all requests are finished.
 --- Unlike `buf_request`, this will collect all the responses from each server instead of handling them.
---- A map of client_id:request_result will be provided to the callback
+--- A map of client_id:request_result will be provided to the callback.
 ---
 ---@return fun() cancel A function that will cancel all requests
 function lsp.buf_request_all(bufnr, method, params, callback)
@@ -2040,9 +2044,8 @@ end
 ---@param timeout_ms (integer|nil) Maximum time in milliseconds to wait for a
 ---                               result. Defaults to 1000
 ---
----@return table<integer, any>|nil result, string|nil err Map of client_id:request_result.
---- On timeout, cancel or error, returns `(nil, err)` where `err` is a string describing
---- the failure reason.
+---@return table<integer, {err: lsp.ResponseError, result: any}>|nil (table) result Map of client_id:request_result.
+---@return string|nil err On timeout, cancel, or error, `err` is a string describing the failure reason, and `result` is nil.
 function lsp.buf_request_sync(bufnr, method, params, timeout_ms)
   local request_results
 
@@ -2063,7 +2066,7 @@ function lsp.buf_request_sync(bufnr, method, params, timeout_ms)
 end
 
 --- Send a notification to a server
----@param bufnr (number|nil) The number of the buffer
+---@param bufnr (integer|nil) The number of the buffer
 ---@param method (string) Name of the request method
 ---@param params (any) Arguments to send to the server
 ---

@@ -114,9 +114,6 @@ bool *eval_lavars_used = NULL;
 
 static int echo_attr = 0;   // attributes used for ":echo"
 
-// The names of packages that once were loaded are remembered.
-static garray_T ga_loaded = { 0, 0, sizeof(char *), 4, NULL };
-
 /// Info used by a ":for" loop.
 typedef struct {
   int fi_semicolon;             // true if ending in '; var]'
@@ -503,7 +500,7 @@ void eval_clear(void)
 # endif
 
   // autoloaded script names
-  ga_clear_strings(&ga_loaded);
+  free_autoload_scriptnames();
 
   // unreferenced lists and dicts
   (void)garbage_collect(false);
@@ -599,7 +596,7 @@ int var_redir_start(char *name, int append)
 ///   :redir => foo
 ///   :let foo
 ///   :redir END
-void var_redir_str(char *value, int value_len)
+void var_redir_str(const char *value, int value_len)
 {
   if (redir_lval == NULL) {
     return;
@@ -2150,10 +2147,10 @@ int pattern_match(const char *pat, const char *text, bool ic)
   // avoid 'l' flag in 'cpoptions'
   char *save_cpo = p_cpo;
   p_cpo = empty_option;
-  regmatch.regprog = vim_regcomp((char *)pat, RE_MAGIC + RE_STRING);
+  regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
   if (regmatch.regprog != NULL) {
     regmatch.rm_ic = ic;
-    matches = vim_regexec_nl(&regmatch, (char *)text, (colnr_T)0);
+    matches = vim_regexec_nl(&regmatch, text, (colnr_T)0);
     vim_regfree(regmatch.regprog);
   }
   p_cpo = save_cpo;
@@ -2906,6 +2903,12 @@ static int eval7(char **arg, typval_T *rettv, int evaluate, int want_string)
   case '8':
   case '9':
     ret = get_number_tv(arg, rettv, evaluate, want_string);
+
+    // Apply prefixed "-" and "+" now.  Matters especially when
+    // "->" follows.
+    if (ret == OK && evaluate && end_leader > start_leader) {
+      ret = eval7_leader(rettv, true, start_leader, &end_leader);
+    }
     break;
 
   // String constant: "string".
@@ -3011,13 +3014,12 @@ static int eval7(char **arg, typval_T *rettv, int evaluate, int want_string)
   // Handle following '[', '(' and '.' for expr[expr], expr.name,
   // expr(expr), expr->name(expr)
   if (ret == OK) {
-    ret = handle_subscript((const char **)arg, rettv, evaluate, true,
-                           (char *)start_leader, &end_leader);
+    ret = handle_subscript((const char **)arg, rettv, evaluate, true);
   }
 
   // Apply logical NOT and unary '-', from right to left, ignore '+'.
   if (ret == OK && evaluate && end_leader > start_leader) {
-    ret = eval7_leader(rettv, (char *)start_leader, &end_leader);
+    ret = eval7_leader(rettv, false, start_leader, &end_leader);
   }
 
   recurse--;
@@ -3027,9 +3029,11 @@ static int eval7(char **arg, typval_T *rettv, int evaluate, int want_string)
 /// Apply the leading "!" and "-" before an eval7 expression to "rettv".
 /// Adjusts "end_leaderp" until it is at "start_leader".
 ///
+/// @param numeric_only  if true only handle "+" and "-".
+///
 /// @return  OK on success, FAIL on failure.
-static int eval7_leader(typval_T *const rettv, const char *const start_leader,
-                        const char **const end_leaderp)
+static int eval7_leader(typval_T *const rettv, const bool numeric_only,
+                        const char *const start_leader, const char **const end_leaderp)
   FUNC_ATTR_NONNULL_ALL
 {
   const char *end_leader = (char *)(*end_leaderp);
@@ -3050,6 +3054,10 @@ static int eval7_leader(typval_T *const rettv, const char *const start_leader,
     while (end_leader > start_leader) {
       end_leader--;
       if (*end_leader == '!') {
+        if (numeric_only) {
+          end_leader++;
+          break;
+        }
         if (rettv->v_type == VAR_FLOAT) {
           f = !(bool)f;
         } else {
@@ -6763,20 +6771,18 @@ char *set_cmdarg(exarg_T *eap, char *oldarg)
 {
   char *oldval = vimvars[VV_CMDARG].vv_str;
   if (eap == NULL) {
-    xfree(oldval);
-    vimvars[VV_CMDARG].vv_str = oldarg;
-    return NULL;
+    goto error;
   }
 
   size_t len = 0;
   if (eap->force_bin == FORCE_BIN) {
-    len = 6;
+    len += 6;  // " ++bin"
   } else if (eap->force_bin == FORCE_NOBIN) {
-    len = 8;
+    len += 8;  // " ++nobin"
   }
 
   if (eap->read_edit) {
-    len += 7;
+    len += 7;  // " ++edit"
   }
 
   if (eap->force_ff != 0) {
@@ -6789,48 +6795,89 @@ char *set_cmdarg(exarg_T *eap, char *oldarg)
     len += 7 + 4;  // " ++bad=" + "keep" or "drop"
   }
   if (eap->mkdir_p != 0) {
-    len += 4;
+    len += 4;  // " ++p"
   }
 
   const size_t newval_len = len + 1;
   char *newval = xmalloc(newval_len);
+  size_t xlen = 0;
+  int rc = 0;
 
   if (eap->force_bin == FORCE_BIN) {
-    snprintf(newval, newval_len, " ++bin");
+    rc = snprintf(newval, newval_len, " ++bin");
   } else if (eap->force_bin == FORCE_NOBIN) {
-    snprintf(newval, newval_len, " ++nobin");
+    rc = snprintf(newval, newval_len, " ++nobin");
   } else {
     *newval = NUL;
   }
+  if (rc < 0) {
+    goto error;
+  }
+  xlen += (size_t)rc;
 
   if (eap->read_edit) {
-    STRCAT(newval, " ++edit");
+    rc = snprintf(newval + xlen, newval_len - xlen, " ++edit");
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
   }
 
   if (eap->force_ff != 0) {
-    snprintf(newval + strlen(newval), newval_len, " ++ff=%s",
-             eap->force_ff == 'u' ? "unix" :
-             eap->force_ff == 'd' ? "dos" : "mac");
+    rc = snprintf(newval + xlen,
+                  newval_len - xlen,
+                  " ++ff=%s",
+                  eap->force_ff == 'u'   ? "unix"
+                  : eap->force_ff == 'd' ? "dos" : "mac");
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
   }
   if (eap->force_enc != 0) {
-    snprintf(newval + strlen(newval), newval_len, " ++enc=%s",
-             eap->cmd + eap->force_enc);
-  }
-  if (eap->bad_char == BAD_KEEP) {
-    STRCPY(newval + strlen(newval), " ++bad=keep");
-  } else if (eap->bad_char == BAD_DROP) {
-    STRCPY(newval + strlen(newval), " ++bad=drop");
-  } else if (eap->bad_char != 0) {
-    snprintf(newval + strlen(newval), newval_len, " ++bad=%c",
-             eap->bad_char);
+    rc = snprintf(newval + (xlen), newval_len - xlen, " ++enc=%s", eap->cmd + eap->force_enc);
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
   }
 
-  if (eap->mkdir_p) {
-    snprintf(newval, newval_len, " ++p");
+  if (eap->bad_char == BAD_KEEP) {
+    rc = snprintf(newval + xlen, newval_len - xlen, " ++bad=keep");
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
+  } else if (eap->bad_char == BAD_DROP) {
+    rc = snprintf(newval + xlen, newval_len - xlen, " ++bad=drop");
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
+  } else if (eap->bad_char != 0) {
+    rc = snprintf(newval + xlen, newval_len - xlen, " ++bad=%c", eap->bad_char);
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
   }
+
+  if (eap->mkdir_p != 0) {
+    rc = snprintf(newval + xlen, newval_len - xlen, " ++p");
+    if (rc < 0) {
+      goto error;
+    }
+    xlen += (size_t)rc;
+  }
+  assert(xlen <= newval_len);
 
   vimvars[VV_CMDARG].vv_str = newval;
   return oldval;
+
+error:
+  xfree(oldval);
+  vimvars[VV_CMDARG].vv_str = oldarg;
+  return NULL;
 }
 
 /// Check if variable "name[len]" is a local variable or an argument.
@@ -6899,8 +6946,7 @@ int check_luafunc_name(const char *const str, const bool paren)
 /// @param verbose  give error messages
 /// @param start_leader  start of '!' and '-' prefixes
 /// @param end_leaderp  end of '!' and '-' prefixes
-int handle_subscript(const char **const arg, typval_T *rettv, int evaluate, int verbose,
-                     const char *const start_leader, const char **const end_leaderp)
+int handle_subscript(const char **const arg, typval_T *rettv, int evaluate, int verbose)
 {
   int ret = OK;
   dict_T *selfdict = NULL;
@@ -6944,19 +6990,12 @@ int handle_subscript(const char **const arg, typval_T *rettv, int evaluate, int 
       tv_dict_unref(selfdict);
       selfdict = NULL;
     } else if (**arg == '-') {
-      // Expression "-1.0->method()" applies the leader "-" before
-      // applying ->.
-      if (evaluate && *end_leaderp > start_leader) {
-        ret = eval7_leader(rettv, (char *)start_leader, end_leaderp);
-      }
-      if (ret == OK) {
-        if ((*arg)[2] == '{') {
-          // expr->{lambda}()
-          ret = eval_lambda((char **)arg, rettv, evaluate, verbose);
-        } else {
-          // expr->name()
-          ret = eval_method((char **)arg, rettv, evaluate, verbose);
-        }
+      if ((*arg)[2] == '{') {
+        // expr->{lambda}()
+        ret = eval_lambda((char **)arg, rettv, evaluate, verbose);
+      } else {
+        // expr->name()
+        ret = eval_method((char **)arg, rettv, evaluate, verbose);
       }
     } else {  // **arg == '[' || **arg == '.'
       tv_dict_unref(selfdict);
@@ -7523,80 +7562,6 @@ const char *find_option_end(const char **const arg, int *const scope)
     }
   }
   return p;
-}
-
-/// Return the autoload script name for a function or variable name
-/// Caller must make sure that "name" contains AUTOLOAD_CHAR.
-///
-/// @param[in]  name  Variable/function name.
-/// @param[in]  name_len  Name length.
-///
-/// @return [allocated] autoload script name.
-char *autoload_name(const char *const name, const size_t name_len)
-  FUNC_ATTR_MALLOC FUNC_ATTR_WARN_UNUSED_RESULT
-{
-  // Get the script file name: replace '#' with '/', append ".vim".
-  char *const scriptname = xmalloc(name_len + sizeof("autoload/.vim"));
-  memcpy(scriptname, "autoload/", sizeof("autoload/") - 1);
-  memcpy(scriptname + sizeof("autoload/") - 1, name, name_len);
-  size_t auchar_idx = 0;
-  for (size_t i = sizeof("autoload/") - 1;
-       i - sizeof("autoload/") + 1 < name_len;
-       i++) {
-    if (scriptname[i] == AUTOLOAD_CHAR) {
-      scriptname[i] = '/';
-      auchar_idx = i;
-    }
-  }
-  memcpy(scriptname + auchar_idx, ".vim", sizeof(".vim"));
-
-  return scriptname;
-}
-
-/// If name has a package name try autoloading the script for it
-///
-/// @param[in]  name  Variable/function name.
-/// @param[in]  name_len  Name length.
-/// @param[in]  reload  If true, load script again when already loaded.
-///
-/// @return true if a package was loaded.
-bool script_autoload(const char *const name, const size_t name_len, const bool reload)
-{
-  // If there is no '#' after name[0] there is no package name.
-  const char *p = memchr(name, AUTOLOAD_CHAR, name_len);
-  if (p == NULL || p == name) {
-    return false;
-  }
-
-  bool ret = false;
-  char *tofree = autoload_name(name, name_len);
-  char *scriptname = tofree;
-
-  // Find the name in the list of previously loaded package names.  Skip
-  // "autoload/", it's always the same.
-  int i = 0;
-  for (; i < ga_loaded.ga_len; i++) {
-    if (strcmp(((char **)ga_loaded.ga_data)[i] + 9, scriptname + 9) == 0) {
-      break;
-    }
-  }
-  if (!reload && i < ga_loaded.ga_len) {
-    ret = false;  // Was loaded already.
-  } else {
-    // Remember the name if it wasn't loaded already.
-    if (i == ga_loaded.ga_len) {
-      GA_APPEND(char *, &ga_loaded, scriptname);
-      tofree = NULL;
-    }
-
-    // Try loading the package from $VIMRUNTIME/autoload/<name>.vim
-    if (source_runtime(scriptname, 0) == OK) {
-      ret = true;
-    }
-  }
-
-  xfree(tofree);
-  return ret;
 }
 
 static var_flavour_T var_flavour(char *varname)

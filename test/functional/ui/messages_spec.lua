@@ -10,12 +10,15 @@ local async_meths = helpers.async_meths
 local test_build_dir = helpers.test_build_dir
 local nvim_prog = helpers.nvim_prog
 local exec = helpers.exec
+local exec_capture = helpers.exec_capture
 local exc_exec = helpers.exc_exec
 local exec_lua = helpers.exec_lua
 local poke_eventloop = helpers.poke_eventloop
 local assert_alive = helpers.assert_alive
 local is_os = helpers.is_os
 local is_ci = helpers.is_ci
+local funcs = helpers.funcs
+local skip = helpers.skip
 
 describe('ui/ext_messages', function()
   local screen
@@ -474,8 +477,7 @@ describe('ui/ext_messages', function()
     ]], msg_history={{
       content = {{ "stuff" }},
       kind = "echomsg",
-    }}, showmode={{ "-- INSERT --", 3 }},
-      messages={{
+    }}, messages={{
         content = {{ "Press ENTER or type command to continue", 4}},
         kind = "return_prompt"
     }}}
@@ -985,7 +987,7 @@ describe('ui/builtin messages', function()
 
     -- screen size doesn't affect internal output #10285
     eq('ErrorMsg       xxx ctermfg=15 ctermbg=1 guifg=White guibg=Red',
-       meths.exec("hi ErrorMsg", true))
+       exec_capture("hi ErrorMsg"))
   end)
 
   it(':syntax list langGroup output', function()
@@ -1024,7 +1026,7 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
                    match /\<endif\s\+".*$/ms=s+5,lc=5  contains=@vimCommentGroup,vimCommentString 
                    match /\<else\s\+".*$/ms=s+4,lc=4  contains=@vimCommentGroup,vimCommentString 
                    links to Comment]],
-       meths.exec('syntax list vimComment', true))
+       exec_capture('syntax list vimComment'))
     -- luacheck: pop
   end)
 
@@ -1917,6 +1919,7 @@ aliquip ex ea commodo consequat.]])
   end)
 
   it('with :!cmd does not crash on resize', function()
+    skip(funcs.executable('sleep') == 0, 'missing "sleep" command')
     feed(':!sleep 1<cr>')
     screen:expect{grid=[[
                                          |

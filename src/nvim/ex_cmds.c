@@ -77,7 +77,6 @@
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
 #include "nvim/strings.h"
@@ -150,7 +149,7 @@ void do_ascii(const exarg_T *const eap)
     char buf1[20];
     if (vim_isprintc_strict(c) && (c < ' ' || c > '~')) {
       char buf3[7];
-      transchar_nonprint(curbuf, (char_u *)buf3, c);
+      transchar_nonprint(curbuf, buf3, c);
       vim_snprintf(buf1, sizeof(buf1), "  <%s>", (char *)buf3);
     } else {
       buf1[0] = NUL;
@@ -2658,7 +2657,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
       msg_scroll = false;
     }
     if (!msg_scroll) {          // wait a bit when overwriting an error msg
-      check_for_delay(false);
+      msg_check_for_delay(false);
     }
     msg_start();
     msg_scroll = msg_scroll_save;
@@ -3747,6 +3746,7 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
               update_topline(curwin);
               validate_cursor();
               redraw_later(curwin, UPD_SOME_VALID);
+              show_cursor_info_later(true);
               update_screen();
               highlight_match = false;
               redraw_later(curwin, UPD_SOME_VALID);
@@ -3765,7 +3765,6 @@ static int do_sub(exarg_T *eap, proftime_T timeout, long cmdpreview_ns, handle_T
                         _("replace with %s (y/n/a/q/l/^E/^Y)?"), sub);
               msg_no_more = false;
               msg_scroll = (int)i;
-              show_cursor_info(true);
               if (!ui_has(kUIMessages)) {
                 ui_cursor_goto(msg_row, msg_col);
               }
@@ -4743,7 +4742,7 @@ void ex_oldfiles(exarg_T *eap)
     }
     nr++;
     const char *fname = tv_get_string(TV_LIST_ITEM_TV(li));
-    if (!message_filtered((char *)fname)) {
+    if (!message_filtered(fname)) {
       msg_outnum(nr);
       msg_puts(": ");
       msg_outtrans((char *)tv_get_string(TV_LIST_ITEM_TV(li)));

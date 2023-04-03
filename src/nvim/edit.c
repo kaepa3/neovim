@@ -52,7 +52,6 @@
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
 #include "nvim/pos.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
@@ -138,7 +137,7 @@ static void insert_enter(InsertState *s)
   did_restart_edit = restart_edit;
   // sleep before redrawing, needed for "CTRL-O :" that results in an
   // error message
-  check_for_delay(true);
+  msg_check_for_delay(true);
   // set Insstart_orig to Insstart
   update_Insstart_orig = true;
 
@@ -1246,7 +1245,9 @@ bool edit(int cmdchar, bool startln, long count)
   // Don't allow changes in the buffer while editing the cmdline.  The
   // caller of getcmdline() may get confused.
   // Don't allow recursive insert mode when busy with completion.
-  if (textlock != 0 || ins_compl_active() || compl_busy || pum_visible()) {
+  // Allow in dummy buffers since they are only used internally
+  if (textlock != 0 || ins_compl_active() || compl_busy || pum_visible()
+      || expr_map_locked()) {
     emsg(_(e_textlock));
     return false;
   }
@@ -1350,12 +1351,15 @@ void ins_redraw(bool ready)
   }
 
   pum_check_clear();
+  show_cursor_info_later(false);
   if (must_redraw) {
     update_screen();
-  } else if (clear_cmdline || redraw_cmdline) {
-    showmode();  // clear cmdline and show mode
+  } else {
+    redraw_statuslines();
+    if (clear_cmdline || redraw_cmdline || redraw_mode) {
+      showmode();  // clear cmdline and show mode
+    }
   }
-  show_cursor_info(false);
   setcursor();
   emsg_on_display = false;      // may remove error message now
 }
@@ -1510,14 +1514,14 @@ bool prompt_curpos_editable(void)
 // Undo the previous edit_putchar().
 void edit_unputchar(void)
 {
-  if (pc_status != PC_STATUS_UNSET && pc_row >= msg_scrolled) {
+  if (pc_status != PC_STATUS_UNSET) {
     if (pc_status == PC_STATUS_RIGHT) {
       curwin->w_wcol++;
     }
     if (pc_status == PC_STATUS_RIGHT || pc_status == PC_STATUS_LEFT) {
       redrawWinline(curwin, curwin->w_cursor.lnum);
     } else {
-      grid_puts(&curwin->w_grid, pc_bytes, pc_row - msg_scrolled, pc_col, pc_attr);
+      grid_puts(&curwin->w_grid, pc_bytes, pc_row, pc_col, pc_attr);
     }
   }
 }
@@ -1951,7 +1955,7 @@ static void insert_special(int c, int allow_modmask, int ctrlv)
     allow_modmask = true;
   }
   if (IS_SPECIAL(c) || (mod_mask && allow_modmask)) {
-    char *p = (char *)get_special_key_name(c, mod_mask);
+    char *p = get_special_key_name(c, mod_mask);
     int len = (int)strlen(p);
     c = (uint8_t)p[len - 1];
     if (len > 2) {
@@ -2290,11 +2294,11 @@ static void stop_insert(pos_T *end_insert_pos, int esc, int nomove)
   // Don't do it when "restart_edit" was set and nothing was inserted,
   // otherwise CTRL-O w and then <Left> will clear "last_insert".
   ptr = get_inserted();
-  if (did_restart_edit == 0 || (ptr != NULL
-                                && (int)strlen(ptr) > new_insert_skip)) {
+  int added = ptr == NULL ? 0 : (int)strlen(ptr) - new_insert_skip;
+  if (did_restart_edit == 0 || added > 0) {
     xfree(last_insert);
     last_insert = ptr;
-    last_insert_skip = new_insert_skip;
+    last_insert_skip = added < 0 ? 0 : new_insert_skip;
   } else {
     xfree(ptr);
   }
@@ -3453,6 +3457,7 @@ static bool ins_esc(long *count, int cmdchar, bool nomove)
       }
     } else {
       curwin->w_cursor.col--;
+      curwin->w_valid &= ~(VALID_WCOL|VALID_VIRTCOL);
       // Correct cursor for multi-byte character.
       mb_adjust_cursor();
     }

@@ -45,18 +45,45 @@ The following changes may require adaptations in user config or plugins.
     - `printheader`
     - `printmbcharset`
 
+• 'paste' option is now deprecated and 'pastetoggle' is removed. |paste| works
+  automatically in GUI and terminal (TUI) Nvim.  Just Paste It.™
+
 • libiconv and intl are now required build dependencies.
 
 • Unsaved changes are now preserved rather than discarded when |channel-stdio|
   is closed.
+
+• Changes to |vim.treesitter.get_node_text()|:
+  - It now returns `string`, as opposed to `string|string[]|nil`.
+  - The `concat` option has been removed as it was not consistently applied.
+  - Invalid ranges now cause an error instead of returning `nil`.
+
+• Renamed vim.pretty_print to vim.print. |deprecated|
+
+• |nvim_exec()| is now deprecated in favor of |nvim_exec2()|.
+
+• `help` treesitter parser was renamed to `vimdoc`. The only user-visible
+  change is that language-specific highlight groups need to be renamed from
+  `@foo.help` to `@foo.vimdoc`.
+
+• The default value of 'commentstring' is now empty instead of "/*%s*/".
 
 ==============================================================================
 NEW FEATURES                                                    *news-features*
 
 The following new APIs or features were added.
 
-• Added |vim.version| for parsing and comparing version strings conforming to
-  the semver specification, see |lua-version|.
+• |nvim_buf_get_extmarks()| now accepts a -1 `ns_id` to request extmarks from
+  all namespaces and adds the namespace id to the details array.
+  Other missing properties have been added to the details array and marks can
+  be filtered by type.
+
+• Added a new experimental |lua-loader| that byte-compiles and caches lua files.
+  To enable the new loader, add the following at the top of your |init.lua|: >lua
+    vim.loader.enable()
+
+• Added |lua-version| for parsing and comparing version strings conforming to
+  the semver specification.
 
 • A new environment variable named NVIM_APPNAME enables configuring the
   directories where Neovim should find its configuration and state files. See
@@ -122,6 +149,8 @@ The following new APIs or features were added.
 • |vim.fs.dir()| now has a `opts` argument with a depth field to allow
   recursively searching a directory tree.
 
+• |vim.gsplit()| supports all features of |vim.split()|.
+
 • |vim.secure.read()| reads a file and prompts the user if it should be
   trusted and, if so, returns the file's contents.
 
@@ -168,9 +197,9 @@ The following new APIs or features were added.
   more complicated dynamic language injections.
 
 • |vim.treesitter.get_node_text()| now accepts a `metadata` option for
-  writing custom directives using |vim.treesitter.add_directive()|.
+  writing custom directives using |vim.treesitter.query.add_directive()|.
 
-• |vim.treesitter.add()| replaces `vim.treesitter.language.require_language`.
+• |vim.treesitter.language.add()| replaces `vim.treesitter.language.require_language`.
 
 • `require'bit'` is now always available |lua-bit|
 
@@ -196,6 +225,21 @@ The following new APIs or features were added.
 
 • Added an omnifunc implementation for lua, |vim.lua_omnifunc()|
 
+• Treesitter injection queries now use the format described at
+  https://tree-sitter.github.io/tree-sitter/syntax-highlighting#language-injection .
+  Support for the previous format will be removed in a future release.
+
+• |nvim_get_option_value()| now has a `filetype` option so it can return the
+  default option for a specific filetype.
+
+• |vim.filetype.get_option()| to get the default option value for a specific
+  filetype. This is a wrapper around |nvim_get_option_value()| with caching.
+
+• Added |nvim_get_hl()| for getting highlight group definitions in a format compatible with |nvim_set_hl()|.
+
+• |vim.diagnostic| now supports LSP DiagnosticsTag.
+  See: https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#diagnosticTag
+
 ==============================================================================
 CHANGED FEATURES                                                 *news-changes*
 
@@ -214,6 +258,14 @@ The following changes to existing APIs or features add new behavior.
 
 • API calls now show more information about where an exception happened.
 
+• The `win_viewport` UI event now contains information about virtual lines,
+  meaning that smooth scrolling can now be implemented more consistenlty.
+
+• The `:= {expr}` syntax can be used to evaluate a lua expression, as
+  a shorter form of `:lua ={expr}`. `:=` and `:[range]=` without argument
+  are unchanged. However `:=#` and similar variants using |ex-flags|
+  are no longer supported.
+
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
@@ -228,7 +280,14 @@ The following deprecated functions or APIs were removed.
   changes need to be contributed there first.)
   See https://github.com/neovim/neovim/pull/20674.
 
-- 'hkmap', 'hkmapp' and 'aleph' options were removed. Use 'keymap' option instead.
+• 'hkmap', 'hkmapp' and 'aleph' options were removed. Use 'keymap' option instead.
+
+• |LanguageTree:parse()| no longer returns changed regions. Please use the
+  `on_changedtree` callbacks instead.
+
+• `vim.highlight.create()`, `vim.highlight.link()` were removed, use |nvim_set_hl()| instead.
+
+• `require'health'` was removed. Use |vim.health| instead.
 
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
@@ -236,9 +295,27 @@ DEPRECATIONS                                                *news-deprecations*
 The following functions are now deprecated and will be removed in the next
 release.
 
-• |vim.treesitter.add()| replaces `vim.treesitter.language.require_language()`
+• |vim.treesitter.language.add()| replaces `vim.treesitter.language.require_language()`
 
 • |vim.treesitter.get_node_at_pos()| and |vim.treesitter.get_node_at_cursor()|
   are both deprecated in favor of |vim.treesitter.get_node()|.
+
+• `vim.api.nvim_get_hl_by_name()`, `vim.api.nvim_get_hl_by_id()` were deprecated, use |nvim_get_hl()| instead.
+
+• The following top level Treesitter functions have been moved:
+  `vim.treesitter.inspect_language()`    -> `vim.treesitter.language.inspect()`
+  `vim.treesitter.get_query_files()`     -> `vim.treesitter.query.get_files()`
+  `vim.treesitter.set_query()`           -> `vim.treesitter.query.set()`
+  `vim.treesitter.query.set_query()`     -> `vim.treesitter.query.set()`
+  `vim.treesitter.get_query()`           -> `vim.treesitter.query.get()`
+  `vim.treesitter.query.get_query()`     -> `vim.treesitter.query.get()`
+  `vim.treesitter.parse_query()`         -> `vim.treesitter.query.parse()`
+  `vim.treesitter.query.parse_query()`   -> `vim.treesitter.query.parse()`
+  `vim.treesitter.add_predicate()`       -> `vim.treesitter.query.add_predicate()`
+  `vim.treesitter.add_directive()`       -> `vim.treesitter.query.add_directive()`
+  `vim.treesitter.list_predicates()`     -> `vim.treesitter.query.list_predicates()`
+  `vim.treesitter.list_directives()`     -> `vim.treesitter.query.list_directives()`
+  `vim.treesitter.query.get_range()`     -> `vim.treesitter.get_range()`
+  `vim.treesitter.query.get_node_text()` -> `vim.treesitter.get_node_text()`
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

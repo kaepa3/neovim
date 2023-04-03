@@ -28,6 +28,7 @@
 for k, v in pairs({
   treesitter = true,
   filetype = true,
+  loader = true,
   F = true,
   lsp = true,
   highlight = true,
@@ -322,8 +323,8 @@ end
 ---
 ---@param command string|table Command(s) to execute.
 ---                            If a string, executes multiple lines of Vim script at once. In this
----                            case, it is an alias to |nvim_exec()|, where `output` is set to
----                            false. Thus it works identical to |:source|.
+---                            case, it is an alias to |nvim_exec2()|, where `opts.output` is set
+---                            to false. Thus it works identical to |:source|.
 ---                            If a table, executes a single command. In this case, it is an alias
 ---                            to |nvim_cmd()| where `opts` is empty.
 ---@see |ex-cmd-index|
@@ -338,7 +339,8 @@ vim.cmd = setmetatable({}, {
     if type(command) == 'table' then
       return vim.api.nvim_cmd(command, {})
     else
-      return vim.api.nvim_exec(command, false)
+      vim.api.nvim_exec2(command, {})
+      return ''
     end
   end,
   __index = function(t, command)
@@ -397,14 +399,17 @@ do
   vim.t = make_dict_accessor('t')
 end
 
---- Get a table of lines with start, end columns for a region marked by two points
+--- Get a table of lines with start, end columns for a region marked by two points.
+--- Input and output positions are (0,0)-indexed and indicate byte positions.
 ---
 ---@param bufnr integer number of buffer
 ---@param pos1 integer[] (line, column) tuple marking beginning of region
 ---@param pos2 integer[] (line, column) tuple marking end of region
 ---@param regtype string type of selection, see |setreg()|
----@param inclusive boolean indicating whether the selection is end-inclusive
----@return table region Table of the form `{linenr = {startcol,endcol}}`
+---@param inclusive boolean indicating whether column of pos2 is inclusive
+---@return table region Table of the form `{linenr = {startcol,endcol}}`.
+---        `endcol` is exclusive, and whole lines are marked with
+---        `{startcol,endcol} = {0,-1}`.
 function vim.region(bufnr, pos1, pos2, regtype, inclusive)
   if not vim.api.nvim_buf_is_loaded(bufnr) then
     vim.fn.bufload(bufnr)
@@ -516,11 +521,6 @@ do
     end
     return false
   end
-end
-
----@private
-function vim.register_keystroke_callback()
-  error('vim.register_keystroke_callback is deprecated, instead use: vim.on_key')
 end
 
 local on_key_cbs = {}
@@ -778,22 +778,37 @@ do
   end
 end
 
----Prints given arguments in human-readable format.
----Example:
----<pre>lua
----  -- Print highlight group Normal and store it's contents in a variable.
----  local hl_normal = vim.pretty_print(vim.api.nvim_get_hl_by_name("Normal", true))
----</pre>
----@see |vim.inspect()|
----@return any # given arguments.
+---@private
 function vim.pretty_print(...)
-  local objects = {}
-  for i = 1, select('#', ...) do
-    local v = select(i, ...)
-    table.insert(objects, vim.inspect(v))
+  vim.deprecate('vim.pretty_print', 'vim.print', '0.10')
+  return vim.print(...)
+end
+
+--- "Pretty prints" the given arguments and returns them unmodified.
+---
+--- Example:
+--- <pre>lua
+---   local hl_normal = vim.print(vim.api.nvim_get_hl_by_name('Normal', true))
+--- </pre>
+---
+--- @see |vim.inspect()|
+--- @return any # given arguments.
+function vim.print(...)
+  if vim.in_fast_event() then
+    print(...)
+    return ...
   end
 
-  print(table.concat(objects, '    '))
+  for i = 1, select('#', ...) do
+    local o = select(i, ...)
+    if type(o) == 'string' then
+      vim.api.nvim_out_write(o)
+    else
+      vim.api.nvim_out_write(vim.inspect(o, { newline = '\n', indent = '  ' }))
+    end
+    vim.api.nvim_out_write('\n')
+  end
+
   return ...
 end
 
@@ -867,26 +882,32 @@ function vim._cs_remote(rcid, server_addr, connect_error, args)
   }
 end
 
---- Display a deprecation notification to the user.
+--- Shows a deprecation message to the user.
 ---
----@param name        string     Deprecated function.
----@param alternative string|nil Preferred alternative function.
----@param version     string     Version in which the deprecated function will
----                              be removed.
----@param plugin      string|nil Plugin name that the function will be removed
----                              from. Defaults to "Nvim".
+---@param name        string     Deprecated feature (function, API, etc.).
+---@param alternative string|nil Suggested alternative feature.
+---@param version     string     Version when the deprecated function will be removed.
+---@param plugin      string|nil Name of the plugin that owns the deprecated feature.
+---                              Defaults to "Nvim".
 ---@param backtrace   boolean|nil Prints backtrace. Defaults to true.
+---
+---@returns Deprecated message, or nil if no message was shown.
 function vim.deprecate(name, alternative, version, plugin, backtrace)
-  local message = name .. ' is deprecated'
+  local msg = ('%s is deprecated'):format(name)
   plugin = plugin or 'Nvim'
-  message = alternative and (message .. ', use ' .. alternative .. ' instead.') or message
-  message = message
-    .. ' See :h deprecated\nThis function will be removed in '
-    .. plugin
-    .. ' version '
-    .. version
-  if vim.notify_once(message, vim.log.levels.WARN) and backtrace ~= false then
+  msg = alternative and ('%s, use %s instead.'):format(msg, alternative) or msg
+  msg = ('%s%s\nThis feature will be removed in %s version %s'):format(
+    msg,
+    (plugin == 'Nvim' and ' :help deprecated' or ''),
+    plugin,
+    version
+  )
+  local displayed = vim.notify_once(msg, vim.log.levels.WARN)
+  if displayed and backtrace ~= false then
     vim.notify(debug.traceback('', 2):sub(2), vim.log.levels.WARN)
+  end
+  if displayed then
+    return msg
   end
 end
 

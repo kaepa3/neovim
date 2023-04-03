@@ -197,10 +197,10 @@ void grid_put_schar(ScreenGrid *grid, int row, int col, char *schar, int attr)
 
 /// like grid_puts(), but output "text[len]".  When "len" is -1 output up to
 /// a NUL.
-int grid_puts_len(ScreenGrid *grid, char *text, int textlen, int row, int col, int attr)
+int grid_puts_len(ScreenGrid *grid, const char *text, int textlen, int row, int col, int attr)
 {
   size_t off;
-  char *ptr = text;
+  const char *ptr = text;
   int len = textlen;
   int c;
   size_t max_off;
@@ -549,9 +549,9 @@ void grid_put_linebuf(ScreenGrid *grid, int row, int coloff, int endcol, int cle
   }
 
   if (bg_attr) {
+    assert(off_from == (size_t)col);
     for (int c = col; c < endcol; c++) {
-      linebuf_attr[off_from + (size_t)c] =
-        hl_combine_attr(bg_attr, linebuf_attr[off_from + (size_t)c]);
+      linebuf_attr[c] = hl_combine_attr(bg_attr, linebuf_attr[c]);
     }
   }
 

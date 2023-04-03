@@ -74,42 +74,6 @@
 # include "api/vim.c.generated.h"
 #endif
 
-/// Gets a highlight definition by name.
-///
-/// @param name Highlight group name
-/// @param rgb Export RGB colors
-/// @param[out] err Error details, if any
-/// @return Highlight definition map
-/// @see nvim_get_hl_by_id
-Dictionary nvim_get_hl_by_name(String name, Boolean rgb, Arena *arena, Error *err)
-  FUNC_API_SINCE(3)
-{
-  Dictionary result = ARRAY_DICT_INIT;
-  int id = syn_name2id(name.data);
-
-  VALIDATE_S((id != 0), "highlight name", name.data, {
-    return result;
-  });
-  return nvim_get_hl_by_id(id, rgb, arena, err);
-}
-
-/// Gets a highlight definition by id. |hlID()|
-/// @param hl_id Highlight id as returned by |hlID()|
-/// @param rgb Export RGB colors
-/// @param[out] err Error details, if any
-/// @return Highlight definition map
-/// @see nvim_get_hl_by_name
-Dictionary nvim_get_hl_by_id(Integer hl_id, Boolean rgb, Arena *arena, Error *err)
-  FUNC_API_SINCE(3)
-{
-  Dictionary dic = ARRAY_DICT_INIT;
-  VALIDATE_INT((syn_get_final_id((int)hl_id) != 0), "highlight id", hl_id, {
-    return dic;
-  });
-  int attrcode = syn_id2attr((int)hl_id);
-  return hl_get_attr_by_id(attrcode, rgb, arena, err);
-}
-
 /// Gets a highlight group by name
 ///
 /// similar to |hlID()|, but allocates a new ID if not present.
@@ -119,12 +83,25 @@ Integer nvim_get_hl_id_by_name(String name)
   return syn_check_group(name.data, name.size);
 }
 
-Dictionary nvim__get_hl_defs(Integer ns_id, Arena *arena, Error *err)
+/// Gets all or specific highlight groups in a namespace.
+///
+/// @param ns_id Get highlight groups for namespace ns_id |nvim_get_namespaces()|.
+///              Use 0 to get global highlight groups |:highlight|.
+/// @param opts  Options dict:
+///                 - name: (string) Get a highlight definition by name.
+///                 - id: (integer) Get a highlight definition by id.
+///                 - link: (boolean, default true) Show linked group name instead of effective definition |:hi-link|.
+///
+/// @param[out] err Error details, if any.
+/// @return Highlight groups as a map from group name to a highlight definition map as in |nvim_set_hl()|,
+///                   or only a single highlight definition map if requested by name or id.
+///
+/// @note When the `link` attribute is defined in the highlight definition
+///       map, other attributes will not be taking effect (see |:hi-link|).
+Dictionary nvim_get_hl(Integer ns_id, Dict(get_highlight) *opts, Arena *arena, Error *err)
+  FUNC_API_SINCE(11)
 {
-  if (ns_id == 0) {
-    return get_global_hl_defs(arena);
-  }
-  abort();
+  return ns_get_hl_defs((NS)ns_id, opts, arena, err);
 }
 
 /// Sets a highlight group.
@@ -139,8 +116,14 @@ Dictionary nvim__get_hl_defs(Integer ns_id, Arena *arena, Error *err)
 ///       values of the Normal group. If the Normal group has not been defined,
 ///       using these values results in an error.
 ///
+///
+/// @note If `link` is used in combination with other attributes; only the
+///       `link` will take effect (see |:hi-link|).
+///
 /// @param ns_id Namespace id for this highlight |nvim_create_namespace()|.
 ///              Use 0 to set a highlight group globally |:highlight|.
+///              Highlights from non-global namespaces are not active by default, use
+///              |nvim_set_hl_ns()| or |nvim_win_set_hl_ns()| to activate them.
 /// @param name  Highlight group name, e.g. "ErrorMsg"
 /// @param val   Highlight definition map, accepts the following keys:
 ///                - fg (or foreground): color name or "#RRGGBB", see note.
@@ -183,8 +166,8 @@ void nvim_set_hl(Integer ns_id, String name, Dict(highlight) *val, Error *err)
   }
 }
 
-/// Set active namespace for highlights. This can be set for a single window,
-/// see |nvim_win_set_hl_ns()|.
+/// Set active namespace for highlights defined with |nvim_set_hl()|. This can be set for
+/// a single window, see |nvim_win_set_hl_ns()|.
 ///
 /// @param ns_id the namespace to use
 /// @param[out] err Error details, if any
@@ -200,7 +183,7 @@ void nvim_set_hl_ns(Integer ns_id, Error *err)
   redraw_all_later(UPD_NOT_VALID);
 }
 
-/// Set active namespace for highlights while redrawing.
+/// Set active namespace for highlights defined with |nvim_set_hl()| while redrawing.
 ///
 /// This function meant to be called while redrawing, primarily from
 /// |nvim_set_decoration_provider()| on_win and on_line callbacks, which
@@ -536,10 +519,8 @@ ArrayOf(String) nvim_get_runtime_file(String name, Boolean all, Error *err)
 
   int flags = DIP_DIRFILE | (all ? DIP_ALL : 0);
 
-  TRY_WRAP({
-    try_start();
+  TRY_WRAP(err, {
     do_in_runtimepath((name.size ? name.data : ""), flags, find_runtime_cb, &rv);
-    try_end(err);
   });
   return rv;
 }
@@ -579,7 +560,7 @@ ArrayOf(String) nvim__get_runtime(Array pat, Boolean all, Dict(runtime) *opts, E
   if (source) {
     for (size_t i = 0; i < res.size; i++) {
       String name = res.items[i].data.string;
-      (void)do_source(name.data, false, DOSO_NONE);
+      (void)do_source(name.data, false, DOSO_NONE, NULL);
     }
   }
 
@@ -1236,14 +1217,12 @@ void nvim_put(ArrayOf(String) lines, String type, Boolean after, Boolean follow,
 
   finish_yankreg_from_object(reg, false);
 
-  TRY_WRAP({
-    try_start();
+  TRY_WRAP(err, {
     bool VIsual_was_active = VIsual_active;
     msg_silent++;  // Avoid "N more lines" message.
     do_put(0, reg, after ? FORWARD : BACKWARD, 1, follow ? PUT_CURSEND : 0);
     msg_silent--;
     VIsual_active = VIsual_was_active;
-    try_end(err);
   });
 
 cleanup:

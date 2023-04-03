@@ -533,7 +533,7 @@ function module.feed_command(...)
   end
 end
 
--- @deprecated use nvim_exec()
+-- @deprecated use nvim_exec2()
 function module.source(code)
   module.exec(dedent(code))
 end
@@ -553,16 +553,18 @@ function module.set_shell_powershell(fake)
     assert(found)
   end
   local shell = found and (is_os('win') and 'powershell' or 'pwsh') or module.testprg('pwsh-test')
-  local set_encoding = '[Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();'
-  local cmd = set_encoding..'Remove-Item -Force '..table.concat(is_os('win')
+  local cmd = 'Remove-Item -Force '..table.concat(is_os('win')
     and {'alias:cat', 'alias:echo', 'alias:sleep', 'alias:sort'}
     or  {'alias:echo'}, ',')..';'
   module.exec([[
     let &shell = ']]..shell..[['
     set shellquote= shellxquote=
-    let &shellcmdflag = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command ]]..cmd..[['
-    let &shellpipe = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
-    let &shellredir = '2>&1 | Out-File -Encoding UTF8 %s; exit $LastExitCode'
+    let &shellcmdflag = '-NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command '
+    let &shellcmdflag .= '[Console]::InputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new();'
+    let &shellcmdflag .= '$PSDefaultParameterValues[''Out-File:Encoding'']=''utf8'';'
+    let &shellcmdflag .= ']]..cmd..[['
+    let &shellredir = '2>&1 | %%{ "$_" } | Out-File %s; exit $LastExitCode'
+    let &shellpipe  = '2>&1 | %%{ "$_" } | Tee-Object %s; exit $LastExitCode'
   ]])
   return found
 end
@@ -824,11 +826,11 @@ function module.skip_fragile(pending_fn, cond)
 end
 
 function module.exec(code)
-  return module.meths.exec(code, false)
+  module.meths.exec2(code, {})
 end
 
 function module.exec_capture(code)
-  return module.meths.exec(code, true)
+  return module.meths.exec2(code, { output = true }).output
 end
 
 function module.exec_lua(code, ...)

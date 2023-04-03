@@ -55,7 +55,6 @@
 #include "nvim/path.h"
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
-#include "nvim/screen.h"
 #include "nvim/sha256.h"
 #include "nvim/shada.h"
 #include "nvim/strings.h"
@@ -157,7 +156,7 @@ void filemess(buf_T *buf, char *name, char *s, int attr)
     msg_scroll = false;
   }
   if (!msg_scroll) {    // wait a bit when overwriting an error msg
-    check_for_delay(false);
+    msg_check_for_delay(false);
   }
   msg_start();
   msg_scroll = msg_scroll_save;
@@ -5369,10 +5368,21 @@ void vim_deltempdir(void)
 /// Creates the directory on the first call.
 char *vim_gettempdir(void)
 {
-  if (vim_tempdir == NULL) {
+  static int notfound = 0;
+  bool exists = false;
+  if (vim_tempdir == NULL || !(exists = os_isdir(vim_tempdir))) {
+    if (vim_tempdir != NULL && !exists) {
+      notfound++;
+      if (notfound == 1) {
+        ELOG("tempdir disappeared (antivirus or broken cleanup job?): %s", vim_tempdir);
+      }
+      if (notfound > 1) {
+        msg_schedule_semsg("E5431: tempdir disappeared (%d times)", notfound);
+      }
+      XFREE_CLEAR(vim_tempdir);
+    }
     vim_mktempdir();
   }
-
   return vim_tempdir;
 }
 

@@ -1206,7 +1206,6 @@ char *addstar(char *fname, size_t len, int context)
     // For help tags the translation is done in find_help_tags().
     // For a tag pattern starting with "/" no translation is needed.
     if (context == EXPAND_HELP
-        || context == EXPAND_CHECKHEALTH
         || context == EXPAND_COLORS
         || context == EXPAND_COMPILER
         || context == EXPAND_OWNSYNTAX
@@ -1214,7 +1213,9 @@ char *addstar(char *fname, size_t len, int context)
         || context == EXPAND_PACKADD
         || context == EXPAND_RUNTIME
         || ((context == EXPAND_TAGS_LISTFILES || context == EXPAND_TAGS)
-            && fname[0] == '/')) {
+            && fname[0] == '/')
+        || context == EXPAND_CHECKHEALTH
+        || context == EXPAND_LUA) {
       retval = xstrnsave(fname, len);
     } else {
       new_len = len + 2;                // +2 for '^' at start, NUL at end
@@ -2140,6 +2141,7 @@ static const char *set_context_by_cmdname(const char *cmd, cmdidx_T cmdidx, expa
     return set_context_in_scriptnames_cmd(xp, arg);
 
   case CMD_lua:
+  case CMD_equal:
     xp->xp_context = EXPAND_LUA;
     break;
 

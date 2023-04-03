@@ -24,7 +24,6 @@
 #include "nvim/main.h"
 #include "nvim/option.h"
 #include "nvim/os/input.h"
-#include "nvim/screen.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
 #include "nvim/types.h"
@@ -93,7 +92,7 @@ getkey:
     }
 
 #ifdef NVIM_LOG_DEBUG
-    char *keyname = key == K_EVENT ? "K_EVENT" : (char *)get_special_key_name(key, mod_mask);
+    char *keyname = key == K_EVENT ? "K_EVENT" : get_special_key_name(key, mod_mask);
     DLOG("input: %s", keyname);
 #endif
 

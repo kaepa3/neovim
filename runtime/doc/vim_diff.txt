@@ -34,6 +34,7 @@ Defaults					            *nvim-defaults*
 - 'backspace' defaults to "indent,eol,start"
 - 'backupdir' defaults to .,~/.local/state/nvim/backup// (|xdg|), auto-created
 - 'belloff' defaults to "all"
+- 'commentstring' defaults to ""
 - 'compatible' is always disabled
 - 'complete' excludes "i"
 - 'directory' defaults to ~/.local/state/nvim/swap// (|xdg|), auto-created
@@ -237,12 +238,15 @@ Functions:
   |stdpath()|
   |system()|, |systemlist()| can run {cmd} directly (without 'shell')
   |matchadd()| can be called before highlight group is defined
+  |tempname()| tries to recover if the Nvim |tempdir| disappears.
   |writefile()| with "p" flag creates parent directories.
 
 Highlight groups:
   |highlight-blend| controls blend level for a highlight group
   |expr-highlight| highlight groups (prefixed with "Nvim")
   |hl-NormalFloat| highlights floating window
+  |hl-FloatBorder| highlights border of a floating window
+  |hl-FloatTitle| highlights title of a floating window
   |hl-NormalNC| highlights non-current windows
   |hl-MsgArea| highlights messages/cmdline area
   |hl-MsgSeparator| highlights separator for scrolled messages
@@ -457,6 +461,7 @@ Commands:
   |:doautocmd| does not warn about "No matching autocommands".
   |:wincmd| accepts a count.
   `:write!` does not show a prompt if the file was updated externally.
+  |:=| does not accept |ex-flags|. With an arg it is equivalent to |:lua=|
 
 Command-line:
   The meanings of arrow keys do not change depending on 'wildoptions'.
@@ -620,6 +625,7 @@ Options:
   'highlight' (Names of builtin |highlight-groups| cannot be changed.)
   *'hkmap'* *'hk'* use `set keymap=hebrew` instead.
   *'hkmapp'* *'hkp'* use `set keymap=hebrewp` instead.
+  *'pastetoggle'* *'pt'*
 
   *'imactivatefunc'* *'imaf'*
   *'imactivatekey'* *'imak'*

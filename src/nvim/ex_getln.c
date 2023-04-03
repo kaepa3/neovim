@@ -63,7 +63,6 @@
 #include "nvim/pos.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
@@ -906,6 +905,9 @@ theend:
   if (ui_has(kUICmdline)) {
     ui_call_cmdline_hide(ccline.level);
     msg_ext_clear_later();
+  }
+  if (!cmd_silent) {
+    status_redraw_all();  // redraw to show mode change
   }
 
   cmdline_level--;
@@ -2115,7 +2117,7 @@ static int command_line_handle_key(CommandLineState *s)
 
   // put the character in the command line
   if (IS_SPECIAL(s->c) || mod_mask != 0) {
-    put_on_cmdline((char *)get_special_key_name(s->c, mod_mask), -1, true);
+    put_on_cmdline(get_special_key_name(s->c, mod_mask), -1, true);
   } else {
     int j = utf_char2bytes(s->c, IObuff);
     IObuff[j] = NUL;                // exclude composing chars
@@ -2736,6 +2738,9 @@ int check_opt_wim(void)
 bool text_locked(void)
 {
   if (cmdwin_type != 0) {
+    return true;
+  }
+  if (expr_map_locked()) {
     return true;
   }
   return textlock != 0;

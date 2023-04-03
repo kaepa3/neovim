@@ -49,7 +49,6 @@
 #include "nvim/path.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
-#include "nvim/screen.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/ui.h"
@@ -2340,7 +2339,6 @@ void showmatch(int c)
     dollar_vcol = -1;
   }
   curwin->w_virtcol++;              // do display ')' just before "$"
-  update_screen();                  // show the new char first
 
   colnr_T save_dollar_vcol = dollar_vcol;
   int save_state = State;
@@ -2349,7 +2347,8 @@ void showmatch(int c)
   curwin->w_cursor = mpos;          // move to matching char
   *so = 0;                          // don't use 'scrolloff' here
   *siso = 0;                        // don't use 'sidescrolloff' here
-  show_cursor_info(false);
+  show_cursor_info_later(false);
+  update_screen();                  // show the new char
   setcursor();
   ui_flush();
   // Restore dollar_vcol(), because setcursor() may call curs_rows()
@@ -4160,10 +4159,10 @@ static void show_pat_in_path(char *line, int type, bool did_show, int action, FI
     }
     if (action == ACTION_SHOW_ALL) {
       snprintf(IObuff, IOSIZE, "%3ld: ", count);  // Show match nr.
-      msg_puts((const char *)IObuff);
+      msg_puts(IObuff);
       snprintf(IObuff, IOSIZE, "%4" PRIdLINENR, *lnum);  // Show line nr.
       // Highlight line numbers.
-      msg_puts_attr((const char *)IObuff, HL_ATTR(HLF_N));
+      msg_puts_attr(IObuff, HL_ATTR(HLF_N));
       msg_puts(" ");
     }
     msg_prt_line(line, false);

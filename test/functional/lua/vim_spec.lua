@@ -6,6 +6,7 @@ local nvim_prog = helpers.nvim_prog
 local funcs = helpers.funcs
 local meths = helpers.meths
 local command = helpers.command
+local dedent = helpers.dedent
 local insert = helpers.insert
 local clear = helpers.clear
 local eq = helpers.eq
@@ -124,6 +125,22 @@ describe('lua stdlib', function()
     eq(1, funcs.luaeval('vim.stricmp("\\0C\\0", "\\0b\\0")'))
     eq(1, funcs.luaeval('vim.stricmp("\\0c\\0", "\\0b\\0")'))
     eq(1, funcs.luaeval('vim.stricmp("\\0C\\0", "\\0B\\0")'))
+  end)
+
+  it('vim.deprecate', function()
+    -- vim.deprecate(name, alternative, version, plugin, backtrace)
+    eq(dedent[[
+      foo.bar() is deprecated, use zub.wooo{ok=yay} instead. :help deprecated
+      This feature will be removed in Nvim version 2.17]],
+      exec_lua('return vim.deprecate(...)', 'foo.bar()', 'zub.wooo{ok=yay}', '2.17'))
+    -- Same message, skipped.
+    eq(vim.NIL,
+      exec_lua('return vim.deprecate(...)', 'foo.bar()', 'zub.wooo{ok=yay}', '2.17'))
+    -- When `plugin` is specified, don't show ":help deprecated". #22235
+    eq(dedent[[
+      foo.bar() is deprecated, use zub.wooo{ok=yay} instead.
+      This feature will be removed in my-plugin.nvim version 0.3.0]],
+      exec_lua('return vim.deprecate(...)', 'foo.bar()', 'zub.wooo{ok=yay}', '0.3.0', 'my-plugin.nvim', false))
   end)
 
   it('vim.startswith', function()
@@ -275,51 +292,51 @@ describe('lua stdlib', function()
     ]]}
   end)
 
-  it("vim.split", function()
-    local split = function(str, sep, kwargs)
-      return exec_lua('return vim.split(...)', str, sep, kwargs)
-    end
-
+  it('vim.gsplit, vim.split', function()
     local tests = {
-      { "a,b", ",", false, false, { 'a', 'b' } },
-      { ":aa::bb:", ":", false, false, { '', 'aa', '', 'bb', '' } },
-      { ":aa::bb:", ":", false, true, { 'aa', '', 'bb' } },
-      { "::ee::ff:", ":", false, false, { '', '', 'ee', '', 'ff', '' } },
-      { "::ee::ff:", ":", false, true, { 'ee', '', 'ff' } },
-      { "ab", ".", false, false, { '', '', '' } },
-      { "a1b2c", "[0-9]", false, false, { 'a', 'b', 'c' } },
-      { "xy", "", false, false, { 'x', 'y' } },
-      { "here be dragons", " ", false, false, { "here", "be", "dragons"} },
-      { "axaby", "ab?", false, false, { '', 'x', 'y' } },
-      { "f v2v v3v w2w ", "([vw])2%1", false, false, { 'f ', ' v3v ', ' ' } },
-      { "", "", false, false, {} },
-      { "", "a", false, false, { '' } },
-      { "x*yz*oo*l", "*", true, false, { 'x', 'yz', 'oo', 'l' } },
+      { 'a,b',             ',',     false, false, { 'a', 'b' } },
+      { ':aa::::bb:',      ':',     false, false, { '', 'aa', '', '', '', 'bb', '' } },
+      { ':aa::::bb:',      ':',     false, true,  { 'aa', '', '', '', 'bb' } },
+      { ':aa::bb:',        ':',     false, true,  { 'aa', '', 'bb' } },
+      { '/a/b:/b/\n',      '[:\n]', false, true,  { '/a/b', '/b/' } },
+      { '::ee::ff:',       ':',     false, false, { '', '', 'ee', '', 'ff', '' } },
+      { '::ee::ff::',      ':',     false, true,  { 'ee', '', 'ff' } },
+      { 'ab',              '.',     false, false, { '', '', '' } },
+      { 'a1b2c',           '[0-9]', false, false, { 'a', 'b', 'c' } },
+      { 'xy',              '',      false, false, { 'x', 'y' } },
+      { 'here be dragons', ' ',     false, false, { 'here', 'be', 'dragons'} },
+      { 'axaby',           'ab?',   false, false, { '', 'x', 'y' } },
+      { 'f v2v v3v w2w ',  '([vw])2%1', false, false, { 'f ', ' v3v ', ' ' } },
+      { '',                '',      false, false, {} },
+      { '',                '',      false, true,  {} },
+      { '\n',              '[:\n]', false, true,  {} },
+      { '',                'a',     false, false, { '' } },
+      { 'x*yz*oo*l',       '*',     true,  false, { 'x', 'yz', 'oo', 'l' } },
     }
 
     for _, t in ipairs(tests) do
-      eq(t[5], split(t[1], t[2], {plain=t[3], trimempty=t[4]}))
+      eq(t[5], vim.split(t[1], t[2], {plain=t[3], trimempty=t[4]}))
     end
 
     -- Test old signature
-    eq({'x', 'yz', 'oo', 'l'}, split("x*yz*oo*l", "*", true))
+    eq({'x', 'yz', 'oo', 'l'}, vim.split("x*yz*oo*l", "*", true))
 
     local loops = {
       { "abc", ".-" },
     }
 
     for _, t in ipairs(loops) do
-      matches("Infinite loop detected", pcall_err(split, t[1], t[2]))
+      matches("Infinite loop detected", pcall_err(vim.split, t[1], t[2]))
     end
 
     -- Validates args.
-    eq(true, pcall(split, 'string', 'string'))
+    eq(true, pcall(vim.split, 'string', 'string'))
     matches('s: expected string, got number',
-      pcall_err(split, 1, 'string'))
+      pcall_err(vim.split, 1, 'string'))
     matches('sep: expected string, got number',
-      pcall_err(split, 'string', 1))
-    matches('kwargs: expected table, got number',
-      pcall_err(split, 'string', 'string', 1))
+      pcall_err(vim.split, 'string', 1))
+    matches('opts: expected table, got number',
+      pcall_err(vim.split, 'string', 'string', 1))
   end)
 
   it('vim.trim', function()
@@ -2269,7 +2286,7 @@ describe('lua stdlib', function()
 
   describe('vim.region', function()
     it('charwise', function()
-      insert(helpers.dedent( [[
+      insert(dedent( [[
       text tααt tααt text
       text tαxt txtα tex
       text tαxt tαxt
@@ -2898,6 +2915,15 @@ describe('lua stdlib', function()
         return a
       ]])
     end)
+
+    it('accepts the key name', function()
+      eq({ b = 'b', c = 'c' }, exec_lua [[
+        local a = vim.defaulttable(function(k) return k end)
+        local _ = a.b
+        local _ = a.c
+        return a
+      ]])
+    end)
   end)
 
   it('vim.lua_omnifunc', function()
@@ -2922,6 +2948,24 @@ describe('lua stdlib', function()
       {1:~                                                           }|
       {4:-- Omni completion (^O^N^P) }{5:match 1 of 2}                    |
     ]]}
+  end)
+
+  it('vim.print', function()
+    -- vim.print() returns its args.
+    eq({42, 'abc', { a = { b = 77 }}},
+      exec_lua[[return {vim.print(42, 'abc', { a = { b = 77 }})}]])
+
+    -- vim.print() pretty-prints the args.
+    eq(dedent[[
+
+      42
+      abc
+      {
+        a = {
+          b = 77
+        }
+      }]],
+      eval[[execute('lua vim.print(42, "abc", { a = { b = 77 }})')]])
   end)
 end)
 

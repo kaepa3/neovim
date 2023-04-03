@@ -39,7 +39,6 @@
 #include "nvim/os/os_defs.h"
 #include "nvim/pos.h"
 #include "nvim/profile.h"
-#include "nvim/screen.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
@@ -552,7 +551,7 @@ void spell_suggest(int count)
       vim_snprintf(IObuff, IOSIZE, ":ot \"%.*s\" egnahC",
                    sug.su_badlen, sug.su_badptr);
     }
-    msg_puts((const char *)IObuff);
+    msg_puts(IObuff);
     msg_clr_eos();
     msg_putchar('\n');
 
@@ -569,18 +568,18 @@ void spell_suggest(int count)
       }
       vim_snprintf(IObuff, IOSIZE, "%2d", i + 1);
       if (cmdmsg_rl) {
-        rl_mirror(IObuff);
+        rl_mirror_ascii(IObuff);
       }
-      msg_puts((const char *)IObuff);
+      msg_puts(IObuff);
 
       vim_snprintf(IObuff, IOSIZE, " \"%s\"", wcopy);
-      msg_puts((const char *)IObuff);
+      msg_puts(IObuff);
 
       // The word may replace more than "su_badlen".
       if (sug.su_badlen < stp->st_orglen) {
         vim_snprintf(IObuff, IOSIZE, _(" < \"%.*s\""),
                      stp->st_orglen, sug.su_badptr);
-        msg_puts((const char *)IObuff);
+        msg_puts(IObuff);
       }
 
       if (p_verbose > 0) {
@@ -595,10 +594,10 @@ void spell_suggest(int count)
         }
         if (cmdmsg_rl) {
           // Mirror the numbers, but keep the leading space.
-          rl_mirror(IObuff + 1);
+          rl_mirror_ascii(IObuff + 1);
         }
         msg_advance(30);
-        msg_puts((const char *)IObuff);
+        msg_puts(IObuff);
       }
       msg_putchar('\n');
     }

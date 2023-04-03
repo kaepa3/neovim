@@ -909,7 +909,7 @@ void ex_loadview(exarg_T *eap)
     return;
   }
 
-  if (do_source(fname, false, DOSO_NONE) == FAIL) {
+  if (do_source(fname, false, DOSO_NONE, NULL) == FAIL) {
     semsg(_(e_notopen), fname);
   }
   xfree(fname);
@@ -959,7 +959,7 @@ void ex_mkrc(exarg_T *eap)
 
   // When using 'viewdir' may have to create the directory.
   if (using_vdir && !os_isdir(p_vdir)) {
-    vim_mkdir_emsg((const char *)p_vdir, 0755);
+    vim_mkdir_emsg(p_vdir, 0755);
   }
 
   fd = open_exfile(fname, eap->forceit, WRITEBIN);

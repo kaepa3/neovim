@@ -302,7 +302,7 @@ local types = { 'integer', 'number', 'string', 'table', 'list', 'boolean', 'func
 local tagged_types = { 'TSNode', 'LanguageTree' }
 
 -- Document these as 'table'
-local alias_types = { 'Range4', 'Range6' }
+local alias_types = { 'Range', 'Range4', 'Range6', 'TSMetadata' }
 
 -- Processes the file and writes filtered output to stdout.
 function TLua2DoX_filter.filter(this, AppStamp, Filename)
@@ -335,6 +335,8 @@ function TLua2DoX_filter.filter(this, AppStamp, Filename)
         elseif string.sub(line, 1, 4) == '---@' then -- it's a magic comment
           offset = 1
         end
+
+        line = line:gsub('@package', '@private')
 
         if vim.startswith(line, '---@cast')
           or vim.startswith(line, '---@diagnostic')
