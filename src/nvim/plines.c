@@ -100,7 +100,7 @@ int plines_win_nofill(win_T *wp, linenr_T lnum, bool winheight)
 int plines_win_nofold(win_T *wp, linenr_T lnum)
 {
   char *s;
-  unsigned int col;
+  unsigned col;
   int width;
 
   s = ml_get_buf(wp->w_buffer, lnum, false);
@@ -120,10 +120,10 @@ int plines_win_nofold(win_T *wp, linenr_T lnum)
   if (width <= 0 || col > 32000) {
     return 32000;  // bigger than the number of screen columns
   }
-  if (col <= (unsigned int)width) {
+  if (col <= (unsigned)width) {
     return 1;
   }
-  col -= (unsigned int)width;
+  col -= (unsigned)width;
   width += win_col_off2(wp);
   assert(col <= INT_MAX && (int)col < INT_MAX - (width - 1));
   return ((int)col + (width - 1)) / width + 1;
@@ -189,10 +189,11 @@ int plines_win_col(win_T *wp, linenr_T lnum, long column)
 /// @param[out] nextp    if not NULL, the line after a fold
 /// @param[out] foldedp  if not NULL, whether lnum is on a fold
 /// @param[in]  cache    whether to use the window's cache for folds
+/// @param[in]  winheight when true limit to window height
 ///
 /// @return the total number of screen lines
 int plines_win_full(win_T *wp, linenr_T lnum, linenr_T *const nextp, bool *const foldedp,
-                    const bool cache)
+                    const bool cache, const bool winheight)
 {
   bool folded = hasFoldingWin(wp, lnum, NULL, nextp, cache, NULL);
   if (foldedp) {
@@ -201,9 +202,9 @@ int plines_win_full(win_T *wp, linenr_T lnum, linenr_T *const nextp, bool *const
   if (folded) {
     return 1;
   } else if (lnum == wp->w_topline) {
-    return plines_win_nofill(wp, lnum, true) + wp->w_topfill;
+    return plines_win_nofill(wp, lnum, winheight) + wp->w_topfill;
   }
-  return plines_win(wp, lnum, true);
+  return plines_win(wp, lnum, winheight);
 }
 
 int plines_m_win(win_T *wp, linenr_T first, linenr_T last)
@@ -212,7 +213,7 @@ int plines_m_win(win_T *wp, linenr_T first, linenr_T last)
 
   while (first <= last) {
     linenr_T next = first;
-    count += plines_win_full(wp, first, &next, NULL, false);
+    count += plines_win_full(wp, first, &next, NULL, false, true);
     first = next + 1;
   }
   return count;
@@ -243,12 +244,12 @@ int win_chartabsize(win_T *wp, char *p, colnr_T col)
 /// @param s
 ///
 /// @return Number of characters the string will take on the screen.
-int linetabsize(char *s)
+int linetabsize_str(char *s)
 {
   return linetabsize_col(0, s);
 }
 
-/// Like linetabsize(), but "s" starts at column "startcol".
+/// Like linetabsize_str(), but "s" starts at column "startcol".
 ///
 /// @param startcol
 /// @param s
@@ -265,14 +266,14 @@ int linetabsize_col(int startcol, char *s)
   return cts.cts_vcol;
 }
 
-/// Like linetabsize(), but for a given window instead of the current one.
+/// Like linetabsize_str(), but for a given window instead of the current one.
 ///
 /// @param wp
 /// @param line
 /// @param len
 ///
 /// @return Number of characters the string will take on the screen.
-unsigned int win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
+unsigned win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
 {
   chartabsize_T cts;
   init_chartabsize_arg(&cts, wp, lnum, 0, line, line);
@@ -281,7 +282,14 @@ unsigned int win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
     cts.cts_vcol += win_lbr_chartabsize(&cts, NULL);
   }
   clear_chartabsize_arg(&cts);
-  return (unsigned int)cts.cts_vcol;
+  return (unsigned)cts.cts_vcol;
+}
+
+/// Return the number of cells line "lnum" of window "wp" will take on the
+/// screen, taking into account the size of a tab and text properties.
+unsigned     linetabsize(win_T *wp, linenr_T lnum)
+{
+  return win_linetabsize(wp, lnum, ml_get_buf(wp->w_buffer, lnum, false), (colnr_T)MAXCOL);
 }
 
 /// Prepare the structure passed to chartabsize functions.
@@ -302,7 +310,8 @@ void init_chartabsize_arg(chartabsize_T *cts, win_T *wp, linenr_T lnum FUNC_ATTR
 
 /// Free any allocated item in "cts".
 void clear_chartabsize_arg(chartabsize_T *cts)
-{}
+{
+}
 
 /// like win_chartabsize(), but also check for line breaks on the screen
 ///
@@ -404,7 +413,7 @@ int win_lbr_chartabsize(chartabsize_T *cts, int *headp)
       }
     }
 
-    for (;;) {
+    while (true) {
       char *ps = s;
       MB_PTR_ADV(s);
       c = (uint8_t)(*s);

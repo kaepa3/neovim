@@ -10,7 +10,7 @@ freebsd_task:
   timeout_in: 30m
   install_script:
     - pkg update -f
-    - pkg install -y cmake gmake ninja pkgconf unzip wget gettext python libffi git
+    - pkg install -y cmake gmake ninja unzip wget gettext python git
   build_deps_script:
     - gmake deps
   build_script:
@@ -26,3 +26,13 @@ freebsd_task:
     - sudo -u cirrus gmake unittest
   oldtest_script:
     - sudo -u cirrus gmake oldtest
+
+external_deps_task:
+  container:
+    dockerfile: ci/Dockerfile.external_deps
+  deps_script:
+    - cmake -S cmake.deps --preset external_deps
+    - cmake --build .deps
+  build_script:
+    - cmake --preset ci
+    - cmake --build build

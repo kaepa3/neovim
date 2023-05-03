@@ -193,7 +193,7 @@ static void insert_enter(InsertState *s)
     }
   }
 
-  Insstart_textlen = (colnr_T)linetabsize(get_cursor_line_ptr());
+  Insstart_textlen = linetabsize_str(get_cursor_line_ptr());
   Insstart_blank_vcol = MAXCOL;
 
   if (!did_ai) {
@@ -1858,7 +1858,7 @@ int get_literal(bool no_simplify)
   no_mapping++;                 // don't map the next key hits
   cc = 0;
   i = 0;
-  for (;;) {
+  while (true) {
     nc = plain_vgetc();
     if (!no_simplify) {
       nc = merge_modifiers(nc, &mod_mask);
@@ -2251,7 +2251,7 @@ int stop_arrow(void)
       // right, except when nothing was inserted yet.
       update_Insstart_orig = false;
     }
-    Insstart_textlen = (colnr_T)linetabsize(get_cursor_line_ptr());
+    Insstart_textlen = linetabsize_str(get_cursor_line_ptr());
 
     if (u_save_cursor() == OK) {
       arrow_used = false;
@@ -2356,7 +2356,7 @@ static void stop_insert(pos_T *end_insert_pos, int esc, int nomove)
 
       curwin->w_cursor = *end_insert_pos;
       check_cursor_col();        // make sure it is not past the line
-      for (;;) {
+      while (true) {
         if (gchar_cursor() == NUL && curwin->w_cursor.col > 0) {
           curwin->w_cursor.col--;
         }
@@ -2449,6 +2449,7 @@ void beginline(int flags)
     }
     curwin->w_set_curswant = true;
   }
+  adjust_skipcol();
 }
 
 // oneright oneleft cursor_down cursor_up
@@ -2490,6 +2491,7 @@ int oneright(void)
   curwin->w_cursor.col += l;
 
   curwin->w_set_curswant = true;
+  adjust_skipcol();
   return OK;
 }
 
@@ -2505,7 +2507,7 @@ int oneleft(void)
 
     // We might get stuck on 'showbreak', skip over it.
     width = 1;
-    for (;;) {
+    while (true) {
       coladvance(v - width);
       // getviscol() is slow, skip it when 'showbreak' is empty,
       // 'breakindent' is not set and there are no multi-byte
@@ -2538,6 +2540,7 @@ int oneleft(void)
   // if the character on the left of the current cursor is a multi-byte
   // character, move to its first byte
   mb_adjust_cursor();
+  adjust_skipcol();
   return OK;
 }
 
@@ -2886,7 +2889,7 @@ static void mb_replace_pop_ins(int cc)
   }
 
   // Handle composing chars.
-  for (;;) {
+  while (true) {
     int c = replace_pop();
     if (c == -1) {                // stack empty
       break;

@@ -800,7 +800,7 @@ retry:
     memcpy(state->growbuf, IObuff, IOSIZE - 1);
     size_t growbuflen = state->linelen;
 
-    for (;;) {
+    while (true) {
       errno = 0;
       if (fgets(state->growbuf + growbuflen,
                 (int)(state->growbufsiz - growbuflen), state->fd) == NULL) {
@@ -2291,7 +2291,7 @@ static char *qf_guess_filepath(qf_list_T *qfl, char *filename)
 }
 
 /// Returns true, if a quickfix/location list with the given identifier exists.
-static bool qflist_valid(win_T *wp, unsigned int qf_id)
+static bool qflist_valid(win_T *wp, unsigned qf_id)
 {
   qf_info_T *qi = &ql_info;
 
@@ -2641,7 +2641,7 @@ static void qf_goto_win_with_qfl_file(int qf_fnum)
 {
   win_T *win = curwin;
   win_T *altwin = NULL;
-  for (;;) {
+  while (true) {
     if (win->w_buffer->b_fnum == qf_fnum) {
       break;
     }
@@ -3885,11 +3885,12 @@ static buf_T *qf_find_buf(qf_info_T *qi)
 }
 
 /// Process the 'quickfixtextfunc' option value.
-void qf_process_qftf_option(const char **errmsg)
+const char *did_set_quickfixtextfunc(optset_T *args FUNC_ATTR_UNUSED)
 {
   if (option_set_callback_func(p_qftf, &qftf_cb) == FAIL) {
-    *errmsg = e_invarg;
+    return e_invarg;
   }
+  return NULL;
 }
 
 /// Update the w:quickfix_title variable in the quickfix/location list window in
@@ -4414,7 +4415,7 @@ static char *get_mef_name(void)
   }
 
   // Keep trying until the name doesn't exist yet.
-  for (;;) {
+  while (true) {
     if (start == -1) {
       start = (int)os_get_pid();
     } else {
@@ -5214,7 +5215,10 @@ static bool vgr_match_buflines(qf_list_T *qfl, char *fname, buf_T *buf, char *sp
   FUNC_ATTR_NONNULL_ARG(1, 3, 4, 5, 6)
 {
   bool found_match = false;
-  const size_t pat_len = strlen(spat);
+  size_t pat_len = strlen(spat);
+  if (pat_len > MAX_FUZZY_MATCHES) {
+    pat_len = MAX_FUZZY_MATCHES;
+  }
 
   for (linenr_T lnum = 1; lnum <= buf->b_ml.ml_line_count && *tomatch > 0; lnum++) {
     colnr_T col = 0;
@@ -5262,6 +5266,7 @@ static bool vgr_match_buflines(qf_list_T *qfl, char *fname, buf_T *buf, char *sp
       const size_t sz = sizeof(matches) / sizeof(matches[0]);
 
       // Fuzzy string match
+      CLEAR_FIELD(matches);
       while (fuzzy_match(str + col, spat, false, &score, matches, (int)sz) > 0) {
         // Pass the buffer number so that it gets used even for a
         // dummy buffer, unless duplicate_name is set, then the
@@ -6957,15 +6962,15 @@ void ex_cexpr(exarg_T *eap)
 
   // Evaluate the expression.  When the result is a string or a list we can
   // use it to fill the errorlist.
-  typval_T tv;
-  if (eval0(eap->arg, &tv, &eap->nextcmd, true) == FAIL) {
+  typval_T *tv = eval_expr(eap->arg, eap);
+  if (tv == NULL) {
     return;
   }
 
-  if ((tv.v_type == VAR_STRING && tv.vval.v_string != NULL)
-      || tv.v_type == VAR_LIST) {
+  if ((tv->v_type == VAR_STRING && tv->vval.v_string != NULL)
+      || tv->v_type == VAR_LIST) {
     incr_quickfix_busy();
-    int res = qf_init_ext(qi, qi->qf_curlist, NULL, NULL, &tv, p_efm,
+    int res = qf_init_ext(qi, qi->qf_curlist, NULL, NULL, tv, p_efm,
                           (eap->cmdidx != CMD_caddexpr
                            && eap->cmdidx != CMD_laddexpr),
                           (linenr_T)0, (linenr_T)0,
@@ -6996,7 +7001,7 @@ void ex_cexpr(exarg_T *eap)
     emsg(_("E777: String or List expected"));
   }
 cleanup:
-  tv_clear(&tv);
+  tv_free(tv);
 }
 
 // Get the location list for ":lhelpgrep"

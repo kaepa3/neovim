@@ -122,7 +122,7 @@ else
 endif
 # Build oldtest by specifying the relative .vim filename.
 .PHONY: phony_force
-test/old/testdir/%.vim: phony_force
+test/old/testdir/%.vim: phony_force nvim
 	+$(SINGLE_MAKE) -C test/old/testdir NVIM_PRG=$(NVIM_PRG) SCRIPTS= $(MAKEOVERRIDES) $(patsubst test/old/testdir/%.vim,%,$@)
 
 functionaltest-lua: | nvim
@@ -133,14 +133,6 @@ LINT=lintlua lintsh lintc clang-tidy lintcommit lint
 TEST=functionaltest unittest
 generated-sources benchmark $(FORMAT) $(LINT) $(TEST): | build/.ran-cmake
 	$(CMAKE_PRG) --build build --target $@
-
-uninstall:
-ifneq (,$(wildcard build/install_manifest.txt))
-	$(CMAKE_PRG) --build build --target $@
-else
-	@echo Install manifest file not found. You need to build and install \
-	neovim to generate the manifest file.
-endif
 
 test: $(TEST)
 
