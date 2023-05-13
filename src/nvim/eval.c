@@ -3677,9 +3677,6 @@ static int eval_index_inner(typval_T *rettv, bool is_range, typval_T *var1, typv
       } else if (n2 >= len) {
         n2 = len;
       }
-      if (exclusive) {
-        n2--;
-      }
       if (n1 >= len || n2 < 0 || n1 > n2) {
         v = NULL;
       } else {
@@ -8657,7 +8654,7 @@ bool eval_has_provider(const char *feat)
     return false;
   }
 
-  char name[32];  // Normalized: "python_compiled" => "python".
+  char name[32];  // Normalized: "python3_compiled" => "python3".
   snprintf(name, sizeof(name), "%s", feat);
   strchrsub(name, '_', '\0');  // Chop any "_xx" suffix.
 
