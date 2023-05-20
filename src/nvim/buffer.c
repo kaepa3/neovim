@@ -833,7 +833,7 @@ void buf_freeall(buf_T *buf, int flags)
 /// itself (not the file, that must have been done already).
 static void free_buffer(buf_T *buf)
 {
-  pmap_del(handle_T)(&buffer_handles, buf->b_fnum);
+  pmap_del(int)(&buffer_handles, buf->b_fnum, NULL);
   buf_free_count++;
   // b:changedtick uses an item in buf_T.
   free_buffer_stuff(buf, kBffClearWinInfo);
@@ -1084,11 +1084,11 @@ char *do_bufdel(int command, char *arg, int addr_count, int start_bnr, int end_b
 
     if (deleted == 0) {
       if (command == DOBUF_UNLOAD) {
-        STRCPY(IObuff, _("E515: No buffers were unloaded"));
+        xstrlcpy(IObuff, _("E515: No buffers were unloaded"), IOSIZE);
       } else if (command == DOBUF_DEL) {
-        STRCPY(IObuff, _("E516: No buffers were deleted"));
+        xstrlcpy(IObuff, _("E516: No buffers were deleted"), IOSIZE);
       } else {
-        STRCPY(IObuff, _("E517: No buffers were wiped out"));
+        xstrlcpy(IObuff, _("E517: No buffers were wiped out"), IOSIZE);
       }
       errormsg = IObuff;
     } else if (deleted >= p_report) {
@@ -1459,16 +1459,11 @@ int do_buffer(int action, int start, int dir, int count, int forceit)
 
   // make "buf" the current buffer
   if (action == DOBUF_SPLIT) {      // split window first
-    // If 'switchbuf' contains "useopen": jump to first window containing
-    // "buf" if one exists
-    if ((swb_flags & SWB_USEOPEN) && buf_jump_open_win(buf)) {
+    // If 'switchbuf' is set jump to the window containing "buf".
+    if (swbuf_goto_win_with_buf(buf) != NULL) {
       return OK;
     }
-    // If 'switchbuf' contains "usetab": jump to first window in any tab
-    // page containing "buf" if one exists
-    if ((swb_flags & SWB_USETAB) && buf_jump_open_tab(buf)) {
-      return OK;
-    }
+
     if (win_split(0, 0) == FAIL) {
       return FAIL;
     }
@@ -1870,7 +1865,7 @@ buf_T *buflist_new(char *ffname_arg, char *sfname_arg, linenr_T lnum, int flags)
     lastbuf = buf;
 
     buf->b_fnum = top_file_num++;
-    pmap_put(handle_T)(&buffer_handles, buf->b_fnum, buf);
+    pmap_put(int)(&buffer_handles, buf->b_fnum, buf);
     if (top_file_num < 0) {  // wrap around (may cause duplicates)
       emsg(_("W14: Warning: List of file names overflow"));
       if (emsg_silent == 0 && !in_assert_fails) {
@@ -2072,17 +2067,8 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
   }
 
   if (options & GETF_SWITCH) {
-    // If 'switchbuf' contains "useopen": jump to first window containing
-    // "buf" if one exists
-    if (swb_flags & SWB_USEOPEN) {
-      wp = buf_jump_open_win(buf);
-    }
-
-    // If 'switchbuf' contains "usetab": jump to first window in any tab
-    // page containing "buf" if one exists
-    if (wp == NULL && (swb_flags & SWB_USETAB)) {
-      wp = buf_jump_open_tab(buf);
-    }
+    // If 'switchbuf' is set jump to the window containing "buf".
+    wp = swbuf_goto_win_with_buf(buf);
 
     // If 'switchbuf' contains "split", "vsplit" or "newtab" and the
     // current buffer isn't empty: open new tab or window
