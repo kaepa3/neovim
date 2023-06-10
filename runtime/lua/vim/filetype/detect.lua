@@ -196,6 +196,9 @@ function M.conf(path, bufnr)
   if vim.fn.did_filetype() ~= 0 or path:find(vim.g.ft_ignore_pat) then
     return
   end
+  if path:find('%.conf$') then
+    return 'conf'
+  end
   for _, line in ipairs(getlines(bufnr, 1, 5)) do
     if line:find('^#') then
       return 'conf'
@@ -771,14 +774,14 @@ end
 function M.mod(path, bufnr)
   if vim.g.filetype_mod then
     return vim.g.filetype_mod
+  elseif matchregex(path, [[\c\<go\.mod$]]) then
+    return 'gomod'
   elseif is_lprolog(bufnr) then
     return 'lprolog'
   elseif matchregex(nextnonblank(bufnr, 1), [[\%(\<MODULE\s\+\w\+\s*;\|^\s*(\*\)]]) then
     return 'modula2'
   elseif is_rapid(bufnr) then
     return 'rapid'
-  elseif matchregex(path, [[\c\<go\.mod$]]) then
-    return 'gomod'
   else
     -- Nothing recognized, assume modsim3
     return 'modsim3'
@@ -1456,6 +1459,7 @@ local patterns_hashbang = {
   ['gforth\\>'] = { 'forth', { vim_regex = true } },
   ['icon\\>'] = { 'icon', { vim_regex = true } },
   guile = 'scheme',
+  ['nix%-shell'] = 'nix',
 }
 
 ---@private
@@ -1488,7 +1492,7 @@ local function match_from_hashbang(contents, path, dispatch_extension)
   elseif matchregex(first_line, [[^#!\s*[^/\\ ]*\>\([^/\\]\|$\)]]) then
     name = vim.fn.substitute(first_line, [[^#!\s*\([^/\\ ]*\>\).*]], '\\1', '')
   else
-    name = vim.fn.substitute(first_line, [[^#!\s*\S*[/\\]\(\i\+\).*]], '\\1', '')
+    name = vim.fn.substitute(first_line, [[^#!\s*\S*[/\\]\(\f\+\).*]], '\\1', '')
   end
 
   -- tcl scripts may have #!/bin/sh in the first line and "exec wish" in the
