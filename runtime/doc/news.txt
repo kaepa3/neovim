@@ -23,7 +23,12 @@ The following changes may require adaptations in user config or plugins.
 • "#" followed by a digit no longer stands for a function key at the start of
   the lhs of a mapping.
 
-• `:behave` was removed. if you used `:behave mswin`, the following is equivalent: >vim
+• `:behave` was removed.
+  - If you used `:behave xterm`, the following is equivalent: >vim
+
+    set mousemodel=extend
+<
+  - If you used `:behave mswin`, the following is equivalent: >vim
 
     set selection=exclusive
     set selectmode=mouse,key
@@ -38,10 +43,19 @@ The following changes may require adaptations in user config or plugins.
 
 • Renamed `vim.treesitter.playground` to `vim.treesitter.dev`.
 
-==============================================================================
-ADDED FEATURES                                                     *news-added*
+• Removed functions from the |vim.json| module:
+  • Unnecessary, undocumented functions which caused global side-effects.
+  • `vim.json.null` is redundant with `vim.NIL`.
+  • `vim.json.array_mt` (and related) is redundant with `vim.empty_dict()`.
 
-The following new APIs or features were added.
+==============================================================================
+NEW FEATURES                                                    *news-features*
+
+The following new APIs and features were added.
+
+• Performance:
+  • 'diffopt' "linematch" scoring algorithm now favours larger and less groups
+    https://github.com/neovim/neovim/pull/23611
 
 • Added |vim.lsp.status()| to consume the last progress messages as a string.
 
@@ -83,6 +97,9 @@ The following new APIs or features were added.
 • |vim.system()| for running system commands.
 
 • |nvim_set_keymap()| and |nvim_del_keymap()| now support abbreviations.
+
+• Implemented LSP inlay hints: |vim.lsp.buf.inlay_hint()|
+  https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_inlayHint
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*

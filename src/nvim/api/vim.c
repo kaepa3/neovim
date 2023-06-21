@@ -487,7 +487,7 @@ Integer nvim_strwidth(String text, Error *err)
   return (Integer)mb_string2cells(text.data);
 }
 
-/// Gets the paths contained in 'runtimepath'.
+/// Gets the paths contained in |runtime-search-path|.
 ///
 /// @return List of paths
 ArrayOf(String) nvim_list_runtime_paths(Error *err)
@@ -1427,7 +1427,7 @@ ArrayOf(Dictionary) nvim_get_keymap(String mode)
 ///               values are booleans (default false). Also:
 ///               - "noremap" non-recursive mapping |:noremap|
 ///               - "desc" human-readable description.
-///               - "callback" Lua function called when the mapping is executed.
+///               - "callback" Lua function called in place of {rhs}.
 ///               - "replace_keycodes" (boolean) When "expr" is true, replace keycodes in the
 ///                 resulting string (see |nvim_replace_termcodes()|). Returning nil from the Lua
 ///                 "callback" is equivalent to returning an empty string.

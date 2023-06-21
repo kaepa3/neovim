@@ -60,6 +60,8 @@ lsp._request_name_to_capability = {
   ['textDocument/documentHighlight'] = { 'documentHighlightProvider' },
   ['textDocument/semanticTokens/full'] = { 'semanticTokensProvider' },
   ['textDocument/semanticTokens/full/delta'] = { 'semanticTokensProvider' },
+  ['textDocument/inlayHint'] = { 'inlayHintProvider' },
+  ['inlayHint/resolve'] = { 'inlayHintProvider', 'resolveProvider' },
 }
 
 -- TODO improve handling of scratch buffers with LSP attached.
@@ -933,7 +935,7 @@ function lsp.status()
   end
   local message = table.concat(messages, ', ')
   if percentage then
-    return string.format('%03d: %s', percentage, message)
+    return string.format('%3d%%: %s', percentage, message)
   end
   return message
 end
@@ -1343,7 +1345,6 @@ function lsp.start_client(config)
       messages = 'messages',
       verbose = 'verbose',
     }
-    local version = vim.version()
 
     local workspace_folders --- @type table[]?
     local root_uri --- @type string?
@@ -1377,7 +1378,7 @@ function lsp.start_client(config)
       -- since 3.15.0
       clientInfo = {
         name = 'Neovim',
-        version = string.format('%s.%s.%s', version.major, version.minor, version.patch),
+        version = tostring(vim.version()),
       },
       -- The rootPath of the workspace. Is null if no folder is open.
       --
@@ -1488,7 +1489,7 @@ function lsp.start_client(config)
   ---successful, then it will return {request_id} as the
   ---second result. You can use this with `client.cancel_request(request_id)`
   ---to cancel the-request.
-  ---@see |vim.lsp.buf_request()|
+  ---@see |vim.lsp.buf_request_all()|
   function client.request(method, params, handler, bufnr)
     if not handler then
       handler = assert(
@@ -1498,21 +1499,25 @@ function lsp.start_client(config)
     end
     -- Ensure pending didChange notifications are sent so that the server doesn't operate on a stale state
     changetracking.flush(client, bufnr)
+    local version = util.buf_versions[bufnr]
     bufnr = resolve_bufnr(bufnr)
     if log.debug() then
       log.debug(log_prefix, 'client.request', client_id, method, params, handler, bufnr)
     end
     local success, request_id = rpc.request(method, params, function(err, result)
-      handler(
-        err,
-        result,
-        { method = method, client_id = client_id, bufnr = bufnr, params = params }
-      )
+      local context = {
+        method = method,
+        client_id = client_id,
+        bufnr = bufnr,
+        params = params,
+        version = version,
+      }
+      handler(err, result, context)
     end, function(request_id)
       local request = client.requests[request_id]
       request.type = 'complete'
       nvim_exec_autocmds('LspRequest', {
-        buffer = bufnr,
+        buffer = api.nvim_buf_is_valid(bufnr) and bufnr or nil,
         modeline = false,
         data = { client_id = client_id, request_id = request_id, request = request },
       })
@@ -1648,6 +1653,46 @@ function lsp.start_client(config)
   end
 
   ---@private
+  --- Execute a lsp command, either via client command function (if available)
+  --- or via workspace/executeCommand (if supported by the server)
+  ---
+  ---@param command lsp.Command
+  ---@param context? {bufnr: integer}
+  ---@param handler? lsp-handler only called if a server command
+  function client._exec_cmd(command, context, handler)
+    context = vim.deepcopy(context or {})
+    context.bufnr = context.bufnr or api.nvim_get_current_buf()
+    context.client_id = client.id
+    local cmdname = command.command
+    local fn = client.commands[cmdname] or lsp.commands[cmdname]
+    if fn then
+      fn(command, context)
+      return
+    end
+
+    local command_provider = client.server_capabilities.executeCommandProvider
+    local commands = type(command_provider) == 'table' and command_provider.commands or {}
+    if not vim.list_contains(commands, cmdname) then
+      vim.notify_once(
+        string.format(
+          'Language server `%s` does not support command `%s`. This command may require a client extension.',
+          client.name,
+          cmdname
+        ),
+        vim.log.levels.WARN
+      )
+      return
+    end
+    -- Not using command directly to exclude extra properties,
+    -- see https://github.com/python-lsp/python-lsp-server/issues/146
+    local params = {
+      command = command.command,
+      arguments = command.arguments,
+    }
+    client.request('workspace/executeCommand', params, handler, context.bufnr)
+  end
+
+  ---@private
   --- Runs the on_attach function from the client's config if it was defined.
   ---@param bufnr integer Buffer number
   function client._on_attach(bufnr)
@@ -1753,6 +1798,7 @@ end
 ---
 ---@param bufnr (integer) Buffer handle, or 0 for current
 ---@param client_id (integer) Client id
+---@return boolean success `true` if client was attached successfully; `false` otherwise
 function lsp.buf_attach_client(bufnr, client_id)
   validate({
     bufnr = { bufnr, 'n', true },
@@ -1841,7 +1887,7 @@ function lsp.buf_attach_client(bufnr, client_id)
   end
 
   if buffer_client_ids[client_id] then
-    return
+    return true
   end
   -- This is our first time attaching this client to this buffer.
   buffer_client_ids[client_id] = true
@@ -2112,22 +2158,19 @@ function lsp.buf_request(bufnr, method, params, handler)
   return client_request_ids, _cancel_all_requests
 end
 
----Sends an async request for all active clients attached to the buffer.
----Executes the callback on the combined result.
----Parameters are the same as |vim.lsp.buf_request()| but the return result and callback are
----different.
+--- Sends an async request for all active clients attached to the buffer and executes the `handler`
+--- callback with the combined result.
 ---
 ---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
 ---@param params (table|nil) Parameters to send to the server
----@param callback fun(request_results: table<integer, {error: lsp.ResponseError, result: any}>) (function)
---- The callback to call when all requests are finished.
---- Unlike `buf_request`, this will collect all the responses from each server instead of handling them.
---- A map of client_id:request_result will be provided to the callback.
+---@param handler fun(results: table<integer, {error: lsp.ResponseError, result: any}>) (function)
+--- Handler called after all requests are completed. Server results are passed as
+--- a `client_id:result` map.
 ---
----@return fun() cancel A function that will cancel all requests
-function lsp.buf_request_all(bufnr, method, params, callback)
-  local request_results = {}
+---@return fun() cancel Function that cancels all requests.
+function lsp.buf_request_all(bufnr, method, params, handler)
+  local results = {}
   local result_count = 0
   local expected_result_count = 0
 
@@ -2140,12 +2183,12 @@ function lsp.buf_request_all(bufnr, method, params, callback)
   end)
 
   local function _sync_handler(err, result, ctx)
-    request_results[ctx.client_id] = { error = err, result = result }
+    results[ctx.client_id] = { error = err, result = result }
     result_count = result_count + 1
     set_expected_result_count()
 
     if result_count >= expected_result_count then
-      callback(request_results)
+      handler(results)
     end
   end
 
@@ -2157,8 +2200,8 @@ end
 --- Sends a request to all server and waits for the response of all of them.
 ---
 --- Calls |vim.lsp.buf_request_all()| but blocks Nvim while awaiting the result.
---- Parameters are the same as |vim.lsp.buf_request()| but the return result is
---- different. Wait maximum of {timeout_ms} (default 1000) ms.
+--- Parameters are the same as |vim.lsp.buf_request_all()| but the result is
+--- different. Waits a maximum of {timeout_ms} (default 1000) ms.
 ---
 ---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
