@@ -48,7 +48,7 @@
 ///
 /// \brief For more information on buffers, see |buffers|
 ///
-/// Unloaded Buffers:~
+/// Unloaded Buffers: ~
 ///
 /// Buffers may be unloaded by the |:bunload| command or the buffer's
 /// |'bufhidden'| option. When a buffer is unloaded its file contents are freed
@@ -84,7 +84,7 @@ Integer nvim_buf_line_count(Buffer buffer, Error *err)
 /// Activates buffer-update events on a channel, or as Lua callbacks.
 ///
 /// Example (Lua): capture buffer updates in a global `events` variable
-/// (use "print(vim.inspect(events))" to see its contents):
+/// (use "vim.print(events)" to see its contents):
 /// <pre>lua
 ///   events = {}
 ///   vim.api.nvim_buf_attach(0, false, {
@@ -112,7 +112,7 @@ Integer nvim_buf_line_count(Buffer buffer, Error *err)
 ///               - byte count of previous contents
 ///               - deleted_codepoints (if `utf_sizes` is true)
 ///               - deleted_codeunits (if `utf_sizes` is true)
-///             - on_bytes: lua callback invoked on change.
+///             - on_bytes: Lua callback invoked on change.
 ///               This callback receives more granular information about the
 ///               change compared to on_lines.
 ///               Return `true` to detach.
@@ -347,7 +347,7 @@ end:
 void nvim_buf_set_lines(uint64_t channel_id, Buffer buffer, Integer start, Integer end,
                         Boolean strict_indexing, ArrayOf(String) replacement, Error *err)
   FUNC_API_SINCE(1)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
@@ -515,6 +515,7 @@ end:
 void nvim_buf_set_text(uint64_t channel_id, Buffer buffer, Integer start_row, Integer start_col,
                        Integer end_row, Integer end_col, ArrayOf(String) replacement, Error *err)
   FUNC_API_SINCE(7)
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   MAXSIZE_TEMP_ARRAY(scratch, 1);
   if (replacement.size == 0) {
@@ -547,6 +548,7 @@ void nvim_buf_set_text(uint64_t channel_id, Buffer buffer, Integer start_row, In
   // Another call to ml_get_buf() may free the line, so make a copy.
   str_at_start = xstrdup(ml_get_buf(buf, (linenr_T)start_row, false));
   size_t len_at_start = strlen(str_at_start);
+  start_col = start_col < 0 ? (int64_t)len_at_start + start_col + 1 : start_col;
   VALIDATE_RANGE((start_col >= 0 && (size_t)start_col <= len_at_start), "start_col", {
     goto early_end;
   });
@@ -554,6 +556,7 @@ void nvim_buf_set_text(uint64_t channel_id, Buffer buffer, Integer start_row, In
   // Another call to ml_get_buf() may free the line, so make a copy.
   str_at_end = xstrdup(ml_get_buf(buf, (linenr_T)end_row, false));
   size_t len_at_end = strlen(str_at_end);
+  end_col = end_col < 0 ? (int64_t)len_at_end + end_col + 1 : end_col;
   VALIDATE_RANGE((end_col >= 0 && (size_t)end_col <= len_at_end), "end_col", {
     goto early_end;
   });
@@ -1059,7 +1062,7 @@ Boolean nvim_buf_is_loaded(Buffer buffer)
 ///          - unload: Unloaded only, do not delete. See |:bunload|
 void nvim_buf_delete(Buffer buffer, Dictionary opts, Error *err)
   FUNC_API_SINCE(7)
-  FUNC_API_CHECK_TEXTLOCK
+  FUNC_API_TEXTLOCK
 {
   buf_T *buf = find_buffer_by_handle(buffer, err);
 
@@ -1189,8 +1192,9 @@ Boolean nvim_buf_set_mark(Buffer buffer, String name, Integer line, Integer col,
   return res;
 }
 
-/// Returns a tuple (row,col) representing the position of the named mark. See
-/// |mark-motions|.
+/// Returns a `(row,col)` tuple representing the position of the named mark.
+/// "End of line" column position is returned as |v:maxcol| (big number).
+/// See |mark-motions|.
 ///
 /// Marks are (1,0)-indexed. |api-indexing|
 ///
@@ -1250,11 +1254,11 @@ ArrayOf(Integer, 2) nvim_buf_get_mark(Buffer buffer, String name, Error *err)
 /// buffer/window currently, like |termopen()|.
 ///
 /// @param buffer     Buffer handle, or 0 for current buffer
-/// @param fun        Function to call inside the buffer (currently lua callable
+/// @param fun        Function to call inside the buffer (currently Lua callable
 ///                   only)
 /// @param[out] err   Error details, if any
-/// @return           Return value of function. NB: will deepcopy lua values
-///                   currently, use upvalues to send lua references in and out.
+/// @return           Return value of function. NB: will deepcopy Lua values
+///                   currently, use upvalues to send Lua references in and out.
 Object nvim_buf_call(Buffer buffer, LuaRef fun, Error *err)
   FUNC_API_SINCE(7)
   FUNC_API_LUA_ONLY
@@ -1328,27 +1332,6 @@ static void fix_cursor(linenr_T lo, linenr_T hi, linenr_T extra)
     changed_cline_bef_curs();
   }
   invalidate_botline();
-}
-
-// Normalizes 0-based indexes to buffer line numbers
-static int64_t normalize_index(buf_T *buf, int64_t index, bool end_exclusive, bool *oob)
-{
-  assert(buf->b_ml.ml_line_count > 0);
-  int64_t max_index = buf->b_ml.ml_line_count + (int)end_exclusive - 1;
-  // Fix if < 0
-  index = index < 0 ? max_index + index + 1 : index;
-
-  // Check for oob
-  if (index > max_index) {
-    *oob = true;
-    index = max_index;
-  } else if (index < 0) {
-    *oob = true;
-    index = 0;
-  }
-  // Convert the index to a vim line number
-  index++;
-  return index;
 }
 
 /// Initialise a string array either:

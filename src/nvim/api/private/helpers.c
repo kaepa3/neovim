@@ -40,10 +40,10 @@
 # include "api/private/ui_events_metadata.generated.h"
 #endif
 
-/// Start block that may cause VimL exceptions while evaluating another code
+/// Start block that may cause Vimscript exceptions while evaluating another code
 ///
-/// Used when caller is supposed to be operating when other VimL code is being
-/// processed and that “other VimL code” must not be affected.
+/// Used when caller is supposed to be operating when other Vimscript code is being
+/// processed and that “other Vimscript code” must not be affected.
 ///
 /// @param[out]  tstate  Location where try state should be saved.
 void try_enter(TryState *const tstate)
@@ -478,6 +478,27 @@ Array string_to_array(const String input, bool crlf)
   return ret;
 }
 
+/// Normalizes 0-based indexes to buffer line numbers.
+int64_t normalize_index(buf_T *buf, int64_t index, bool end_exclusive, bool *oob)
+{
+  assert(buf->b_ml.ml_line_count > 0);
+  int64_t max_index = buf->b_ml.ml_line_count + (int)end_exclusive - 1;
+  // A negative index counts from the bottom.
+  index = index < 0 ? max_index + index + 1 : index;
+
+  // Check for oob and clamp.
+  if (index > max_index) {
+    *oob = true;
+    index = max_index;
+  } else if (index < 0) {
+    *oob = true;
+    index = 0;
+  }
+  // Convert the index to a 1-based line number.
+  index++;
+  return index;
+}
+
 /// Returns a substring of a buffer line
 ///
 /// @param buf          Buffer handle
@@ -806,7 +827,7 @@ bool api_object_to_bool(Object obj, const char *what, bool nil_value, Error *err
   } else if (obj.type == kObjectTypeInteger) {
     return obj.data.integer;  // C semantics: non-zero int is true
   } else if (obj.type == kObjectTypeNil) {
-    return nil_value;  // caller decides what NIL (missing retval in lua) means
+    return nil_value;  // caller decides what NIL (missing retval in Lua) means
   } else {
     api_set_error(err, kErrorTypeValidation, "%s is not a boolean", what);
     return false;

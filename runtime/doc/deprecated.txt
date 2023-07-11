@@ -130,15 +130,16 @@ LSP FUNCTIONS
 - *vim.lsp.util.set_qflist()*			Use |setqflist()| instead.
 - *vim.lsp.util.set_loclist()*			Use |setloclist()| instead.
 - *vim.lsp.buf_get_clients()*			Use |vim.lsp.get_active_clients()| with
-						{buffer = bufnr} instead.
+						{buffer=bufnr} instead.
 - *vim.lsp.buf.formatting()*			Use |vim.lsp.buf.format()| with
-						{async = true} instead.
+						{async=true} instead.
 - *vim.lsp.buf.formatting_sync()*		Use |vim.lsp.buf.format()| with
-						{async = false} instead.
+						{async=false} instead.
 - *vim.lsp.buf.range_formatting()*		Use |vim.lsp.formatexpr()|
 						or |vim.lsp.buf.format()| instead.
 - *vim.lsp.util.get_progress_messages()*	Use |vim.lsp.status()| or access
 						`progress` of |vim.lsp.client|
+- *vim.lsp.for_each_buffer_client()*		Use |vim.lsp.get_active_clients()|
 
 TREESITTER FUNCTIONS
 - *vim.treesitter.language.require_language()*	Use |vim.treesitter.language.add()|

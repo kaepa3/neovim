@@ -1923,7 +1923,7 @@ describe("folded lines", function()
       meths.buf_set_extmark(0, ns, 2, 0, { virt_lines_above = true, virt_lines = {{{"virt_line above line 3", ""}}} })
       meths.buf_set_extmark(0, ns, 3, 0, { virt_lines = {{{"virt_line below line 4", ""}}} })
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -1943,7 +1943,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 5, curline = 0, curcol = 0, linecount = 4, sum_scroll_delta = 0};
+        }}
       else
         screen:expect([[
           {5:^+--  2 lines: line 1·························}|
@@ -1959,7 +1961,7 @@ describe("folded lines", function()
 
       feed('jzfj')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -1979,7 +1981,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 5, curline = 2, curcol = 0, linecount = 4, sum_scroll_delta = 0};
+        }}
       else
         screen:expect([[
           {5:+--  2 lines: line 1·························}|
@@ -1996,7 +2000,7 @@ describe("folded lines", function()
       feed('kzo<C-Y>')
       funcs.setline(5, 'line 5')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2016,7 +2020,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 6, curline = 0, curcol = 0, linecount = 5, sum_scroll_delta = -1};
+        }}
       else
         screen:expect([[
           virt_line above line 1                       |
@@ -2044,7 +2050,7 @@ describe("folded lines", function()
       meths.buf_set_extmark(0, ns, 1, 0, { virt_lines = {{{"more virt_line below line 2", ""}}} })
       feed('G<C-E>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2064,7 +2070,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 0};
+        }}
       else
         screen:expect([[
           line 1                                       |
@@ -2080,7 +2088,7 @@ describe("folded lines", function()
 
       feed('<C-E>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2100,7 +2108,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 1, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 1};
+        }}
       else
         screen:expect([[
           line 2                                       |
@@ -2116,7 +2126,7 @@ describe("folded lines", function()
 
       feed('<C-E>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2136,7 +2146,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 2};
+        }}
       else
         screen:expect([[
           virt_line below line 2                       |
@@ -2152,7 +2164,7 @@ describe("folded lines", function()
 
       feed('<C-E>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2172,7 +2184,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 3};
+        }}
       else
         screen:expect([[
           more virt_line below line 2                  |
@@ -2188,7 +2202,7 @@ describe("folded lines", function()
 
       feed('<C-E>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2208,7 +2222,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 4};
+        }}
       else
         screen:expect([[
           {5:+--  2 lines: line 3·························}|
@@ -2224,7 +2240,7 @@ describe("folded lines", function()
 
       feed('<C-E>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2244,7 +2260,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 4, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 5};
+        }}
       else
         screen:expect([[
           ^line 5                                       |
@@ -2260,7 +2278,7 @@ describe("folded lines", function()
 
       feed('3<C-Y>')
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2280,7 +2298,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
                                                        |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 2};
+        }}
       else
         screen:expect([[
           virt_line below line 2                       |
@@ -2296,7 +2316,7 @@ describe("folded lines", function()
 
       meths.input_mouse('left', 'press', '3', multigrid and 2 or 0, 3, 0)
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2316,7 +2336,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
           {11:-- VISUAL LINE --}                            |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 2};
+        }}
       else
         screen:expect([[
           virt_line below line 2                       |
@@ -2332,7 +2354,7 @@ describe("folded lines", function()
 
       meths.input_mouse('left', 'drag', '3', multigrid and 2 or 0, 7, 0)
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2352,7 +2374,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
           {11:-- VISUAL LINE --}                            |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 0, linecount = 5, sum_scroll_delta = 3};
+        }}
       else
         screen:expect([[
           more virt_line below line 2                  |
@@ -2368,7 +2392,7 @@ describe("folded lines", function()
 
       meths.input_mouse('left', 'drag', '3', multigrid and 2 or 0, 7, 5)
       if multigrid then
-        screen:expect([[
+        screen:expect{grid=[[
         ## grid 1
           [2:---------------------------------------------]|
           [2:---------------------------------------------]|
@@ -2388,7 +2412,9 @@ describe("folded lines", function()
           {1:~                                            }|
         ## grid 3
           {11:-- VISUAL LINE --}                            |
-        ]])
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 2, botline = 6, curline = 4, curcol = 5, linecount = 5, sum_scroll_delta = 4};
+        }}
       else
         screen:expect([[
           {5:+--  2 lines: line 3·························}|
@@ -2401,23 +2427,100 @@ describe("folded lines", function()
           {11:-- VISUAL LINE --}                            |
         ]])
       end
+
+      feed('<Esc>gg')
+      command('botright 1split | wincmd w')
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          {3:[No Name] [+]                                }|
+          [4:---------------------------------------------]|
+          {2:[No Name] [+]                                }|
+          [3:---------------------------------------------]|
+        ## grid 2
+          ^line 1                                       |
+          line 2                                       |
+          virt_line below line 2                       |
+          more virt_line below line 2                  |
+        ## grid 3
+                                                       |
+        ## grid 4
+          line 1                                       |
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 3, curline = 0, curcol = 0, linecount = 5, sum_scroll_delta = 0};
+          [4] = {win = {id = 1001}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 5, sum_scroll_delta = 0};
+        }}
+      else
+        screen:expect([[
+          ^line 1                                       |
+          line 2                                       |
+          virt_line below line 2                       |
+          more virt_line below line 2                  |
+          {3:[No Name] [+]                                }|
+          line 1                                       |
+          {2:[No Name] [+]                                }|
+                                                       |
+        ]])
+      end
+
+      feed('<C-Y>')
+      if multigrid then
+        screen:expect{grid=[[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          {3:[No Name] [+]                                }|
+          [4:---------------------------------------------]|
+          {2:[No Name] [+]                                }|
+          [3:---------------------------------------------]|
+        ## grid 2
+          virt_line above line 1                       |
+          ^line 1                                       |
+          line 2                                       |
+          virt_line below line 2                       |
+        ## grid 3
+                                                       |
+        ## grid 4
+          line 1                                       |
+        ]], win_viewport={
+          [2] = {win = {id = 1000}, topline = 0, botline = 3, curline = 0, curcol = 0, linecount = 5, sum_scroll_delta = -1};
+          [4] = {win = {id = 1001}, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 5, sum_scroll_delta = 0};
+        }}
+      else
+        screen:expect([[
+          virt_line above line 1                       |
+          ^line 1                                       |
+          line 2                                       |
+          virt_line below line 2                       |
+          {3:[No Name] [+]                                }|
+          line 1                                       |
+          {2:[No Name] [+]                                }|
+                                                       |
+        ]])
+      end
     end)
 
     it('Folded and Visual highlights are combined #19691', function()
       command('hi! Visual guibg=Red')
       insert([[
-        " foo
-        " {{{1
+        " foofoofoofoofoofoo
+        " 口 {{{1
         set nocp
         " }}}1
-        " bar
-        " {{{1
+        " barbarbarbarbarbar
+        " 口 {{{1
         set foldmethod=marker
         " }}}1
-        " baz]])
+        " bazbazbazbazbazbaz]])
       feed('gg')
       command('source')
-      feed('<C-V>G3l')
+      feed('<C-V>G15l')
       if multigrid then
         screen:expect([[
         ## grid 1
@@ -2430,11 +2533,11 @@ describe("folded lines", function()
           [2:---------------------------------------------]|
           [3:---------------------------------------------]|
         ## grid 2
-          {14:" fo}o                                        |
-          {15:+-- }{5: 3 lines: "······························}|
-          {14:" ba}r                                        |
-          {15:+-- }{5: 3 lines: "······························}|
-          {14:" b}^az                                        |
+          {14:" foofoofoofoofo}ofoo                         |
+          {15:+--  3 lines: " }{5:口···························}|
+          {14:" barbarbarbarba}rbar                         |
+          {15:+--  3 lines: " }{5:口···························}|
+          {14:" bazbazbazbazb}^azbaz                         |
           {1:~                                            }|
           {1:~                                            }|
         ## grid 3
@@ -2442,11 +2545,191 @@ describe("folded lines", function()
         ]])
       else
         screen:expect([[
-          {14:" fo}o                                        |
-          {15:+-- }{5: 3 lines: "······························}|
-          {14:" ba}r                                        |
-          {15:+-- }{5: 3 lines: "······························}|
-          {14:" b}^az                                        |
+          {14:" foofoofoofoofo}ofoo                         |
+          {15:+--  3 lines: " }{5:口···························}|
+          {14:" barbarbarbarba}rbar                         |
+          {15:+--  3 lines: " }{5:口···························}|
+          {14:" bazbazbazbazb}^azbaz                         |
+          {1:~                                            }|
+          {1:~                                            }|
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      end
+
+      feed('l')
+      if multigrid then
+        screen:expect([[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          {14:" foofoofoofoofoo}foo                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" barbarbarbarbar}bar                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" bazbazbazbazba}^zbaz                         |
+          {1:~                                            }|
+          {1:~                                            }|
+        ## grid 3
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      else
+        screen:expect([[
+          {14:" foofoofoofoofoo}foo                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" barbarbarbarbar}bar                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" bazbazbazbazba}^zbaz                         |
+          {1:~                                            }|
+          {1:~                                            }|
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      end
+
+      feed('l')
+      if multigrid then
+        screen:expect([[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          {14:" foofoofoofoofoof}oo                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" barbarbarbarbarb}ar                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" bazbazbazbazbaz}^baz                         |
+          {1:~                                            }|
+          {1:~                                            }|
+        ## grid 3
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      else
+        screen:expect([[
+          {14:" foofoofoofoofoof}oo                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" barbarbarbarbarb}ar                         |
+          {15:+--  3 lines: " 口}{5:···························}|
+          {14:" bazbazbazbazbaz}^baz                         |
+          {1:~                                            }|
+          {1:~                                            }|
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      end
+
+      feed('2l')
+      if multigrid then
+        screen:expect([[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          {14:" foofoofoofoofoofoo}                         |
+          {15:+--  3 lines: " 口··}{5:·························}|
+          {14:" barbarbarbarbarbar}                         |
+          {15:+--  3 lines: " 口··}{5:·························}|
+          {14:" bazbazbazbazbazba}^z                         |
+          {1:~                                            }|
+          {1:~                                            }|
+        ## grid 3
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      else
+        screen:expect([[
+          {14:" foofoofoofoofoofoo}                         |
+          {15:+--  3 lines: " 口··}{5:·························}|
+          {14:" barbarbarbarbarbar}                         |
+          {15:+--  3 lines: " 口··}{5:·························}|
+          {14:" bazbazbazbazbazba}^z                         |
+          {1:~                                            }|
+          {1:~                                            }|
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      end
+
+      feed('O16l')
+      if multigrid then
+        screen:expect([[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          " foofoofoofoofo{14:ofoo}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " barbarbarbarba{14:rbar}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " bazbazbazbazba^z{14:baz}                         |
+          {1:~                                            }|
+          {1:~                                            }|
+        ## grid 3
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      else
+        screen:expect([[
+          " foofoofoofoofo{14:ofoo}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " barbarbarbarba{14:rbar}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " bazbazbazbazba^z{14:baz}                         |
+          {1:~                                            }|
+          {1:~                                            }|
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      end
+
+      feed('l')
+      if multigrid then
+        screen:expect([[
+        ## grid 1
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [2:---------------------------------------------]|
+          [3:---------------------------------------------]|
+        ## grid 2
+          " foofoofoofoofoo{14:foo}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " barbarbarbarbar{14:bar}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " bazbazbazbazbaz^b{14:az}                         |
+          {1:~                                            }|
+          {1:~                                            }|
+        ## grid 3
+          {11:-- VISUAL BLOCK --}                           |
+        ]])
+      else
+        screen:expect([[
+          " foofoofoofoofoo{14:foo}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " barbarbarbarbar{14:bar}                         |
+          {5:+--  3 lines: " }{15:口··}{5:·························}|
+          " bazbazbazbazbaz^b{14:az}                         |
           {1:~                                            }|
           {1:~                                            }|
           {11:-- VISUAL BLOCK --}                           |

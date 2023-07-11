@@ -222,12 +222,14 @@
 # define FUNC_API_FAST
 /// Internal C function not exposed in the RPC API.
 # define FUNC_API_NOEXPORT
-/// API function not exposed in VimL/eval.
+/// API function not exposed in Vimscript/eval.
 # define FUNC_API_REMOTE_ONLY
-/// API function not exposed in VimL/remote.
+/// API function not exposed in Vimscript/remote.
 # define FUNC_API_LUA_ONLY
-/// API function checked textlock.
-# define FUNC_API_CHECK_TEXTLOCK
+/// API function fails during textlock.
+# define FUNC_API_TEXTLOCK
+/// API function fails during textlock, but allows cmdwin.
+# define FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 /// API function introduced at the given API level.
 # define FUNC_API_SINCE(X)
 /// API function deprecated since the given API level.
