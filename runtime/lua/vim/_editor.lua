@@ -54,6 +54,7 @@ vim._extra = {
   inspect_pos = true,
 }
 
+--- @private
 vim.log = {
   levels = {
     TRACE = 0,
@@ -187,9 +188,7 @@ end
 ---@see |vim.print()|
 ---@see https://github.com/kikito/inspect.lua
 ---@see https://github.com/mpeterv/vinspect
-local function inspect(object, options) -- luacheck: no unused
-  error(object, options) -- Stub for gen_vimdoc.py
-end
+vim.inspect = vim.inspect
 
 do
   local tdots, tick, got_line1, undo_started, trailing_nl = 0, 0, false, false, false
@@ -328,6 +327,7 @@ function vim.schedule_wrap(cb)
 end
 
 -- vim.fn.{func}(...)
+---@private
 vim.fn = setmetatable({}, {
   __index = function(t, key)
     local _fn
@@ -345,9 +345,12 @@ vim.fn = setmetatable({}, {
   end,
 })
 
+--- @private
 vim.funcref = function(viml_func_name)
   return vim.fn[viml_func_name]
 end
+
+local VIM_CMD_ARG_MAX = 20
 
 --- Execute Vim script commands.
 ---
@@ -389,12 +392,6 @@ end
 ---                            If a table, executes a single command. In this case, it is an alias
 ---                            to |nvim_cmd()| where `opts` is empty.
 ---@see |ex-cmd-index|
-function vim.cmd(command) -- luacheck: no unused
-  error(command) -- Stub for gen_vimdoc.py
-end
-
-local VIM_CMD_ARG_MAX = 20
-
 vim.cmd = setmetatable({}, {
   __call = function(_, command)
     if type(command) == 'table' then
@@ -435,7 +432,6 @@ vim.cmd = setmetatable({}, {
 do
   local validate = vim.validate
 
-  ---@private
   local function make_dict_accessor(scope, handle)
     validate({
       scope = { scope, 's' },
@@ -745,7 +741,6 @@ function vim._expand_pat(pat, env)
   end
 
   local keys = {}
-  ---@private
   local function insert_keys(obj)
     for k, _ in pairs(obj) do
       if type(k) == 'string' and string.sub(k, 1, string.len(match_part)) == match_part then
@@ -1008,7 +1003,6 @@ end
 function vim._init_default_mappings()
   -- mappings
 
-  ---@private
   local function region_chunks(region)
     local chunks = {}
     local maxcol = vim.v.maxcol
@@ -1020,7 +1014,6 @@ function vim._init_default_mappings()
     return chunks
   end
 
-  ---@private
   local function _visual_search(cmd)
     assert(cmd == '/' or cmd == '?')
     vim.api.nvim_feedkeys('\27', 'nx', true) -- Escape visual mode.
@@ -1037,7 +1030,6 @@ function vim._init_default_mappings()
     vim.api.nvim_feedkeys(search_cmd, 'nx', true)
   end
 
-  ---@private
   local function map(mode, lhs, rhs)
     vim.keymap.set(mode, lhs, rhs, { desc = 'Nvim builtin' })
   end
@@ -1055,6 +1047,33 @@ function vim._init_default_mappings()
   end, { desc = ':help v_#-default', silent = true })
   -- Use : instead of <Cmd> so that ranges are supported. #19365
   map('n', '&', ':&&<CR>')
+
+  -- gx
+
+  -- TODO: use vim.region() when it lands... #13896 #16843
+  local function get_visual_selection()
+    local save_a = vim.fn.getreginfo('a')
+    vim.cmd([[norm! "ay]])
+    local selection = vim.fn.getreg('a', 1)
+    vim.fn.setreg('a', save_a)
+    return selection
+  end
+
+  local function do_open(uri)
+    local _, err = vim.ui.open(uri)
+    if err then
+      vim.notify(err, vim.log.levels.ERROR)
+    end
+  end
+
+  local gx_desc =
+    'Opens filepath or URI under cursor with the system handler (file explorer, web browser, …)'
+  vim.keymap.set({ 'n' }, 'gx', function()
+    do_open(vim.fn.expand('<cfile>'))
+  end, { desc = gx_desc })
+  vim.keymap.set({ 'x' }, 'gx', function()
+    do_open(get_visual_selection())
+  end, { desc = gx_desc })
 
   -- menus
 
@@ -1094,7 +1113,7 @@ function vim._init_defaults()
   vim._init_default_autocmds()
 end
 
-require('vim._meta')
+require('vim._options')
 
 -- Remove at Nvim 1.0
 ---@deprecated

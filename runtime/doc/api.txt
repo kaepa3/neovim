@@ -1674,8 +1674,8 @@ nvim_parse_expression({expr}, {flags}, {highlight})
               stringified without "kExprNode" prefix.
             • "start": a pair [line, column] describing where node is
               "started" where "line" is always 0 (will not be 0 if you will be
-              using nvim_parse_viml() on e.g. ":let", but that is not present
-              yet). Both elements are Integers.
+              using this API on e.g. ":let", but that is not present yet).
+              Both elements are Integers.
             • "len": “length” of the node. This and "start" are there for
               debugging purposes primary (debugging parser and providing debug
               information).
@@ -2108,8 +2108,8 @@ nvim_buf_call({buffer}, {fun})                               *nvim_buf_call()*
     a temporary scratch window (called the "autocmd window" for historical
     reasons) will be used.
 
-    This is useful e.g. to call vimL functions that only work with the current
-    buffer/window currently, like |termopen()|.
+    This is useful e.g. to call Vimscript functions that only work with the
+    current buffer/window currently, like |termopen()|.
 
     Attributes: ~
         Lua |vim.api| only
@@ -2615,15 +2615,16 @@ nvim_buf_set_extmark({buffer}, {ns_id}, {line}, {col}, {*opts})
                     string or as an integer, the latter which can be obtained
                     using |nvim_get_hl_id_by_name()|.
                   • virt_text_pos : position of virtual text. Possible values:
-                    • "eol": right after eol character (default)
+                    • "eol": right after eol character (default).
                     • "overlay": display over the specified column, without
                       shifting the underlying text.
                     • "right_align": display right aligned in the window.
                     • "inline": display at the specified column, and shift the
-                      buffer text to the right as needed
+                      buffer text to the right as needed.
 
                   • virt_text_win_col : position the virtual text at a fixed
-                    window column (starting from the first text column)
+                    window column (starting from the first text column of the
+                    screen line) instead of "virt_text_pos".
                   • virt_text_hide : hide the virtual text when the background
                     text is selected or hidden because of scrolling with
                     'nowrap' or 'smoothscroll'. Currently only affects
@@ -2896,7 +2897,7 @@ nvim_win_hide({window})                                      *nvim_win_hide()*
     or |nvim_win_close()|, which will close the buffer.
 
     Attributes: ~
-        not allowed when |textlock| is active or in the |cmdwin|
+        not allowed when |textlock| is active
 
     Parameters: ~
       • {window}  Window handle, or 0 for current window
@@ -2914,7 +2915,7 @@ nvim_win_set_buf({window}, {buffer})                      *nvim_win_set_buf()*
     Sets the current buffer in a window, without side effects
 
     Attributes: ~
-        not allowed when |textlock| is active or in the |cmdwin|
+        not allowed when |textlock| is active
 
     Parameters: ~
       • {window}  Window handle, or 0 for current window
@@ -2988,7 +2989,9 @@ nvim_win_text_height({window}, {*opts})               *nvim_win_text_height()*
                     omitted include the whole line.
 
     Return: ~
-        The number of screen lines that the range of text occupy.
+        Dictionary containing text height information, with these keys:
+        • all: The total number of screen lines occupied by the range.
+        • fill: The number of diff filler or virtual lines among them.
 
     See also: ~
       • |virtcol()| for text width.
@@ -3033,7 +3036,7 @@ nvim_open_win({buffer}, {enter}, {*config})                  *nvim_open_win()*
 <
 
     Attributes: ~
-        not allowed when |textlock| is active or in the |cmdwin|
+        not allowed when |textlock| is active
 
     Parameters: ~
       • {buffer}  Buffer to display, or 0 for current buffer

@@ -5,7 +5,6 @@ local npcall = vim.F.npcall
 
 local M = {}
 
----@private
 --- Sends an async request to all active clients attached to the current
 --- buffer.
 ---
@@ -45,7 +44,6 @@ function M.hover()
   request('textDocument/hover', params)
 end
 
----@private
 local function request_with_options(name, params, options)
   local req_handler
   if options then
@@ -120,7 +118,6 @@ function M.completion(context)
   return request('textDocument/completion', params)
 end
 
----@private
 ---@param bufnr integer
 ---@param mode "v"|"V"
 ---@return table {start={row,col}, end={row,col}} using (1, 0) indexing
@@ -197,16 +194,6 @@ end
 function M.format(options)
   options = options or {}
   local bufnr = options.bufnr or api.nvim_get_current_buf()
-  local clients = vim.lsp.get_active_clients({
-    id = options.id,
-    bufnr = bufnr,
-    name = options.name,
-  })
-
-  if options.filter then
-    clients = vim.tbl_filter(options.filter, clients)
-  end
-
   local mode = api.nvim_get_mode().mode
   local range = options.range
   if not range and mode == 'v' or mode == 'V' then
@@ -214,15 +201,20 @@ function M.format(options)
   end
   local method = range and 'textDocument/rangeFormatting' or 'textDocument/formatting'
 
-  clients = vim.tbl_filter(function(client)
-    return client.supports_method(method)
-  end, clients)
+  local clients = vim.lsp.get_clients({
+    id = options.id,
+    bufnr = bufnr,
+    name = options.name,
+    method = method,
+  })
+  if options.filter then
+    clients = vim.tbl_filter(options.filter, clients)
+  end
 
   if #clients == 0 then
     vim.notify('[LSP] Format request failed, no matching language servers.')
   end
 
-  ---@private
   local function set_range(client, params)
     if range then
       local range_params =
@@ -274,18 +266,15 @@ end
 function M.rename(new_name, options)
   options = options or {}
   local bufnr = options.bufnr or api.nvim_get_current_buf()
-  local clients = vim.lsp.get_active_clients({
+  local clients = vim.lsp.get_clients({
     bufnr = bufnr,
     name = options.name,
+    -- Clients must at least support rename, prepareRename is optional
+    method = 'textDocument/rename',
   })
   if options.filter then
     clients = vim.tbl_filter(options.filter, clients)
   end
-
-  -- Clients must at least support rename, prepareRename is optional
-  clients = vim.tbl_filter(function(client)
-    return client.supports_method('textDocument/rename')
-  end, clients)
 
   if #clients == 0 then
     vim.notify('[LSP] Rename, no matching language servers with rename capability.')
@@ -296,7 +285,6 @@ function M.rename(new_name, options)
   -- Compute early to account for cursor movements after going async
   local cword = vim.fn.expand('<cword>')
 
-  ---@private
   local function get_text_at_range(range, offset_encoding)
     return api.nvim_buf_get_text(
       bufnr,
@@ -314,7 +302,6 @@ function M.rename(new_name, options)
       return
     end
 
-    ---@private
     local function rename(name)
       local params = util.make_position_params(win, client.offset_encoding)
       params.newName = name
@@ -415,7 +402,6 @@ function M.document_symbol(options)
   request_with_options('textDocument/documentSymbol', params, options)
 end
 
----@private
 local function pick_call_hierarchy_item(call_hierarchy_items)
   if not call_hierarchy_items then
     return
@@ -435,7 +421,6 @@ local function pick_call_hierarchy_item(call_hierarchy_items)
   return choice
 end
 
----@private
 local function call_hierarchy(method)
   local params = util.make_position_params()
   request('textDocument/prepareCallHierarchy', params, function(err, result, ctx)
@@ -474,7 +459,7 @@ end
 ---
 function M.list_workspace_folders()
   local workspace_folders = {}
-  for _, client in pairs(vim.lsp.get_active_clients({ bufnr = 0 })) do
+  for _, client in pairs(vim.lsp.get_clients({ bufnr = 0 })) do
     for _, folder in pairs(client.workspace_folders or {}) do
       table.insert(workspace_folders, folder.name)
     end
@@ -495,11 +480,13 @@ function M.add_workspace_folder(workspace_folder)
     print(workspace_folder, ' is not a valid directory')
     return
   end
-  local params = util.make_workspace_params(
-    { { uri = vim.uri_from_fname(workspace_folder), name = workspace_folder } },
-    {}
-  )
-  for _, client in pairs(vim.lsp.get_active_clients({ bufnr = 0 })) do
+  local new_workspace = {
+    uri = vim.uri_from_fname(workspace_folder),
+    name = workspace_folder,
+  }
+  local params = { event = { added = { new_workspace }, removed = {} } }
+  local bufnr = vim.api.nvim_get_current_buf()
+  for _, client in pairs(vim.lsp.get_clients({ bufnr = bufnr })) do
     local found = false
     for _, folder in pairs(client.workspace_folders or {}) do
       if folder.name == workspace_folder then
@@ -509,11 +496,11 @@ function M.add_workspace_folder(workspace_folder)
       end
     end
     if not found then
-      vim.lsp.buf_notify(0, 'workspace/didChangeWorkspaceFolders', params)
+      client.notify('workspace/didChangeWorkspaceFolders', params)
       if not client.workspace_folders then
         client.workspace_folders = {}
       end
-      table.insert(client.workspace_folders, params.event.added[1])
+      table.insert(client.workspace_folders, new_workspace)
     end
   end
 end
@@ -528,14 +515,16 @@ function M.remove_workspace_folder(workspace_folder)
   if not (workspace_folder and #workspace_folder > 0) then
     return
   end
-  local params = util.make_workspace_params(
-    { {} },
-    { { uri = vim.uri_from_fname(workspace_folder), name = workspace_folder } }
-  )
-  for _, client in pairs(vim.lsp.get_active_clients({ bufnr = 0 })) do
-    for idx, folder in pairs(client.workspace_folders or {}) do
+  local workspace = {
+    uri = vim.uri_from_fname(workspace_folder),
+    name = workspace_folder,
+  }
+  local params = { event = { added = {}, removed = { workspace } } }
+  local bufnr = vim.api.nvim_get_current_buf()
+  for _, client in pairs(vim.lsp.get_clients({ bufnr = bufnr })) do
+    for idx, folder in pairs(client.workspace_folders) do
       if folder.name == workspace_folder then
-        vim.lsp.buf_notify(0, 'workspace/didChangeWorkspaceFolders', params)
+        client.notify('workspace/didChangeWorkspaceFolders', params)
         client.workspace_folders[idx] = nil
         return
       end
@@ -586,8 +575,6 @@ function M.clear_references()
   util.buf_clear_references()
 end
 
----@private
---
 --- This is not public because the main extension point is
 --- vim.ui.select which can be overridden independently.
 ---
@@ -599,7 +586,6 @@ end
 local function on_code_action_results(results, ctx, options)
   local action_tuples = {}
 
-  ---@private
   local function action_filter(a)
     -- filter by specified action kind
     if options and options.context and options.context.only then
@@ -639,7 +625,6 @@ local function on_code_action_results(results, ctx, options)
     return
   end
 
-  ---@private
   local function apply_action(action, client)
     if action.edit then
       util.apply_workspace_edit(action.edit, client.offset_encoding)
@@ -650,7 +635,6 @@ local function on_code_action_results(results, ctx, options)
     end
   end
 
-  ---@private
   local function on_user_choice(action_tuple)
     if not action_tuple then
       return
@@ -708,7 +692,6 @@ end
 
 --- Requests code actions from all clients and calls the handler exactly once
 --- with all aggregated results
----@private
 local function code_action_request(params, options)
   local bufnr = api.nvim_get_current_buf()
   local method = 'textDocument/codeAction'

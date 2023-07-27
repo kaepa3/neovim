@@ -186,7 +186,7 @@ backwards-compatibility cost. Some examples:
 
 Some features are built in that otherwise required external plugins:
 
-- Highlighting the yanked region, see |lua-highlight|.
+- Highlighting the yanked region, see |vim.highlight|.
 
 ARCHITECTURE
 
@@ -391,7 +391,7 @@ This section documents various low-level behavior changes.
 
 |mkdir()| behaviour changed:
 1. Assuming /tmp/foo does not exist and /tmp can be written to
-   mkdir('/tmp/foo/bar', 'p', 0700) will create both /tmp/foo and /tmp/foo/bar 
+   mkdir('/tmp/foo/bar', 'p', 0700) will create both /tmp/foo and /tmp/foo/bar
    with 0700 permissions. Vim mkdir will create /tmp/foo with 0755.
 2. If you try to create an existing directory with `'p'` (e.g. mkdir('/',
    'p')) mkdir() will silently exit. In Vim this was an error.
@@ -416,16 +416,16 @@ This section documents various low-level behavior changes.
    error out.
 5. Stringifyed infinite and NaN values now use |str2float()| and can be evaled
    back.
-6. (internal) Trying to print or stringify VAR_UNKNOWN in Vim results in 
+6. (internal) Trying to print or stringify VAR_UNKNOWN in Vim results in
    nothing, E908, in Nvim it is internal error.
 
 |json_decode()| behaviour changed:
 1. It may output |msgpack-special-dict|.
-2. |msgpack-special-dict| is emitted also in case of duplicate keys, while in 
+2. |msgpack-special-dict| is emitted also in case of duplicate keys, while in
    Vim it errors out.
 3. It accepts only valid JSON.  Trailing commas are not accepted.
 
-|json_encode()| behaviour slightly changed: now |msgpack-special-dict| values 
+|json_encode()| behaviour slightly changed: now |msgpack-special-dict| values
 are accepted, but |v:none| is not.
 
 Viminfo text files were replaced with binary (messagepack) |shada| files.
@@ -444,10 +444,10 @@ Additional differences:
   |shada-error-handling|
 - ShaDa file keeps search direction (|v:searchforward|), viminfo does not.
 
-|printf()| returns something meaningful when used with `%p` argument: in Vim 
-it used to return useless address of the string (strings are copied to the 
-newly allocated memory all over the place) and fail on types which cannot be 
-coerced to strings. See |id()| for more details, currently it uses 
+|printf()| returns something meaningful when used with `%p` argument: in Vim
+it used to return useless address of the string (strings are copied to the
+newly allocated memory all over the place) and fail on types which cannot be
+coerced to strings. See |id()| for more details, currently it uses
 `printf("%p", {expr})` internally.
 
 |c_CTRL-R| pasting a non-special register into |cmdline| omits the last <CR>.
@@ -534,6 +534,10 @@ Working directory (Vim implemented some of these after Nvim):
   window number, and its only possible returns values are 0 and 1.
 - `getcwd(-1)` is equivalent to `getcwd(-1, 0)` instead of returning the global
   working directory. Use `getcwd(-1, -1)` to get the global working directory.
+
+Autocommands:
+- Fixed inconsistent behavior in execution of nested autocommands:
+  https://github.com/neovim/neovim/issues/23368
 
 ==============================================================================
 Missing features					 *nvim-missing*
@@ -623,10 +627,17 @@ Highlight groups:
 Options:
   *'aleph'* *'al'*
   antialias
+  'backspace' no longer supports number values. Instead:
+    - for `backspace=0` set `backspace=` (empty)
+    - for `backspace=1` set `backspace=indent,eol`
+    - for `backspace=2` set `backspace=indent,eol,start` (default behavior in Nvim)
+    - for `backspace=3` set `backspace=indent,eol,nostop`
   *'balloondelay'* *'bdlay'*
   *'ballooneval'* *'beval'* *'noballooneval'* *'nobeval'*
   *'balloonexpr'* *'bexpr'*
+  'backupdir': paths can no longer be separated with spaces.
   bioskey (MS-DOS)
+  'cdpath': paths can no longer be separated with spaces.
   conskey (MS-DOS)
   *'cp'* *'nocompatible'* *'nocp'* *'compatible'* (Nvim is always "nocompatible".)
   'cpoptions' (gjkHw<*- and all POSIX flags were removed)
@@ -691,6 +702,7 @@ Options:
     Use |g8| or |ga|.  See |mbyte-combining|.
   *'maxmem'* Nvim delegates memory-management to the OS.
   *'maxmemtot'* Nvim delegates memory-management to the OS.
+  |'path'|: paths can no longer be separated with spaces.
   printoptions
   *'printdevice'*
   *'printencoding'*

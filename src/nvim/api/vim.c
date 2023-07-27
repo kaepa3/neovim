@@ -305,6 +305,7 @@ void nvim_feedkeys(String keys, String mode, Boolean escape_ks)
 Integer nvim_input(String keys)
   FUNC_API_SINCE(1) FUNC_API_FAST
 {
+  may_trigger_vim_suspend_resume(false);
   return (Integer)input_enqueue(keys);
 }
 
@@ -334,6 +335,8 @@ void nvim_input_mouse(String button, String action, String modifier, Integer gri
                       Integer col, Error *err)
   FUNC_API_SINCE(6) FUNC_API_FAST
 {
+  may_trigger_vim_suspend_resume(false);
+
   if (button.data == NULL || action.data == NULL) {
     goto error;
   }
@@ -527,12 +530,17 @@ ArrayOf(String) nvim_get_runtime_file(String name, Boolean all, Error *err)
   return rv;
 }
 
-static void find_runtime_cb(char *fname, void *cookie)
+static bool find_runtime_cb(int num_fnames, char **fnames, bool all, void *cookie)
 {
   Array *rv = (Array *)cookie;
-  if (fname != NULL) {
-    ADD(*rv, CSTR_TO_OBJ(fname));
+  for (int i = 0; i < num_fnames; i++) {
+    ADD(*rv, CSTR_TO_OBJ(fnames[i]));
+    if (!all) {
+      return true;
+    }
   }
+
+  return num_fnames > 0;
 }
 
 String nvim__get_lib_dir(void)
@@ -959,7 +967,7 @@ Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   }
 
   if (cmdwin_type != 0 && buf == curbuf) {
-    api_set_error(err, kErrorTypeException, "%s", _(e_cmdwin));
+    api_set_error(err, kErrorTypeException, "%s", e_cmdwin);
     return 0;
   }
 

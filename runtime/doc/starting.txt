@@ -224,7 +224,7 @@ argument.
 		All [args] are treated as {script} arguments and stored in the
 		Lua `_G.arg` global table, thus "-l" ends processing of Nvim
 		arguments. The {script} name is stored at `_G.arg[0]`.
-		
+
 		Sets 'verbose' to 1 (like "-V1"), so Lua `print()` writes to
 		output.
 		If {script} prints messages and doesn't cause Nvim to exit,
@@ -506,12 +506,12 @@ accordingly, proceeding as follows:
 
 10. Load the plugin scripts.					*load-plugins*
 	This does the same as the command: >
-		:runtime! plugin/**/*.vim
-		:runtime! plugin/**/*.lua
+		:runtime! plugin/**/*.{vim,lua}
 <	The result is that all directories in 'runtimepath' will be searched
 	for the "plugin" sub-directory and all files ending in ".vim" or
 	".lua" will be sourced (in alphabetical order per directory),
-	also in subdirectories. First "*.vim" are sourced, then "*.lua" files.
+	also in subdirectories. First "*.vim" are sourced, then "*.lua" files,
+	per directory.
 
 	However, directories in 'runtimepath' ending in "after" are skipped
 	here and only loaded after packages, see below.

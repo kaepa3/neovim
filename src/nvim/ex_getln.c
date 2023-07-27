@@ -130,6 +130,30 @@ typedef struct command_line_state {
   buf_T *b_im_ptr_buf;  ///< buffer where b_im_ptr is valid
 } CommandLineState;
 
+typedef struct cmdpreview_undo_info {
+  u_header_T *save_b_u_oldhead;
+  u_header_T *save_b_u_newhead;
+  u_header_T *save_b_u_curhead;
+  int save_b_u_numhead;
+  bool save_b_u_synced;
+  long save_b_u_seq_last;
+  long save_b_u_save_nr_last;
+  long save_b_u_seq_cur;
+  time_t save_b_u_time_cur;
+  long save_b_u_save_nr_cur;
+  char *save_b_u_line_ptr;
+  linenr_T save_b_u_line_lnum;
+  colnr_T save_b_u_line_colnr;
+} CpUndoInfo;
+
+typedef struct cmdpreview_buf_info {
+  buf_T *buf;
+  long save_b_p_ul;
+  int save_b_changed;
+  varnumber_T save_changedtick;
+  CpUndoInfo undo_info;
+} CpBufInfo;
+
 typedef struct cmdpreview_win_info {
   win_T *win;
   pos_T save_w_cursor;
@@ -137,17 +161,6 @@ typedef struct cmdpreview_win_info {
   int save_w_p_cul;
   int save_w_p_cuc;
 } CpWinInfo;
-
-typedef struct cmdpreview_buf_info {
-  buf_T *buf;
-  bool save_b_u_synced;
-  time_t save_b_u_time_cur;
-  long save_b_u_seq_cur;
-  u_header_T *save_b_u_newhead;
-  long save_b_p_ul;
-  int save_b_changed;
-  varnumber_T save_changedtick;
-} CpBufInfo;
 
 typedef struct cmdpreview_info {
   kvec_t(CpWinInfo) win_info;
@@ -261,6 +274,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
     return false;
   }
 
+  emsg_off++;
   exarg_T ea = {
     .line1 = 1,
     .line2 = 1,
@@ -368,6 +382,7 @@ static bool do_incsearch_highlighting(int firstc, int *search_delim, incsearch_s
   curwin->w_cursor = save_cursor;
   retval = true;
 theend:
+  emsg_off--;
   return retval;
 }
 
@@ -2275,8 +2290,48 @@ static void cmdpreview_close_win(void)
   }
 }
 
+/// Save the undo state of a buffer for command preview.
+static void cmdpreview_save_undo(CpUndoInfo *cp_undoinfo, buf_T *buf)
+  FUNC_ATTR_NONNULL_ALL
+{
+  cp_undoinfo->save_b_u_synced = buf->b_u_synced;
+  cp_undoinfo->save_b_u_oldhead = buf->b_u_oldhead;
+  cp_undoinfo->save_b_u_newhead = buf->b_u_newhead;
+  cp_undoinfo->save_b_u_curhead = buf->b_u_curhead;
+  cp_undoinfo->save_b_u_numhead = buf->b_u_numhead;
+  cp_undoinfo->save_b_u_seq_last = buf->b_u_seq_last;
+  cp_undoinfo->save_b_u_save_nr_last = buf->b_u_save_nr_last;
+  cp_undoinfo->save_b_u_seq_cur = buf->b_u_seq_cur;
+  cp_undoinfo->save_b_u_time_cur = buf->b_u_time_cur;
+  cp_undoinfo->save_b_u_save_nr_cur = buf->b_u_save_nr_cur;
+  cp_undoinfo->save_b_u_line_ptr = buf->b_u_line_ptr;
+  cp_undoinfo->save_b_u_line_lnum = buf->b_u_line_lnum;
+  cp_undoinfo->save_b_u_line_colnr = buf->b_u_line_colnr;
+}
+
+/// Restore the undo state of a buffer for command preview.
+static void cmdpreview_restore_undo(const CpUndoInfo *cp_undoinfo, buf_T *buf)
+{
+  buf->b_u_oldhead = cp_undoinfo->save_b_u_oldhead;
+  buf->b_u_newhead = cp_undoinfo->save_b_u_newhead;
+  buf->b_u_curhead = cp_undoinfo->save_b_u_curhead;
+  buf->b_u_numhead = cp_undoinfo->save_b_u_numhead;
+  buf->b_u_seq_last = cp_undoinfo->save_b_u_seq_last;
+  buf->b_u_save_nr_last = cp_undoinfo->save_b_u_save_nr_last;
+  buf->b_u_seq_cur = cp_undoinfo->save_b_u_seq_cur;
+  buf->b_u_time_cur = cp_undoinfo->save_b_u_time_cur;
+  buf->b_u_save_nr_cur = cp_undoinfo->save_b_u_save_nr_cur;
+  buf->b_u_line_ptr = cp_undoinfo->save_b_u_line_ptr;
+  buf->b_u_line_lnum = cp_undoinfo->save_b_u_line_lnum;
+  buf->b_u_line_colnr = cp_undoinfo->save_b_u_line_colnr;
+  if (buf->b_u_curhead == NULL) {
+    buf->b_u_synced = cp_undoinfo->save_b_u_synced;
+  }
+}
+
 /// Save current state and prepare windows and buffers for command preview.
 static void cmdpreview_prepare(CpInfo *cpinfo)
+  FUNC_ATTR_NONNULL_ALL
 {
   kv_init(cpinfo->buf_info);
   kv_init(cpinfo->win_info);
@@ -2292,13 +2347,12 @@ static void cmdpreview_prepare(CpInfo *cpinfo)
     CpBufInfo cp_bufinfo;
     cp_bufinfo.buf = buf;
 
-    cp_bufinfo.save_b_u_synced = buf->b_u_synced;
-    cp_bufinfo.save_b_u_time_cur = buf->b_u_time_cur;
-    cp_bufinfo.save_b_u_seq_cur = buf->b_u_seq_cur;
-    cp_bufinfo.save_b_u_newhead = buf->b_u_newhead;
     cp_bufinfo.save_b_p_ul = buf->b_p_ul;
     cp_bufinfo.save_b_changed = buf->b_changed;
     cp_bufinfo.save_changedtick = buf_get_changedtick(buf);
+
+    cmdpreview_save_undo(&cp_bufinfo.undo_info, buf);
+    u_clearall(buf);
 
     kv_push(cpinfo->buf_info, cp_bufinfo);
 
@@ -2334,8 +2388,9 @@ static void cmdpreview_prepare(CpInfo *cpinfo)
   u_sync(true);
 }
 
-// Restore the state of buffers and windows before command preview.
+/// Restore the state of buffers and windows for command preview.
 static void cmdpreview_restore_state(CpInfo *cpinfo)
+  FUNC_ATTR_NONNULL_ALL
 {
   for (size_t i = 0; i < cpinfo->buf_info.size; i++) {
     CpBufInfo cp_bufinfo = cpinfo->buf_info.items[i];
@@ -2343,31 +2398,29 @@ static void cmdpreview_restore_state(CpInfo *cpinfo)
 
     buf->b_changed = cp_bufinfo.save_b_changed;
 
-    if (buf->b_u_seq_cur != cp_bufinfo.save_b_u_seq_cur) {
+    if (buf->b_u_seq_cur != cp_bufinfo.undo_info.save_b_u_seq_cur) {
       int count = 0;
 
       // Calculate how many undo steps are necessary to restore earlier state.
       for (u_header_T *uhp = buf->b_u_curhead ? buf->b_u_curhead : buf->b_u_newhead;
-           uhp != NULL && uhp->uh_seq > cp_bufinfo.save_b_u_seq_cur;
+           uhp != NULL;
            uhp = uhp->uh_next.ptr, ++count) {}
 
       aco_save_T aco;
       aucmd_prepbuf(&aco, buf);
+      // Ensure all the entries will be undone
+      if (curbuf->b_u_synced == false) {
+        u_sync(true);
+      }
       // Undo invisibly. This also moves the cursor!
       if (!u_undo_and_forget(count, false)) {
         abort();
       }
       aucmd_restbuf(&aco);
-
-      // Restore newhead. It is meaningless when curhead is valid, but we must
-      // restore it so that undotree() is identical before/after the preview.
-      buf->b_u_newhead = cp_bufinfo.save_b_u_newhead;
-      buf->b_u_time_cur = cp_bufinfo.save_b_u_time_cur;
     }
 
-    if (buf->b_u_curhead == NULL) {
-      buf->b_u_synced = cp_bufinfo.save_b_u_synced;
-    }
+    u_blockfree(buf);
+    cmdpreview_restore_undo(&cp_bufinfo.undo_info, buf);
 
     if (cp_bufinfo.save_changedtick != buf_get_changedtick(buf)) {
       buf_set_changedtick(buf, cp_bufinfo.save_changedtick);
@@ -2427,9 +2480,12 @@ static bool cmdpreview_may_show(CommandLineState *s)
   int cmdpreview_type = 0;
   char *cmdline = xstrdup(ccline.cmdbuff);
   const char *errormsg = NULL;
+  emsg_off++;  // Block errors when parsing the command line, and don't update v:errmsg
   if (!parse_cmdline(cmdline, &ea, &cmdinfo, &errormsg)) {
+    emsg_off--;
     goto end;
   }
+  emsg_off--;
 
   // Check if command is previewable, if not, don't attempt to show preview
   if (!(ea.argt & EX_PREVIEW)) {
@@ -3525,7 +3581,7 @@ void unputcmdline(void)
 // part will be redrawn, otherwise it will not.  If this function is called
 // twice in a row, then 'redraw' should be false and redrawcmd() should be
 // called afterwards.
-void put_on_cmdline(char *str, int len, int redraw)
+void put_on_cmdline(const char *str, int len, int redraw)
 {
   int i;
   int m;
@@ -3735,7 +3791,7 @@ static bool cmdline_paste(int regname, bool literally, bool remcr)
 // When "literally" is true, insert literally.
 // When "literally" is false, insert as typed, but don't leave the command
 // line.
-void cmdline_paste_str(char *s, int literally)
+void cmdline_paste_str(const char *s, int literally)
 {
   if (literally) {
     put_on_cmdline(s, -1, true);
@@ -3745,7 +3801,7 @@ void cmdline_paste_str(char *s, int literally)
       if (cv == Ctrl_V && s[1]) {
         s++;
       }
-      int c = mb_cptr2char_adv((const char **)&s);
+      int c = mb_cptr2char_adv(&s);
       if (cv == Ctrl_V || c == ESC || c == Ctrl_C
           || c == CAR || c == NL || c == Ctrl_L
           || (c == Ctrl_BSL && *s == Ctrl_N)) {
@@ -4342,6 +4398,7 @@ static int open_cmdwin(void)
   // Set "cmdwin_type" before any autocommands may mess things up.
   cmdwin_type = get_cmdline_type();
   cmdwin_level = ccline.level;
+  cmdwin_old_curwin = old_curwin;
 
   // Create empty command-line buffer.
   if (buf_open_scratch(0, _("[Command Line]")) == FAIL) {
@@ -4349,6 +4406,7 @@ static int open_cmdwin(void)
     win_close(curwin, true, false);
     ga_clear(&winsizes);
     cmdwin_type = 0;
+    cmdwin_old_curwin = NULL;
     return Ctrl_C;
   }
   // Command-line buffer has bufhidden=wipe, unlike a true "scratch" buffer.
@@ -4445,6 +4503,7 @@ static int open_cmdwin(void)
 
   cmdwin_type = 0;
   cmdwin_level = 0;
+  cmdwin_old_curwin = NULL;
 
   exmode_active = save_exmode;
 

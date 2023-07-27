@@ -1107,21 +1107,11 @@ retnomove:
   }
 
   bool below_window = grid == DEFAULT_GRID_HANDLE && row + wp->w_winbar_height >= wp->w_height;
-  on_status_line = (below_window)
-    ? row + wp->w_winbar_height - wp->w_height + 1 == 1
-    : false;
-
-  on_winbar = (row == -1)
-    ? wp->w_winbar_height != 0
-    : false;
-
-  on_statuscol = !below_window && !on_status_line && !on_winbar && col < win_col_off(wp)
-    ? *wp->w_p_stc != NUL
-    : false;
-
-  on_sep_line = grid == DEFAULT_GRID_HANDLE && col >= wp->w_width
-    ? col - wp->w_width + 1 == 1
-    : false;
+  on_status_line = below_window && row + wp->w_winbar_height - wp->w_height + 1 == 1;
+  on_sep_line = grid == DEFAULT_GRID_HANDLE && col >= wp->w_width && col - wp->w_width + 1 == 1;
+  on_winbar = row == -1 && wp->w_winbar_height != 0;
+  on_statuscol = !below_window && !on_status_line && !on_sep_line && !on_winbar
+                 && *wp->w_p_stc != NUL && col < win_col_off(wp);
 
   // The rightmost character of the status line might be a vertical
   // separator character if there is no connecting window to the right.
@@ -1692,7 +1682,8 @@ static int mouse_adjust_click(win_T *wp, int row, int col)
   // highlighting the second byte, not the ninth.
 
   linenr_T lnum = wp->w_cursor.lnum;
-  char *line = ml_get(lnum);
+  // Make a copy of the line, because syntax matching may free it.
+  char *line = xstrdup(ml_get(lnum));
   char *ptr = line;
   char *ptr_end;
   char *ptr_row_offset = line;  // Where we begin adjusting `ptr_end`
@@ -1733,8 +1724,8 @@ static int mouse_adjust_click(win_T *wp, int row, int col)
 
   vcol = offset;
 
-#define INCR() nudge++; ptr_end += utfc_ptr2len((char *)ptr_end)
-#define DECR() nudge--; ptr_end -= utfc_ptr2len((char *)ptr_end)
+#define INCR() nudge++; ptr_end += utfc_ptr2len(ptr_end)
+#define DECR() nudge--; ptr_end -= utfc_ptr2len(ptr_end)
 
   while (ptr < ptr_end && *ptr != NUL) {
     int cwidth = win_chartabsize(curwin, ptr, vcol);
@@ -1776,6 +1767,7 @@ static int mouse_adjust_click(win_T *wp, int row, int col)
     ptr += utfc_ptr2len(ptr);
   }
 
+  xfree(line);
   return col + nudge;
 }
 

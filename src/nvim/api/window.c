@@ -50,9 +50,18 @@ Buffer nvim_win_get_buf(Window window, Error *err)
 /// @param[out] err Error details, if any
 void nvim_win_set_buf(Window window, Buffer buffer, Error *err)
   FUNC_API_SINCE(5)
-  FUNC_API_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
-  win_set_buf(window, buffer, false, err);
+  win_T *win = find_window_by_handle(window, err);
+  buf_T *buf = find_buffer_by_handle(buffer, err);
+  if (!win || !buf) {
+    return;
+  }
+  if (cmdwin_type != 0 && (win == curwin || buf == curbuf)) {
+    api_set_error(err, kErrorTypeException, "%s", e_cmdwin);
+    return;
+  }
+  win_set_buf(win, buf, false, err);
 }
 
 /// Gets the (1,0)-indexed, buffer-relative cursor position for a given window
@@ -353,10 +362,10 @@ Boolean nvim_win_is_valid(Window window)
 /// @param[out] err Error details, if any
 void nvim_win_hide(Window window, Error *err)
   FUNC_API_SINCE(7)
-  FUNC_API_TEXTLOCK
+  FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   win_T *win = find_window_by_handle(window, err);
-  if (!win) {
+  if (!win || !can_close_in_cmdwin(win, err)) {
     return;
   }
 
@@ -388,16 +397,7 @@ void nvim_win_close(Window window, Boolean force, Error *err)
   FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
   win_T *win = find_window_by_handle(window, err);
-  if (!win) {
-    return;
-  }
-
-  if (cmdwin_type != 0) {
-    if (win == curwin) {
-      cmdwin_result = Ctrl_C;
-    } else {
-      api_set_error(err, kErrorTypeException, "%s", _(e_cmdwin));
-    }
+  if (!win || !can_close_in_cmdwin(win, err)) {
     return;
   }
 
@@ -488,15 +488,20 @@ void nvim_win_set_hl_ns(Window window, Integer ns_id, Error *err)
 ///                - end_vcol: Ending virtual column index on "end_row",
 ///                            0-based exclusive, rounded up to full screen lines.
 ///                            When omitted include the whole line.
-/// @return  The number of screen lines that the range of text occupy.
+/// @return  Dictionary containing text height information, with these keys:
+///          - all: The total number of screen lines occupied by the range.
+///          - fill: The number of diff filler or virtual lines among them.
 ///
 /// @see |virtcol()| for text width.
-Object nvim_win_text_height(Window window, Dict(win_text_height) *opts, Error *err)
+Dictionary nvim_win_text_height(Window window, Dict(win_text_height) *opts, Arena *arena,
+                                Error *err)
   FUNC_API_SINCE(12)
 {
+  Dictionary rv = arena_dict(arena, 2);
+
   win_T *const win = find_window_by_handle(window, err);
   if (!win) {
-    return NIL;
+    return rv;
   }
   buf_T *const buf = win->w_buffer;
   const linenr_T line_count = buf->b_ml.ml_line_count;
@@ -510,58 +515,65 @@ Object nvim_win_text_height(Window window, Dict(win_text_height) *opts, Error *e
 
   if (HAS_KEY(opts->start_row)) {
     VALIDATE_T("start_row", kObjectTypeInteger, opts->start_row.type, {
-      return NIL;
+      return rv;
     });
     start_lnum = (linenr_T)normalize_index(buf, opts->start_row.data.integer, false, &oob);
   }
 
   if (HAS_KEY(opts->end_row)) {
     VALIDATE_T("end_row", kObjectTypeInteger, opts->end_row.type, {
-      return NIL;
+      return rv;
     });
     end_lnum = (linenr_T)normalize_index(buf, opts->end_row.data.integer, false, &oob);
   }
 
   VALIDATE(!oob, "%s", "Line index out of bounds", {
-    return NIL;
+    return rv;
   });
   VALIDATE((start_lnum <= end_lnum), "%s", "'start_row' is higher than 'end_row'", {
-    return NIL;
+    return rv;
   });
 
   if (HAS_KEY(opts->start_vcol)) {
     VALIDATE(HAS_KEY(opts->start_row), "%s", "'start_vcol' specified without 'start_row'", {
-      return NIL;
+      return rv;
     });
     VALIDATE_T("start_vcol", kObjectTypeInteger, opts->start_vcol.type, {
-      return NIL;
+      return rv;
     });
     start_vcol = opts->start_vcol.data.integer;
     VALIDATE_RANGE((start_vcol >= 0 && start_vcol <= MAXCOL), "start_vcol", {
-      return NIL;
+      return rv;
     });
   }
 
   if (HAS_KEY(opts->end_vcol)) {
     VALIDATE(HAS_KEY(opts->end_row), "%s", "'end_vcol' specified without 'end_row'", {
-      return NIL;
+      return rv;
     });
     VALIDATE_T("end_vcol", kObjectTypeInteger, opts->end_vcol.type, {
-      return NIL;
+      return rv;
     });
     end_vcol = opts->end_vcol.data.integer;
     VALIDATE_RANGE((end_vcol >= 0 && end_vcol <= MAXCOL), "end_vcol", {
-      return NIL;
+      return rv;
     });
   }
 
   if (start_lnum == end_lnum && start_vcol >= 0 && end_vcol >= 0) {
     VALIDATE((start_vcol <= end_vcol), "%s", "'start_vcol' is higher than 'end_vcol'", {
-      return NIL;
+      return rv;
     });
   }
 
-  const int64_t res = win_text_height(win, start_lnum, start_vcol, end_lnum, end_vcol)
-                      + (HAS_KEY(opts->end_row) ? 0 : win_get_fill(win, line_count + 1));
-  return INTEGER_OBJ(res);
+  int64_t fill = 0;
+  int64_t all = win_text_height(win, start_lnum, start_vcol, end_lnum, end_vcol, &fill);
+  if (!HAS_KEY(opts->end_row)) {
+    const int64_t end_fill = win_get_fill(win, line_count + 1);
+    fill += end_fill;
+    all += end_fill;
+  }
+  PUT_C(rv, "all", INTEGER_OBJ(all));
+  PUT_C(rv, "fill", INTEGER_OBJ(fill));
+  return rv;
 }

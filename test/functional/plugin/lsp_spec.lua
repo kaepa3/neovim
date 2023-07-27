@@ -82,7 +82,7 @@ describe('LSP', function()
   describe('server_name specified', function()
     it('start_client(), stop_client()', function()
       retry(nil, 4000, function()
-        eq(1, exec_lua('return #lsp.get_active_clients()'))
+        eq(1, exec_lua('return #lsp.get_clients()'))
       end)
       eq(2, exec_lua([[
         TEST_CLIENT2 = test__start_client()
@@ -93,20 +93,20 @@ describe('LSP', function()
         return TEST_CLIENT3
       ]]))
       retry(nil, 4000, function()
-        eq(3, exec_lua('return #lsp.get_active_clients()'))
+        eq(3, exec_lua('return #lsp.get_clients()'))
       end)
 
       eq(false, exec_lua('return lsp.get_client_by_id(TEST_CLIENT1) == nil'))
       eq(false, exec_lua('return lsp.get_client_by_id(TEST_CLIENT1).is_stopped()'))
       exec_lua('return lsp.get_client_by_id(TEST_CLIENT1).stop()')
       retry(nil, 4000, function()
-        eq(2, exec_lua('return #lsp.get_active_clients()'))
+        eq(2, exec_lua('return #lsp.get_clients()'))
       end)
       eq(true, exec_lua('return lsp.get_client_by_id(TEST_CLIENT1) == nil'))
 
       exec_lua('lsp.stop_client({TEST_CLIENT2, TEST_CLIENT3})')
       retry(nil, 4000, function()
-        eq(0, exec_lua('return #lsp.get_active_clients()'))
+        eq(0, exec_lua('return #lsp.get_clients()'))
       end)
     end)
 
@@ -116,12 +116,12 @@ describe('LSP', function()
         TEST_CLIENT3 = test__start_client()
       ]])
       retry(nil, 4000, function()
-        eq(3, exec_lua('return #lsp.get_active_clients()'))
+        eq(3, exec_lua('return #lsp.get_clients()'))
       end)
       -- Stop all clients.
-      exec_lua('lsp.stop_client(lsp.get_active_clients())')
+      exec_lua('lsp.stop_client(lsp.get_clients())')
       retry(nil, 4000, function()
-        eq(0, exec_lua('return #lsp.get_active_clients()'))
+        eq(0, exec_lua('return #lsp.get_clients()'))
       end)
     end)
   end)
@@ -151,7 +151,7 @@ describe('LSP', function()
   describe('basic_init test', function()
     after_each(function()
       stop()
-      exec_lua("lsp.stop_client(lsp.get_active_clients(), true)")
+      exec_lua("lsp.stop_client(lsp.get_clients(), true)")
       exec_lua("vim.api.nvim_exec_autocmds('VimLeavePre', { modeline = false })")
     end)
 
@@ -365,6 +365,14 @@ describe('LSP', function()
             eq('v:lua.vim.lsp.tagfunc', get_buf_option("tagfunc"))
             eq('v:lua.vim.lsp.omnifunc', get_buf_option("omnifunc"))
             eq('v:lua.vim.lsp.formatexpr()', get_buf_option("formatexpr"))
+            eq('', get_buf_option("keywordprg"))
+            eq(true, exec_lua[[
+              local keymap
+              vim.api.nvim_buf_call(BUFFER, function()
+                keymap = vim.fn.maparg("K", "n", false, true)
+              end)
+              return keymap.callback == vim.lsp.buf.hover
+            ]])
             client.stop()
           end
         end;
@@ -372,6 +380,13 @@ describe('LSP', function()
           eq('', get_buf_option("tagfunc"))
           eq('', get_buf_option("omnifunc"))
           eq('', get_buf_option("formatexpr"))
+          eq('', exec_lua[[
+            local keymap
+            vim.api.nvim_buf_call(BUFFER, function()
+              keymap = vim.fn.maparg("K", "n", false, false)
+            end)
+            return keymap
+          ]])
         end;
       }
     end)
@@ -2991,7 +3006,7 @@ describe('LSP', function()
           activeSignature = -1,
           signatures = {
             {
-              documentation = "",
+              documentation = "some doc",
               label = "TestEntity.TestEntity()",
               parameters = {}
             },
@@ -2999,7 +3014,7 @@ describe('LSP', function()
         }
         return vim.lsp.util.convert_signature_help_to_markdown_lines(signature_help, 'cs', {','})
       ]]
-      local expected = {'```cs', 'TestEntity.TestEntity()', '```', ''}
+      local expected = {'```cs', 'TestEntity.TestEntity()', '```', '<text>', 'some doc', '</text>'}
       eq(expected, result)
     end)
   end)

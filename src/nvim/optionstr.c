@@ -1664,7 +1664,7 @@ const char *did_set_foldcolumn(optset_T *args)
 const char *did_set_backspace(optset_T *args FUNC_ATTR_UNUSED)
 {
   if (ascii_isdigit(*p_bs)) {
-    if (*p_bs > '3' || p_bs[1] != NUL) {
+    if (*p_bs != '2') {
       return e_invarg;
     }
   } else if (check_opt_strings(p_bs, p_bs_values, true) != OK) {
@@ -2036,10 +2036,8 @@ static void do_spelllang_source(win_T *win)
     }
   }
   if (p > q) {
-    vim_snprintf(fname, sizeof(fname), "spell/%.*s.vim", (int)(p - q), q);
-    source_runtime(fname, DIP_ALL);
-    vim_snprintf(fname, sizeof(fname), "spell/%.*s.lua", (int)(p - q), q);
-    source_runtime(fname, DIP_ALL);
+    vim_snprintf(fname, sizeof(fname), "spell/%.*s.*", (int)(p - q), q);
+    source_runtime_vim_lua(fname, DIP_ALL);
   }
 }
 

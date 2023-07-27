@@ -641,6 +641,9 @@ function protocol.make_client_capabilities()
       },
     },
     textDocument = {
+      diagnostic = {
+        dynamicRegistration = false,
+      },
       inlayHint = {
         dynamicRegistration = true,
         resolveSupport = {
@@ -825,6 +828,7 @@ function protocol.make_client_capabilities()
             return res
           end)(),
         },
+        dataSupport = true,
       },
       callHierarchy = {
         dynamicRegistration = false,
@@ -844,7 +848,6 @@ function protocol.make_client_capabilities()
             return res
           end)(),
         },
-        hierarchicalWorkspaceSymbolSupport = true,
       },
       configuration = true,
       workspaceFolders = true,

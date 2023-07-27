@@ -128,8 +128,6 @@ void tinput_init(TermInput *input, Loop *loop)
   input->in_fd = STDIN_FILENO;
   input->waiting_for_bg_response = 0;
   input->extkeys_type = kExtkeysNone;
-  // The main thread is waiting for the UI thread to call CONTINUE, so it can
-  // safely access global variables.
   input->ttimeout = (bool)p_ttimeout;
   input->ttimeoutlen = p_ttm;
   input->key_buffer = rbuffer_new(KEY_BUFFER_SIZE);
@@ -229,6 +227,44 @@ static void tinput_enqueue(TermInput *input, char *buf, size_t size)
   rbuffer_write(input->key_buffer, buf, size);
 }
 
+/// Handle TERMKEY_KEYMOD_* modifiers, i.e. Shift, Alt and Ctrl.
+///
+/// @return  The number of bytes written into "buf", excluding the final NUL.
+static size_t handle_termkey_modifiers(TermKeyKey *key, char *buf, size_t buflen)
+  FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  size_t len = 0;
+  if (key->modifiers & TERMKEY_KEYMOD_SHIFT) {  // Shift
+    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "S-");
+  }
+  if (key->modifiers & TERMKEY_KEYMOD_ALT) {  // Alt
+    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "A-");
+  }
+  if (key->modifiers & TERMKEY_KEYMOD_CTRL) {  // Ctrl
+    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "C-");
+  }
+  assert(len < buflen);
+  return len;
+}
+
+/// Handle modifiers not handled by libtermkey.
+/// Currently only Super ("D-") and Meta ("T-") are supported in Nvim.
+///
+/// @return  The number of bytes written into "buf", excluding the final NUL.
+static size_t handle_more_modifiers(TermKeyKey *key, char *buf, size_t buflen)
+  FUNC_ATTR_WARN_UNUSED_RESULT
+{
+  size_t len = 0;
+  if (key->modifiers & 8) {  // Super
+    len += (size_t)snprintf(buf + len, buflen - len, "D-");
+  }
+  if (key->modifiers & 32) {  // Meta
+    len += (size_t)snprintf(buf + len, buflen - len, "T-");
+  }
+  assert(len < buflen);
+  return len;
+}
+
 static void handle_kitty_key_protocol(TermInput *input, TermKeyKey *key)
 {
   const char *name = map_get(int, cstr_t)(&kitty_key_map, (int)key->code.codepoint);
@@ -236,16 +272,10 @@ static void handle_kitty_key_protocol(TermInput *input, TermKeyKey *key)
     char buf[64];
     size_t len = 0;
     buf[len++] = '<';
-    if (key->modifiers & TERMKEY_KEYMOD_SHIFT) {
-      len += (size_t)snprintf(buf + len, sizeof(buf) - len, "S-");
-    }
-    if (key->modifiers & TERMKEY_KEYMOD_ALT) {
-      len += (size_t)snprintf(buf + len, sizeof(buf) - len, "A-");
-    }
-    if (key->modifiers & TERMKEY_KEYMOD_CTRL) {
-      len += (size_t)snprintf(buf + len, sizeof(buf) - len, "C-");
-    }
+    len += handle_termkey_modifiers(key, buf + len, sizeof(buf) - len);
+    len += handle_more_modifiers(key, buf + len, sizeof(buf) - len);
     len += (size_t)snprintf(buf + len, sizeof(buf) - len, "%s>", name);
+    assert(len < sizeof(buf));
     tinput_enqueue(input, buf, len);
   }
 }
@@ -270,6 +300,7 @@ static void forward_simple_utf8(TermInput *input, TermKeyKey *key)
     ptr++;
   }
 
+  assert(len < sizeof(buf));
   tinput_enqueue(input, buf, len);
 }
 
@@ -297,7 +328,7 @@ static void forward_modified_utf8(TermInput *input, TermKeyKey *key)
     if ((key->modifiers & TERMKEY_KEYMOD_CTRL)
         && !(key->modifiers & TERMKEY_KEYMOD_SHIFT)
         && ASCII_ISUPPER(key->code.codepoint)) {
-      assert(len <= 62);
+      assert(len + 2 < sizeof(buf));
       // Make room for the S-
       memmove(buf + 3, buf + 1, len - 1);
       buf[1] = 'S';
@@ -306,6 +337,16 @@ static void forward_modified_utf8(TermInput *input, TermKeyKey *key)
     }
   }
 
+  char more_buf[25];
+  size_t more_len = handle_more_modifiers(key, more_buf, sizeof(more_buf));
+  if (more_len > 0) {
+    assert(len + more_len < sizeof(buf));
+    memmove(buf + 1 + more_len, buf + 1, len - 1);
+    memcpy(buf + 1, more_buf, more_len);
+    len += more_len;
+  }
+
+  assert(len < sizeof(buf));
   tinput_enqueue(input, buf, len);
 }
 
@@ -329,9 +370,10 @@ static void forward_mouse_event(TermInput *input, TermKeyKey *key)
 
   if (ev == TERMKEY_MOUSE_UNKNOWN && !(key->code.mouse[0] & 0x20)) {
     int code = key->code.mouse[0] & ~0x3c;
+    // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h3-Other-buttons
     if (code == 66 || code == 67) {
       ev = TERMKEY_MOUSE_PRESS;
-      button = code - 60;
+      button = code + 4 - 64;
     }
   }
 
@@ -343,17 +385,9 @@ static void forward_mouse_event(TermInput *input, TermKeyKey *key)
   row--; col--;  // Termkey uses 1-based coordinates
   buf[len++] = '<';
 
-  if (key->modifiers & TERMKEY_KEYMOD_SHIFT) {
-    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "S-");
-  }
-
-  if (key->modifiers & TERMKEY_KEYMOD_CTRL) {
-    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "C-");
-  }
-
-  if (key->modifiers & TERMKEY_KEYMOD_ALT) {
-    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "A-");
-  }
+  len += handle_termkey_modifiers(key, buf + len, sizeof(buf) - len);
+  // Doesn't actually work because there are only 3 bits (0x1c) for modifiers.
+  // len += handle_more_modifiers(key, buf + len, sizeof(buf) - len);
 
   if (button == 1) {
     len += (size_t)snprintf(buf + len, sizeof(buf) - len, "Left");
@@ -390,6 +424,7 @@ static void forward_mouse_event(TermInput *input, TermKeyKey *key)
   }
 
   len += (size_t)snprintf(buf + len, sizeof(buf) - len, "><%d,%d>", col, row);
+  assert(len < sizeof(buf));
   tinput_enqueue(input, buf, len);
 }
 

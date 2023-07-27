@@ -847,7 +847,7 @@ static void expand_path_option(char *curdir, garray_T *gap)
   char *buf = xmalloc(MAXPATHL);
 
   while (*path_option != NUL) {
-    copy_option_part(&path_option, buf, MAXPATHL, " ,");
+    copy_option_part(&path_option, buf, MAXPATHL, ",");
 
     if (buf[0] == '.' && (buf[1] == NUL || vim_ispathsep(buf[1]))) {
       // Relative to current buffer:
@@ -1810,7 +1810,7 @@ bool path_with_extension(const char *path, const char *extension)
   if (!last_dot) {
     return false;
   }
-  return strcmp(last_dot + 1, extension) == 0;
+  return mb_strcmp_ic((bool)p_fic, last_dot + 1, extension) == 0;
 }
 
 /// Return true if "name" is a full (absolute) path name or URL.
