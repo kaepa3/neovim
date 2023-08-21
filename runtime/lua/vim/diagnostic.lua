@@ -94,11 +94,22 @@ local function filter_by_severity(severity, diagnostics)
     end, diagnostics)
   end
 
-  local min_severity = to_severity(severity.min) or M.severity.HINT
-  local max_severity = to_severity(severity.max) or M.severity.ERROR
+  if severity.min or severity.max then
+    local min_severity = to_severity(severity.min) or M.severity.HINT
+    local max_severity = to_severity(severity.max) or M.severity.ERROR
+
+    return vim.tbl_filter(function(t)
+      return t.severity <= min_severity and t.severity >= max_severity
+    end, diagnostics)
+  end
+
+  local severities = {}
+  for _, s in ipairs(severity) do
+    severities[to_severity(s)] = true
+  end
 
   return vim.tbl_filter(function(t)
-    return t.severity <= min_severity and t.severity >= max_severity
+    return severities[t.severity]
   end, diagnostics)
 end
 
@@ -562,11 +573,13 @@ end
 ---@param opts table|nil When omitted or "nil", retrieve the current configuration. Otherwise, a
 ---                      configuration table with the following keys:
 ---       - underline: (default true) Use underline for diagnostics. Options:
----                    * severity: Only underline diagnostics matching the given severity
----                    |diagnostic-severity|
+---                    * severity: Only underline diagnostics matching the given
+---                    severity |diagnostic-severity|
 ---       - virtual_text: (default true) Use virtual text for diagnostics. If multiple diagnostics
 ---                       are set for a namespace, one prefix per diagnostic + the last diagnostic
----                       message are shown.
+---                       message are shown. In addition to the options listed below, the
+---                       "virt_text" options of |nvim_buf_set_extmark()| may also be used here
+---                       (e.g. "virt_text_pos" and "hl_mode").
 ---                       Options:
 ---                       * severity: Only show virtual text for diagnostics matching the given
 ---                       severity |diagnostic-severity|
@@ -596,8 +609,8 @@ end
 ---                         end
 ---                       </pre>
 ---       - signs: (default true) Use signs for diagnostics. Options:
----                * severity: Only show signs for diagnostics matching the given severity
----                |diagnostic-severity|
+---                * severity: Only show signs for diagnostics matching the given
+---                severity |diagnostic-severity|
 ---                * priority: (number, default 10) Base priority to use for signs. When
 ---                {severity_sort} is used, the priority of a sign is adjusted based on
 ---                its severity. Otherwise, all signs use the same priority.
@@ -723,17 +736,17 @@ function M.get_namespaces()
 end
 
 ---@class Diagnostic
----@field bufnr integer
+---@field bufnr? integer
 ---@field lnum integer 0-indexed
----@field end_lnum nil|integer 0-indexed
+---@field end_lnum? integer 0-indexed
 ---@field col integer 0-indexed
----@field end_col nil|integer 0-indexed
----@field severity DiagnosticSeverity
+---@field end_col? integer 0-indexed
+---@field severity? DiagnosticSeverity
 ---@field message string
----@field source nil|string
----@field code nil|string
----@field _tags { deprecated: boolean, unnecessary: boolean}
----@field user_data nil|any arbitrary data plugins can add
+---@field source? string
+---@field code? string
+---@field _tags? { deprecated: boolean, unnecessary: boolean}
+---@field user_data? any arbitrary data plugins can add
 
 --- Get current diagnostics.
 ---
@@ -819,13 +832,13 @@ end
 ---
 ---@param opts table|nil Configuration table with the following keys:
 ---         - namespace: (number) Only consider diagnostics from the given namespace.
----         - cursor_position: (cursor position) Cursor position as a (row, col) tuple. See
----                          |nvim_win_get_cursor()|. Defaults to the current cursor position.
+---         - cursor_position: (cursor position) Cursor position as a (row, col) tuple.
+---                          See |nvim_win_get_cursor()|. Defaults to the current cursor position.
 ---         - wrap: (boolean, default true) Whether to loop around file or not. Similar to 'wrapscan'.
 ---         - severity: See |diagnostic-severity|.
 ---         - float: (boolean or table, default true) If "true", call |vim.diagnostic.open_float()|
----                    after moving. If a table, pass the table as the {opts} parameter to
----                    |vim.diagnostic.open_float()|. Unless overridden, the float will show
+---                    after moving. If a table, pass the table as the {opts} parameter
+---                    to |vim.diagnostic.open_float()|. Unless overridden, the float will show
 ---                    diagnostics at the new cursor position (as if "cursor" were passed to
 ---                    the "scope" option).
 ---         - win_id: (number, default 0) Window ID
@@ -1008,8 +1021,11 @@ M.handlers.virtual_text = {
 
       if virt_texts then
         api.nvim_buf_set_extmark(bufnr, virt_text_ns, line, 0, {
-          hl_mode = 'combine',
+          hl_mode = opts.virtual_text.hl_mode or 'combine',
           virt_text = virt_texts,
+          virt_text_pos = opts.virtual_text.virt_text_pos,
+          virt_text_hide = opts.virtual_text.virt_text_hide,
+          virt_text_win_col = opts.virtual_text.virt_text_win_col,
         })
       end
     end
@@ -1213,8 +1229,8 @@ end
 
 --- Show diagnostics in a floating window.
 ---
----@param opts table|nil Configuration table with the same keys as
----            |vim.lsp.util.open_floating_preview()| in addition to the following:
+---@param opts table|nil Configuration table with the same keys
+---            as |vim.lsp.util.open_floating_preview()| in addition to the following:
 ---            - bufnr: (number) Buffer number to show diagnostics from.
 ---                     Defaults to the current buffer.
 ---            - namespace: (number) Limit diagnostics to the given namespace
@@ -1227,16 +1243,15 @@ end
 ---                   otherwise, a (row, col) tuple.
 ---            - severity_sort: (default false) Sort diagnostics by severity. Overrides the setting
 ---                             from |vim.diagnostic.config()|.
----            - severity: See |diagnostic-severity|. Overrides the setting from
----                        |vim.diagnostic.config()|.
+---            - severity: See |diagnostic-severity|. Overrides the setting
+---                        from |vim.diagnostic.config()|.
 ---            - header: (string or table) String to use as the header for the floating window. If a
 ---                      table, it is interpreted as a [text, hl_group] tuple. Overrides the setting
 ---                      from |vim.diagnostic.config()|.
 ---            - source: (boolean or string) Include the diagnostic source in the message.
 ---                      Use "if_many" to only show sources if there is more than one source of
 ---                      diagnostics in the buffer. Otherwise, any truthy value means to always show
----                      the diagnostic source. Overrides the setting from
----                      |vim.diagnostic.config()|.
+---                      the diagnostic source. Overrides the setting from |vim.diagnostic.config()|.
 ---            - format: (function) A function that takes a diagnostic as input and returns a
 ---                      string. The return value is the text used to display the diagnostic.
 ---                      Overrides the setting from |vim.diagnostic.config()|.
@@ -1692,8 +1707,7 @@ end
 
 --- Convert a list of quickfix items to a list of diagnostics.
 ---
----@param list table A list of quickfix items from |getqflist()| or
----            |getloclist()|.
+---@param list table[] List of quickfix items from |getqflist()| or |getloclist()|.
 ---@return Diagnostic[] array of |diagnostic-structure|
 function M.fromqflist(list)
   vim.validate({

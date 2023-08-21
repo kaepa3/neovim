@@ -1627,7 +1627,8 @@ func Test_count()
   call assert_equal(2, count("fooooo", "oo"))
   call assert_equal(0, count("foo", ""))
 
-  call assert_fails('call count(0, 0)', 'E712:')
+  call assert_fails('call count(0, 0)', 'E706:')
+  call assert_fails('call count("", "", {})', ['E728:', 'E728:'])
 endfunc
 
 func Test_changenr()
@@ -2006,6 +2007,32 @@ func Test_setbufvar_options()
   bwipe!
   call win_gotoid(dum1_id)
   bwipe!
+endfunc
+
+func Test_setbufvar_keep_window_title()
+  CheckRunVimInTerminal
+  if !has('title') || empty(&t_ts)
+    throw "Skipped: can't get/set title"
+  endif
+
+  let lines =<< trim END
+      set title
+      edit Xa.txt
+      let g:buf = bufadd('Xb.txt')
+      inoremap <F2> <C-R>=setbufvar(g:buf, '&autoindent', 1) ?? ''<CR>
+  END
+  call writefile(lines, 'Xsetbufvar')
+  let buf = RunVimInTerminal('-S Xsetbufvar', {})
+  call WaitForAssert({-> assert_match('Xa.txt', term_gettitle(buf))}, 1000)
+
+  call term_sendkeys(buf, "i\<F2>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "\<Esc>")
+  call TermWait(buf)
+  call assert_match('Xa.txt', term_gettitle(buf))
+
+  call StopVimInTerminal(buf)
+  call delete('Xsetbufvar')
 endfunc
 
 func Test_redo_in_nested_functions()
@@ -2564,6 +2591,67 @@ func Test_bufadd_bufload()
   call delete('XotherName')
 endfunc
 
+func Test_state()
+  CheckRunVimInTerminal
+
+  let getstate = ":echo 'state: ' .. g:state .. '; mode: ' .. g:mode\<CR>"
+
+  let lines =<< trim END
+	call setline(1, ['one', 'two', 'three'])
+	map ;; gg
+	set complete=.
+	func RunTimer()
+	  call timer_start(10, {id -> execute('let g:state = state()') .. execute('let g:mode = mode()')})
+	endfunc
+	au Filetype foobar let g:state = state()|let g:mode = mode()
+  END
+  call writefile(lines, 'XState')
+  let buf = RunVimInTerminal('-S XState', #{rows: 6})
+
+  " Using a ":" command Vim is busy, thus "S" is returned
+  call term_sendkeys(buf, ":echo 'state: ' .. state() .. '; mode: ' .. mode()\<CR>")
+  call WaitForAssert({-> assert_match('state: S; mode: n', term_getline(buf, 6))}, 1000)
+  call term_sendkeys(buf, ":\<CR>")
+
+  " Using a timer callback
+  call term_sendkeys(buf, ":call RunTimer()\<CR>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: c; mode: n', term_getline(buf, 6))}, 1000)
+
+  " Halfway a mapping
+  call term_sendkeys(buf, ":call RunTimer()\<CR>;")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, ";")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: mSc; mode: n', term_getline(buf, 6))}, 1000)
+
+  " Insert mode completion (bit slower on Mac)
+  call term_sendkeys(buf, ":call RunTimer()\<CR>Got\<C-N>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, "\<Esc>")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: aSc; mode: i', term_getline(buf, 6))}, 1000)
+
+  " Autocommand executing
+  call term_sendkeys(buf, ":set filetype=foobar\<CR>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: xS; mode: n', term_getline(buf, 6))}, 1000)
+
+  " Todo: "w" - waiting for ch_evalexpr()
+
+  " messages scrolled
+  call term_sendkeys(buf, ":call RunTimer()\<CR>:echo \"one\\ntwo\\nthree\"\<CR>")
+  call TermWait(buf, 25)
+  call term_sendkeys(buf, "\<CR>")
+  call term_sendkeys(buf, getstate)
+  call WaitForAssert({-> assert_match('state: Scs; mode: r', term_getline(buf, 6))}, 1000)
+
+  call StopVimInTerminal(buf)
+  call delete('XState')
+endfunc
+
 func Test_range()
   " destructuring
   let [x, y] = range(2)
@@ -3092,12 +3180,32 @@ endfunc
 
 " Test for virtcol()
 func Test_virtcol()
-  enew!
+  new
   call setline(1, "the\tquick\tbrown\tfox")
   norm! 4|
   call assert_equal(8, virtcol('.'))
   call assert_equal(8, virtcol('.', v:false))
   call assert_equal([4, 8], virtcol('.', v:true))
+
+  let w = winwidth(0)
+  call setline(2, repeat('a', w + 2))
+  let win_nosbr = win_getid()
+  split
+  setlocal showbreak=!!
+  let win_sbr = win_getid()
+  call assert_equal([w, w], virtcol([2, w], v:true, win_nosbr))
+  call assert_equal([w + 1, w + 1], virtcol([2, w + 1], v:true, win_nosbr))
+  call assert_equal([w + 2, w + 2], virtcol([2, w + 2], v:true, win_nosbr))
+  call assert_equal([w, w], virtcol([2, w], v:true, win_sbr))
+  call assert_equal([w + 3, w + 3], virtcol([2, w + 1], v:true, win_sbr))
+  call assert_equal([w + 4, w + 4], virtcol([2, w + 2], v:true, win_sbr))
+  close
+
+  call assert_equal(0, virtcol(''))
+  call assert_equal([0, 0], virtcol('', v:true))
+  call assert_equal(0, virtcol('.', v:false, 5001))
+  call assert_equal([0, 0], virtcol('.', v:true, 5001))
+
   bwipe!
 endfunc
 
@@ -3125,6 +3233,26 @@ func Test_delfunc_while_listing()
   call term_sendkeys(buf, "\<CR>")
 
   call StopVimInTerminal(buf)
+endfunc
+
+" Test for the reverse() function with a string
+func Test_string_reverse()
+  let lines =<< trim END
+    call assert_equal('', reverse(v:_null_string))
+    for [s1, s2] in [['', ''], ['a', 'a'], ['ab', 'ba'], ['abc', 'cba'],
+                   \ ['abcd', 'dcba'], ['«-«-»-»', '»-»-«-«'],
+                   \ ['🇦', '🇦'], ['🇦🇧', '🇧🇦'], ['🇦🇧🇨', '🇨🇧🇦'],
+                   \ ['🇦«🇧-🇨»🇩', '🇩»🇨-🇧«🇦']]
+      call assert_equal(s2, reverse(s1))
+    endfor
+  END
+  call CheckLegacyAndVim9Success(lines)
+
+  " test in latin1 encoding
+  let save_enc = &encoding
+  " set encoding=latin1
+  call assert_equal('dcba', reverse('abcd'))
+  let &encoding = save_enc
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

@@ -353,6 +353,24 @@ func RunTheTest(test)
   endif
 endfunc
 
+function Delete_Xtest_Files()
+  for file in glob('X*', v:false, v:true)
+    if file ==? 'XfakeHOME'
+      " Clean up files created by setup.vim
+      call delete('XfakeHOME', 'rf')
+      continue
+    endif
+    " call add(v:errors, file .. " exists when it shouldn't, trying to delete it!")
+    call delete(file)
+    if !empty(glob(file, v:false, v:true))
+      " call add(v:errors, file .. " still exists after trying to delete it!")
+      if has('unix')
+        call system('rm -rf  ' .. file)
+      endif
+    endif
+  endfor
+endfunc
+
 func AfterTheTest(func_name)
   if len(v:errors) > 0
     if match(s:may_fail_list, '^' .. a:func_name) >= 0
@@ -381,12 +399,10 @@ endfunc
 " This function can be called by a test if it wants to abort testing.
 func FinishTesting()
   call AfterTheTest('')
+  call Delete_Xtest_Files()
 
   " Don't write viminfo on exit.
   set viminfo=
-
-  " Clean up files created by setup.vim
-  call delete('XfakeHOME', 'rf')
 
   if s:fail == 0 && s:fail_expected == 0
     " Success, create the .res file so that make knows it's done.
@@ -473,33 +489,6 @@ else
   endtry
 endif
 
-" Names of flaky tests.
-let s:flaky_tests = [
-      \ 'Test_autocmd_SafeState()',
-      \ 'Test_cursorhold_insert()',
-      \ 'Test_exit_callback_interval()',
-      \ 'Test_map_timeout_with_timer_interrupt()',
-      \ 'Test_out_cb()',
-      \ 'Test_popup_and_window_resize()',
-      \ 'Test_quoteplus()',
-      \ 'Test_quotestar()',
-      \ 'Test_reltime()',
-      \ 'Test_state()',
-      \ 'Test_term_mouse_double_click_to_create_tab()',
-      \ 'Test_term_mouse_multiple_clicks_to_visually_select()',
-      \ 'Test_terminal_composing_unicode()',
-      \ 'Test_terminal_redir_file()',
-      \ 'Test_terminal_tmap()',
-      \ 'Test_timer_oneshot()',
-      \ 'Test_timer_paused()',
-      \ 'Test_timer_repeat_many()',
-      \ 'Test_timer_repeat_three()',
-      \ 'Test_timer_stop_all_in_callback()',
-      \ 'Test_timer_stop_in_callback()',
-      \ 'Test_timer_with_partial_callback()',
-      \ 'Test_termwinscroll()',
-      \ ]
-
 " Delete the .res file, it may change behavior for completion
 call delete(fnamemodify(g:testname, ':r') .. '.res')
 
@@ -549,8 +538,7 @@ for g:testfunc in sort(s:tests)
   " - it fails five times (with a different message)
   if len(v:errors) > 0
         \ && $TEST_NO_RETRY == ''
-        \ && (index(s:flaky_tests, g:testfunc) >= 0
-        \      || g:test_is_flaky)
+        \ && g:test_is_flaky
     while 1
       call add(s:messages, 'Found errors in ' .. g:testfunc .. ':')
       call extend(s:messages, v:errors)

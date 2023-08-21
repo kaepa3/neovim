@@ -1101,7 +1101,6 @@ struct window_S {
                                     ///< can be different from w_cursor.lnum
                                     ///< for closed folds.
   linenr_T w_last_cursorline;       ///< where last 'cursorline' was drawn
-  pos_T w_last_cursormoved;         ///< for CursorMoved event
 
   // the next seven are used to update the visual part
   char w_old_visual_mode;           ///< last known VIsual_mode
@@ -1195,6 +1194,7 @@ struct window_S {
   int w_hsep_height;                // Number of horizontal separator rows (0 or 1)
   int w_vsep_width;                 // Number of vertical separator columns (0 or 1).
   pos_save_T w_save_cursor;         // backup of cursor pos and topline
+  bool w_do_win_fix_cursor;         // if true cursor may be invalid
 
   int w_winrow_off;  ///< offset from winrow to the inner window area
   int w_wincol_off;  ///< offset from wincol to the inner window area

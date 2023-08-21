@@ -82,6 +82,7 @@ static unsigned last_prompt_id = 0;
 typedef struct {
   colnr_T vs_curswant;
   colnr_T vs_leftcol;
+  colnr_T vs_skipcol;
   linenr_T vs_topline;
   int vs_topfill;
   linenr_T vs_botline;
@@ -208,6 +209,7 @@ static void save_viewstate(win_T *wp, viewstate_T *vs)
 {
   vs->vs_curswant = wp->w_curswant;
   vs->vs_leftcol = wp->w_leftcol;
+  vs->vs_skipcol = wp->w_skipcol;
   vs->vs_topline = wp->w_topline;
   vs->vs_topfill = wp->w_topfill;
   vs->vs_botline = wp->w_botline;
@@ -219,6 +221,7 @@ static void restore_viewstate(win_T *wp, viewstate_T *vs)
 {
   wp->w_curswant = vs->vs_curswant;
   wp->w_leftcol = vs->vs_leftcol;
+  wp->w_skipcol = vs->vs_skipcol;
   wp->w_topline = vs->vs_topline;
   wp->w_topfill = vs->vs_topfill;
   wp->w_botline = vs->vs_botline;
@@ -940,6 +943,8 @@ theend:
 
 static int command_line_check(VimState *state)
 {
+  CommandLineState *s = (CommandLineState *)state;
+
   redir_off = true;        // Don't redirect the typed command.
   // Repeated, because a ":redir" inside
   // completion may switch it on.
@@ -948,6 +953,9 @@ static int command_line_check(VimState *state)
   did_emsg = false;        // There can't really be a reason why an error
                            // that occurs while typing a command should
                            // cause the command not to be executed.
+
+  // Trigger SafeState if nothing is pending.
+  may_trigger_safestate(s->xpc.xp_numfiles <= 0);
 
   cursorcmd();             // set the cursor on the right spot
   ui_cursor_shape();
@@ -4162,11 +4170,19 @@ static char *get_cmdline_completion(void)
   }
 
   char *cmd_compl = get_user_cmd_complete(p->xpc, p->xpc->xp_context);
-  if (cmd_compl != NULL) {
-    return xstrdup(cmd_compl);
+  if (cmd_compl == NULL) {
+    return NULL;
   }
 
-  return NULL;
+  if (p->xpc->xp_context == EXPAND_USER_LIST
+      || p->xpc->xp_context == EXPAND_USER_DEFINED) {
+    size_t buflen = strlen(cmd_compl) + strlen(p->xpc->xp_arg) + 2;
+    char *buffer = xmalloc(buflen);
+    snprintf(buffer, buflen, "%s,%s", cmd_compl, p->xpc->xp_arg);
+    return buffer;
+  }
+
+  return xstrdup(cmd_compl);
 }
 
 /// "getcmdcompltype()" function

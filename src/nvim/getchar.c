@@ -885,6 +885,7 @@ int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
   if (++typebuf.tb_change_cnt == 0) {
     typebuf.tb_change_cnt = 1;
   }
+  state_no_longer_safe("ins_typebuf()");
 
   addlen = (int)strlen(str);
 
@@ -1145,6 +1146,13 @@ static void gotchars(const uint8_t *chars, size_t len)
   // Since characters have been typed, consider the following to be in
   // another mapping.  Search string will be kept in history.
   maptick++;
+}
+
+/// Record a <Nop> key.
+void gotchars_nop(void)
+{
+  uint8_t nop_buf[3] = { K_SPECIAL, KS_EXTRA, KE_NOP };
+  gotchars(nop_buf, 3);
 }
 
 /// Undo the last gotchars() for "len" bytes.  To be used when putting a typed
@@ -1617,6 +1625,12 @@ int vgetc(void)
 
   // Execute Lua on_key callbacks.
   nlua_execute_on_key(c);
+
+  // Need to process the character before we know it's safe to do something
+  // else.
+  if (c != K_IGNORE) {
+    state_no_longer_safe("key typed");
+  }
 
   return c;
 }
@@ -2745,14 +2759,9 @@ static int vgetorpeek(bool advance)
   }
 
   if (timedout && c == ESC) {
-    uint8_t nop_buf[3];
-
     // When recording there will be no timeout.  Add a <Nop> after the ESC
     // to avoid that it forms a key code with following characters.
-    nop_buf[0] = K_SPECIAL;
-    nop_buf[1] = KS_EXTRA;
-    nop_buf[2] = KE_NOP;
-    gotchars(nop_buf, 3);
+    gotchars_nop();
   }
 
   vgetc_busy--;

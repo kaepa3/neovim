@@ -747,7 +747,7 @@ M.funcs = {
       refers to an existing file then the file is read.  Otherwise
       the buffer will be empty.  If the buffer was already loaded
       then there is no change.  If the buffer is not related to a
-      file the no file is read (e.g., when 'buftype' is "nofile").
+      file then no file is read (e.g., when 'buftype' is "nofile").
       If there is an existing swap file for the file of the buffer,
       there will be no dialog, the buffer will be loaded anyway.
       The {buf} argument is used like with |bufexists()|.
@@ -796,6 +796,8 @@ M.funcs = {
       with a listed buffer, that one is returned.  Next unlisted
       buffers are searched for.
       If the {buf} is a String, but you want to use it as a buffer
+      number, force it to be a Number by adding zero to it: >vim
+      	echo bufname("3" + 0)
       <If the buffer doesn't exist, or doesn't have a name, an empty
       string is returned. >vim
       	echo bufname("#")	" alternate buffer name
@@ -2539,10 +2541,11 @@ M.funcs = {
     args = 2,
     base = 1,
     desc = [=[
-      {expr1} must be a |List|, |Blob|, or a |Dictionary|.
+      {expr1} must be a |List|, |String|, |Blob| or |Dictionary|.
       For each item in {expr1} evaluate {expr2} and when the result
-      is zero remove the item from the |List| or |Dictionary|. For a
-      |Blob| each byte is removed.
+      is zero or false remove the item from the |List| or
+      |Dictionary|.  Similarly for each byte in a |Blob| and each
+      character in a |String|.
 
       {expr2} must be a |string| or |Funcref|.
 
@@ -2550,8 +2553,8 @@ M.funcs = {
       of the current item.  For a |Dictionary| |v:key| has the key
       of the current item and for a |List| |v:key| has the index of
       the current item.  For a |Blob| |v:key| has the index of the
-      current byte.
-
+      current byte. For a |String| |v:key| has the index of the
+      current character.
       Examples: >vim
       	call filter(mylist, 'v:val !~ "OLD"')
       <Removes the items where "OLD" appears. >vim
@@ -2578,14 +2581,16 @@ M.funcs = {
       <If you do not use "val" you can leave it out: >vim
       	call filter(myList, {idx -> idx % 2 == 1})
       <
-      The operation is done in-place.  If you want a |List| or
-      |Dictionary| to remain unmodified make a copy first: >vim
+      For a |List| and a |Dictionary| the operation is done
+      in-place.  If you want it to remain unmodified make a copy
+      first: >vim
       	let l = filter(copy(mylist), 'v:val =~ "KEEP"')
 
-      <Returns {expr1}, the |List|, |Blob| or |Dictionary| that was
-      filtered.  When an error is encountered while evaluating
-      {expr2} no further items in {expr1} are processed.  When
-      {expr2} is a Funcref errors inside a function are ignored,
+      <Returns {expr1}, the |List| or |Dictionary| that was filtered,
+      or a new |Blob| or |String|.
+      When an error is encountered while evaluating {expr2} no
+      further items in {expr1} are processed.
+      When {expr2} is a Funcref errors inside a function are ignored,
       unless it was defined with the "abort" flag.
 
     ]=],
@@ -2898,6 +2903,9 @@ M.funcs = {
     signature = 'foldtextresult({lnum})',
   },
   foreground = {
+    args = 0,
+    params = {},
+    signature = '',
     lua = false,
   },
   fullcommand = {
@@ -3574,7 +3582,9 @@ M.funcs = {
       color		color schemes
       command		Ex command
       compiler	compilers
-      diff_buffer     |:diffget| and |:diffput| completion
+      custom,{func}	custom completion, defined via {func}
+      customlist,{func} custom completion, defined via {func}
+      diff_buffer	|:diffget| and |:diffput| completion
       dir		directory names
       environment	environment variable names
       event		autocommand events
@@ -4002,7 +4012,7 @@ M.funcs = {
   },
   getmousepos = {
     desc = [=[
-      Returns a Dictionary with the last known position of the
+      Returns a |Dictionary| with the last known position of the
       mouse.  This can be used in a mapping for a mouse click.  The
       items are:
       	screenrow	screen row
@@ -4102,6 +4112,9 @@ M.funcs = {
       	text	description of the error
       	type	type of the error, 'E', '1', etc.
       	valid	|TRUE|: recognized error message
+      	user_data
+      		custom data associated with the item, can be
+      		any type.
 
       When there is no error list or it's empty, an empty list is
       returned. Quickfix list entries with a non-existing buffer
@@ -5057,6 +5070,7 @@ M.funcs = {
     args = 1,
     base = 1,
     desc = [=[
+      The result is a Number, which is indent of line {lnum} in the
       current buffer.  The indent is counted in spaces, the value
       of 'tabstop' is relevant.  {lnum} is used just like in
       |getline()|.
@@ -5403,6 +5417,9 @@ M.funcs = {
     base = 1,
     desc = [=[
       Bitwise invert.  The argument is converted to a number.  A
+      List, Dict or Float argument causes an error.  Example: >vim
+      	let bits = invert(bits)
+      <
     ]=],
     name = 'invert',
     params = { { 'expr', 'any' } },
@@ -5775,6 +5792,7 @@ M.funcs = {
     args = 1,
     base = 1,
     desc = [=[
+      The result is a Number, which is the length of the argument.
       When {expr} is a String or a Number the length in bytes is
       used, as with |strlen()|.
       When {expr} is a |List| the number of items in the |List| is
@@ -6042,17 +6060,23 @@ M.funcs = {
     args = 2,
     base = 1,
     desc = [=[
-      {expr1} must be a |List|, |Blob| or |Dictionary|.
-      Replace each item in {expr1} with the result of evaluating
-      {expr2}.  For a |Blob| each byte is replaced.
+      {expr1} must be a |List|, |String|, |Blob| or |Dictionary|.
+      When {expr1} is a |List|| or |Dictionary|, replace each
+      item in {expr1} with the result of evaluating {expr2}.
+      For a |Blob| each byte is replaced.
+      For a |String|, each character, including composing
+      characters, is replaced.
+      If the item type changes you may want to use |mapnew()| to
+      create a new List or Dictionary.
 
-      {expr2} must be a |string| or |Funcref|.
+      {expr2} must be a |String| or |Funcref|.
 
-      If {expr2} is a |string|, inside {expr2} |v:val| has the value
+      If {expr2} is a |String|, inside {expr2} |v:val| has the value
       of the current item.  For a |Dictionary| |v:key| has the key
       of the current item and for a |List| |v:key| has the index of
       the current item.  For a |Blob| |v:key| has the index of the
-      current byte.
+      current byte. For a |String| |v:key| has the index of the
+      current character.
       Example: >vim
       	call map(mylist, '"> " .. v:val .. " <"')
       <This puts "> " before and " <" after each item in "mylist".
@@ -6078,14 +6102,15 @@ M.funcs = {
       <If you do not use "key" you can use a short name: >vim
       	call map(myDict, {_, val -> 'item: ' .. val})
       <
-      The operation is done in-place.  If you want a |List| or
-      |Dictionary| to remain unmodified make a copy first: >vim
+      The operation is done in-place for a |List| and |Dictionary|.
+      If you want it to remain unmodified make a copy first: >vim
       	let tlist = map(copy(mylist), ' v:val .. "\t"')
 
-      <Returns {expr1}, the |List|, |Blob| or |Dictionary| that was
-      filtered.  When an error is encountered while evaluating
-      {expr2} no further items in {expr1} are processed.  When
-      {expr2} is a Funcref errors inside a function are ignored,
+      <Returns {expr1}, the |List| or |Dictionary| that was filtered,
+      or a new |Blob| or |String|.
+      When an error is encountered while evaluating {expr2} no
+      further items in {expr1} are processed.
+      When {expr2} is a Funcref errors inside a function are ignored,
       unless it was defined with the "abort" flag.
 
     ]=],
@@ -6206,6 +6231,19 @@ M.funcs = {
     name = 'mapcheck',
     params = { { 'name', 'string' }, { 'mode', 'string' }, { 'abbr', 'any' } },
     signature = 'mapcheck({name} [, {mode} [, {abbr}]])',
+  },
+  mapnew = {
+    args = 2,
+    base = 1,
+    desc = [=[
+      Like |map()| but instead of replacing items in {expr1} a new
+      List or Dictionary is created and returned.  {expr1} remains
+      unchanged.  Items can still be changed by {expr2}, if you
+      don't want that use |deepcopy()| first.
+    ]=],
+    name = 'mapnew',
+    params = { { 'expr1', 'any' }, { 'expr2', 'any' } },
+    signature = 'mapnew({expr1}, {expr2})',
   },
   mapset = {
     args = 3,
@@ -6879,6 +6917,7 @@ M.funcs = {
       If [expr] is supplied and it evaluates to a non-zero Number or
       a non-empty String (|non-zero-arg|), then the full mode is
       returned, otherwise only the first letter is returned.
+      Also see |state()|.
 
          n	    Normal
          no	    Operator-pending
@@ -7243,7 +7282,11 @@ M.funcs = {
       The "%" starts a conversion specification.  The following
       arguments appear in sequence:
 
-      	%  [flags]  [field-width]  [.precision]  type
+      	% [pos-argument] [flags] [field-width] [.precision] type
+
+      pos-argument
+      	At most one positional argument specifier. These
+      	take the form {n$}, where n is >= 1.
 
       flags
       	Zero or more of the following flags:
@@ -7311,6 +7354,13 @@ M.funcs = {
       	echo printf("%d: %.*s", nr, width, line)
       <This limits the length of the text used from "line" to
       "width" bytes.
+
+      If the argument to be formatted is specified using a posional
+      argument specifier, and a '*' is used to indicate that a
+      number argument is to be used to specify the width or
+      precision, the argument(s) to be used must also be specified
+      using a {n$} positional argument specifier. See |printf-$|.
+
 
       The conversion specifiers and their meanings are:
 
@@ -7398,6 +7448,104 @@ M.funcs = {
       The number of {exprN} arguments must exactly match the number
       of "%" items.  If there are not sufficient or too many
       arguments an error is given.  Up to 18 arguments can be used.
+
+      					*printf-$*
+      In certain languages, error and informative messages are
+      more readable when the order of words is different from the
+      corresponding message in English. To accomodate translations
+      having a different word order, positional arguments may be
+      used to indicate this. For instance: >vim
+
+      	#, c-format
+      	msgid "%s returning %s"
+      	msgstr "waarde %2$s komt terug van %1$s"
+      <
+      In this example, the sentence has its 2 string arguments reversed
+      in the output. >vim
+
+      	echo printf(
+      		"In The Netherlands, vim's creator's name is: %1$s %2$s",
+      		"Bram", "Moolenaar")
+      <	In The Netherlands, vim's creator's name is: Bram Moolenaar >vim
+
+      	echo printf(
+      		"In Belgium, vim's creator's name is: %2$s %1$s",
+      		"Bram", "Moolenaar")
+      <	In Belgium, vim's creator's name is: Moolenaar Bram
+
+      Width (and precision) can be specified using the '*' specifier.
+      In this case, you must specify the field width position in the
+      argument list. >vim
+
+      	echo printf("%1$*2$.*3$d", 1, 2, 3)
+      <	001 >vim
+      	echo printf("%2$*3$.*1$d", 1, 2, 3)
+      <	  2 >vim
+      	echo printf("%3$*1$.*2$d", 1, 2, 3)
+      <	03 >vim
+      	echo printf("%1$*2$.*3$g", 1.4142, 2, 3)
+      <	1.414
+
+      You can mix specifying the width and/or precision directly
+      and via positional arguments: >vim
+
+      	echo printf("%1$4.*2$f", 1.4142135, 6)
+      <	1.414214 >vim
+      	echo printf("%1$*2$.4f", 1.4142135, 6)
+      <	1.4142 >vim
+      	echo printf("%1$*2$.*3$f", 1.4142135, 6, 2)
+      <	  1.41
+
+      					*E1400*
+      You cannot mix positional and non-positional arguments: >vim
+	echo printf("%s%1$s", "One", "Two")
+<	E1400: Cannot mix positional and non-positional
+	arguments: %s%1$s
+
+      					*E1401*
+      You cannot skip a positional argument in a format string: >vim
+      	echo printf("%3$s%1$s", "One", "Two", "Three")
+      <	E1401: format argument 2 unused in $-style
+      	format: %3$s%1$s
+
+      					*E1402*
+      You can re-use a [field-width] (or [precision]) argument: >vim
+      	echo printf("%1$d at width %2$d is: %01$*2$d", 1, 2)
+      <	1 at width 2 is: 01
+
+      However, you can't use it as a different type: >vim
+      	echo printf("%1$d at width %2$ld is: %01$*2$d", 1, 2)
+      <	E1402: Positional argument 2 used as field
+      	width reused as different type: long int/int
+
+      					*E1403*
+      When a positional argument is used, but not the correct number
+      or arguments is given, an error is raised: >vim
+      	echo printf("%1$d at width %2$d is: %01$*2$.*3$d", 1, 2)
+      <	E1403: Positional argument 3 out of bounds:
+      	%1$d at width %2$d is: %01$*2$.*3$d
+
+      Only the first error is reported: >vim
+      	echo printf("%01$*2$.*3$d %4$d", 1, 2)
+      <	E1403: Positional argument 3 out of bounds:
+      	%01$*2$.*3$d %4$d
+
+      					*E1404*
+      A positional argument can be used more than once: >vim
+      	echo printf("%1$s %2$s %1$s", "One", "Two")
+      <	One Two One
+
+      However, you can't use a different type the second time: >vim
+      	echo printf("%1$s %2$s %1$d", "One", "Two")
+      <	E1404: Positional argument 1 type used
+      	inconsistently: int/string
+
+      					*E1405*
+      Various other errors that lead to a format string being
+      wrongly formatted lead to: >vim
+      	echo printf("%1$d at width %2$d is: %01$*2$.3$d", 1, 2)
+      <	E1405: Invalid format specifier:
+      	%1$d at width %2$d is: %01$*2$.3$d
     ]=],
     name = 'printf',
     params = { { 'fmt', 'any' }, { 'expr1', 'any' } },
@@ -7737,9 +7885,9 @@ M.funcs = {
     tags = { 'E998' },
     desc = [=[
       {func} is called for every item in {object}, which can be a
-      |List| or a |Blob|.  {func} is called with two arguments: the
-      result so far and current item.  After processing all items
-      the result is returned.
+      |String|, |List| or a |Blob|.  {func} is called with two
+      arguments: the result so far and current item.  After
+      processing all items the result is returned.
 
       {initial} is the initial result.  When omitted, the first item
       in {object} is used and {func} is first called for the second
@@ -7750,6 +7898,7 @@ M.funcs = {
       	echo reduce([1, 3, 5], { acc, val -> acc + val })
       	echo reduce(['x', 'y'], { acc, val -> acc .. val }, 'a')
       	echo reduce(0z1122, { acc, val -> 2 * acc + val })
+      	echo reduce('xyz', { acc, val -> acc .. ',' .. val })
       <
     ]=],
     name = 'reduce',
@@ -8005,10 +8154,15 @@ M.funcs = {
     args = 1,
     base = 1,
     desc = [=[
-      Reverse the order of items in {object} in-place.
-      {object} can be a |List| or a |Blob|.
-      Returns {object}.
-      Returns zero if {object} is not a List or a Blob.
+      Reverse the order of items in {object}.  {object} can be a
+      |List|, a |Blob| or a |String|.  For a List and a Blob the
+      items are reversed in-place and {object} is returned.
+      For a String a new String is returned.
+      Returns zero if {object} is not a List, Blob or a String.
+      If you want a List or Blob to remain unmodified make a copy
+      first: >vim
+      	let revlist = reverse(copy(mylist))
+      <
     ]=],
     name = 'reverse',
     params = { { 'object', 'any' } },
@@ -8142,7 +8296,7 @@ M.funcs = {
     args = 2,
     base = 1,
     desc = [=[
-      The result is a List of Numbers.  The first number is the same
+      The result is a |List| of Numbers.  The first number is the same
       as what |screenchar()| returns.  Further numbers are
       composing characters on top of the base character.
       This is mainly to be used for testing.
@@ -8357,7 +8511,7 @@ M.funcs = {
       without the "S" flag in 'shortmess'.  This works even if
       'shortmess' does contain the "S" flag.
 
-      This returns a Dictionary. The dictionary is empty if the
+      This returns a |Dictionary|. The dictionary is empty if the
       previous pattern was not set and "pattern" was not specified.
 
         key		type		meaning ~
@@ -8439,7 +8593,7 @@ M.funcs = {
       	" search again
       	call searchcount()
       <
-      {options} must be a Dictionary. It can contain:
+      {options} must be a |Dictionary|. It can contain:
         key		type		meaning ~
         recompute	|Boolean|	if |TRUE|, recompute the count
       				like |n| or |N| was executed.
@@ -9116,6 +9270,9 @@ M.funcs = {
           text	description of the error
           type	single-character error type, 'E', 'W', etc.
           valid	recognized error message
+          user_data
+      		custom data associated with the item, can be
+      		any type.
 
       The "col", "vcol", "nr", "type" and "text" entries are
       optional.  Either "lnum" or "pattern" entry can be used to
@@ -10013,15 +10170,16 @@ M.funcs = {
       If you want a list to remain unmodified make a copy first: >vim
       	let sortedlist = sort(copy(mylist))
 
-      <When {func} is omitted, is empty or zero, then sort() uses the
+      <When {how} is omitted or is a string, then sort() uses the
       string representation of each item to sort on.  Numbers sort
       after Strings, |Lists| after Numbers.  For sorting text in the
       current buffer use |:sort|.
 
-      When {func} is given and it is '1' or 'i' then case is
-      ignored.
+      When {how} is given and it is 'i' then case is ignored.
+      For backwards compatibility, the value one can be used to
+      ignore case.  Zero means to not ignore case.
 
-      When {func} is given and it is 'l' then the current collation
+      When {how} is given and it is 'l' then the current collation
       locale is used for ordering. Implementation details: strcoll()
       is used to compare strings. See |:language| check or set the
       collation locale. |v:collate| can also be used to check the
@@ -10038,19 +10196,19 @@ M.funcs = {
       <	['n', 'o', 'O', 'p', 'z', 'ö'] ~
       This does not work properly on Mac.
 
-      When {func} is given and it is 'n' then all items will be
+      When {how} is given and it is 'n' then all items will be
       sorted numerical (Implementation detail: this uses the
       strtod() function to parse numbers, Strings, Lists, Dicts and
       Funcrefs will be considered as being 0).
 
-      When {func} is given and it is 'N' then all items will be
+      When {how} is given and it is 'N' then all items will be
       sorted numerical. This is like 'n' but a string containing
       digits will be used as the number they represent.
 
-      When {func} is given and it is 'f' then all items will be
+      When {how} is given and it is 'f' then all items will be
       sorted numerical. All values must be a Number or a Float.
 
-      When {func} is a |Funcref| or a function name, this function
+      When {how} is a |Funcref| or a function name, this function
       is called to compare items.  The function is invoked with two
       items as argument and must return zero if they are equal, 1 or
       bigger if the first one sorts after the second one, -1 or
@@ -10080,8 +10238,8 @@ M.funcs = {
       <
     ]=],
     name = 'sort',
-    params = { { 'list', 'any' }, { 'func', 'any' }, { 'dict', 'any' } },
-    signature = 'sort({list} [, {func} [, {dict}]])',
+    params = { { 'list', 'any' }, { 'how', 'any' }, { 'dict', 'any' } },
+    signature = 'sort({list} [, {how} [, {dict}]])',
   },
   soundfold = {
     args = 1,
@@ -10293,6 +10451,44 @@ M.funcs = {
     name = 'stdpath',
     params = { { 'what', 'any' } },
     signature = 'stdpath({what})',
+  },
+  state = {
+    args = {0, 1},
+    base = 1,
+    desc = [=[
+      Return a string which contains characters indicating the
+      current state.  Mostly useful in callbacks that want to do
+      work that may not always be safe.  Roughly this works like:
+      - callback uses state() to check if work is safe to do.
+        Yes: then do it right away.
+        No:  add to work queue and add a |SafeState| autocommand.
+      - When SafeState is triggered and executes your autocommand,
+        check with `state()` if the work can be done now, and if yes
+        remove it from the queue and execute.
+        Remove the autocommand if the queue is now empty.
+      Also see |mode()|.
+
+      When {what} is given only characters in this string will be
+      added.  E.g, this checks if the screen has scrolled: >vim
+      	if state('s') == ''
+      	   " screen has not scrolled
+
+      These characters indicate the state, generally indicating that
+      something is busy:
+          m	halfway a mapping, :normal command, feedkeys() or
+      	stuffed command
+          o	operator pending, e.g. after |d|
+          a	Insert mode autocomplete active
+          x	executing an autocommand
+          S	not triggering SafeState, e.g. after |f| or a count
+          c	callback invoked, including timer (repeats for
+      	recursiveness up to "ccc")
+          s	screen has scrolled for messages
+    ]=],
+    fast = true,
+    name = 'state',
+    params = { { 'what', 'string' } },
+    signature = 'state([{what}])',
   },
   str2float = {
     args = 1,
@@ -11324,10 +11520,21 @@ M.funcs = {
     signature = 'termopen({cmd} [, {opts}])',
   },
   test_garbagecollect_now = {
+    args = 0,
+    desc = [=[
+      Like |garbagecollect()|, but executed right away.  This must
+      only be called directly to avoid any structure to exist
+      internally, and |v:testing| must have been set before calling
+      any function.
+    ]=],
+    params = {},
+    signature = 'test_garbagecollect_now()',
     lua = false,
   },
   test_write_list_log = {
     args = 1,
+    params = { { 'fname' } },
+    signature = '',
     lua = false,
   },
   timer_info = {
@@ -11604,9 +11811,12 @@ M.funcs = {
     signature = 'undofile({name})',
   },
   undotree = {
+    args = { 0, 1 },
+    base = 1,
     desc = [=[
-      Return the current state of the undo tree in a dictionary with
-      the following items:
+      Return the current state of the undo tree for the current
+      buffer, or for a specific buffer if {buf} is given.  The
+      result is a dictionary with the following items:
         "seq_last"	The highest undo sequence number used.
         "seq_cur"	The sequence number of the current position in
       		the undo tree.  This differs from "seq_last"
@@ -11648,8 +11858,8 @@ M.funcs = {
       		item.
     ]=],
     name = 'undotree',
-    params = {},
-    signature = 'undotree()',
+    params = { { 'buf', 'any' } },
+    signature = 'undotree([{buf}])',
   },
   uniq = {
     args = { 1, 3 },
@@ -11726,7 +11936,7 @@ M.funcs = {
     signature = 'values({dict})',
   },
   virtcol = {
-    args = { 1, 2 },
+    args = { 1, 3 },
     base = 1,
     desc = [=[
       The result is a Number, which is the screen column of the file
@@ -11760,9 +11970,12 @@ M.funcs = {
       	    returns the cursor position.  Differs from |'<| in
       	    that it's updated right away.
 
-      If {list} is present and non-zero then virtcol() returns a List
-      with the first and last screen position occupied by the
+      If {list} is present and non-zero then virtcol() returns a
+      List with the first and last screen position occupied by the
       character.
+
+      With the optional {winid} argument the values are obtained for
+      that window instead of the current window.
 
       Note that only marks in the current file can be used.
       Examples: >vim
@@ -11775,15 +11988,15 @@ M.funcs = {
       	" With text "	  there", with 't at 'h':
 
       	echo virtcol("'t")	" returns 6
-      <Techo he first column is 1.  0 is returned for an error.
-      A echo more advanced example that echoes the maximum length of
+      <The first column is 1.  0 or [0, 0] is returned for an error.
+      A more advanced example that echoes the maximum length of
       all lines: >vim
           echo max(map(range(1, line('$')), "virtcol([v:val, '$'])"))
 
     ]=],
     name = 'virtcol',
-    params = { { 'expr', 'any' }, { 'list', 'any' } },
-    signature = 'virtcol({expr} [, {list}])',
+    params = { { 'expr', 'any' }, { 'list', 'any' }, { 'winid', 'integer' } },
+    signature = 'virtcol({expr} [, {list} [, {winid}]])',
   },
   virtcol2col = {
     args = 3,
@@ -11796,6 +12009,9 @@ M.funcs = {
       If {col} is greater than the last virtual column in line
       {lnum}, then the byte index of the character at the last
       virtual column is returned.
+
+      For a multi-byte character, the column number of the first
+      byte in the character is returned.
 
       The {winid} argument can be the window number or the
       |window-ID|. If this is zero, then the current window is used.

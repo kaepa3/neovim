@@ -425,6 +425,13 @@ char *get_user_cmd_complete(expand_T *xp, int idx)
 
 int cmdcomplete_str_to_type(const char *complete_str)
 {
+  if (strncmp(complete_str, "custom,", 7) == 0) {
+    return EXPAND_USER_DEFINED;
+  }
+  if (strncmp(complete_str, "customlist,", 11) == 0) {
+    return EXPAND_USER_LIST;
+  }
+
   for (int i = 0; i < (int)(ARRAY_SIZE(command_complete)); i++) {
     char *cmd_compl = get_command_complete(i);
     if (cmd_compl == NULL) {
@@ -876,7 +883,7 @@ int uc_add_command(char *name, size_t name_len, const char *rep, uint32_t argt, 
   char *rep_buf = NULL;
   garray_T *gap;
 
-  replace_termcodes(rep, strlen(rep), &rep_buf, 0, NULL, CPO_TO_CPO_FLAGS);
+  replace_termcodes(rep, strlen(rep), &rep_buf, 0, 0, NULL, CPO_TO_CPO_FLAGS);
   if (rep_buf == NULL) {
     // Can't replace termcodes - try using the string as is
     rep_buf = xstrdup(rep);
