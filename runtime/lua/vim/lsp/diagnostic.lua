@@ -203,7 +203,8 @@ end
 ---
 --- See |vim.diagnostic.config()| for configuration options. Handler-specific
 --- configuration can be set using |vim.lsp.with()|:
---- <pre>lua
+---
+--- ```lua
 --- vim.lsp.handlers["textDocument/publishDiagnostics"] = vim.lsp.with(
 ---   vim.lsp.diagnostic.on_publish_diagnostics, {
 ---     -- Enable underline, use default values
@@ -221,7 +222,7 @@ end
 ---     update_in_insert = false,
 ---   }
 --- )
---- </pre>
+--- ```
 ---
 ---@param config table Configuration table (see |vim.diagnostic.config()|).
 function M.on_publish_diagnostics(_, result, ctx, config)
@@ -263,7 +264,8 @@ end
 ---
 --- See |vim.diagnostic.config()| for configuration options. Handler-specific
 --- configuration can be set using |vim.lsp.with()|:
---- <pre>lua
+---
+--- ```lua
 --- vim.lsp.handlers["textDocument/diagnostic"] = vim.lsp.with(
 ---   vim.lsp.diagnostic.on_diagnostic, {
 ---     -- Enable underline, use default values
@@ -281,7 +283,7 @@ end
 ---     update_in_insert = false,
 ---   }
 --- )
---- </pre>
+--- ```
 ---
 ---@param config table Configuration table (see |vim.diagnostic.config()|).
 function M.on_diagnostic(_, result, ctx, config)
@@ -408,6 +410,16 @@ local function disable(bufnr)
   clear(bufnr)
 end
 
+--- Refresh diagnostics, only if we have attached clients that support it
+---@param bufnr (integer) buffer number
+---@param opts? table Additional options to pass to util._refresh
+---@private
+local function _refresh(bufnr, opts)
+  opts = opts or {}
+  opts['bufnr'] = bufnr
+  util._refresh(ms.textDocument_diagnostic, opts)
+end
+
 --- Enable pull diagnostics for a buffer
 ---@param bufnr (integer) Buffer handle, or 0 for current
 ---@private
@@ -429,7 +441,7 @@ function M._enable(bufnr)
           return
         end
         if bufstates[bufnr] and bufstates[bufnr].enabled then
-          util._refresh(ms.textDocument_diagnostic, { bufnr = bufnr, only_visible = true })
+          _refresh(bufnr, { only_visible = true, client_id = opts.data.client_id })
         end
       end,
       group = augroup,
@@ -438,7 +450,7 @@ function M._enable(bufnr)
     api.nvim_buf_attach(bufnr, false, {
       on_reload = function()
         if bufstates[bufnr] and bufstates[bufnr].enabled then
-          util._refresh(ms.textDocument_diagnostic, { bufnr = bufnr })
+          _refresh(bufnr)
         end
       end,
       on_detach = function()
@@ -448,8 +460,16 @@ function M._enable(bufnr)
 
     api.nvim_create_autocmd('LspDetach', {
       buffer = bufnr,
-      callback = function()
-        disable(bufnr)
+      callback = function(args)
+        local clients = vim.lsp.get_clients({ bufnr = bufnr, method = ms.textDocument_diagnostic })
+
+        if
+          not vim.iter(clients):any(function(c)
+            return c.id ~= args.data.client_id
+          end)
+        then
+          disable(bufnr)
+        end
       end,
       group = augroup,
     })

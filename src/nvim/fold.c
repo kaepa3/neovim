@@ -12,12 +12,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "nvim/api/extmark.h"
 #include "nvim/ascii.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/buffer_updates.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
+#include "nvim/decoration.h"
 #include "nvim/diff.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
@@ -743,8 +745,7 @@ void deleteFold(win_T *const wp, const linenr_T start, const linenr_T end, const
   }
 
   if (last_lnum > 0) {
-    // TODO(teto): pass the buffer
-    changed_lines(first_lnum, (colnr_T)0, last_lnum, 0L, false);
+    changed_lines(wp->w_buffer, first_lnum, (colnr_T)0, last_lnum, 0L, false);
 
     // send one nvim_buf_lines_event at the end
     // last_lnum is the line *after* the last line of the outermost fold
@@ -1580,8 +1581,7 @@ static void foldCreateMarkers(win_T *wp, pos_T start, pos_T end)
 
   // Update both changes here, to avoid all folds after the start are
   // changed when the start marker is inserted and the end isn't.
-  // TODO(teto): pass the buffer
-  changed_lines(start.lnum, (colnr_T)0, end.lnum, 0L, false);
+  changed_lines(buf, start.lnum, (colnr_T)0, end.lnum, 0L, false);
 
   // Note: foldAddMarker() may not actually change start and/or end if
   // u_save() is unable to save the buffer line, but we send the
@@ -1601,7 +1601,7 @@ static void foldAddMarker(buf_T *buf, pos_T pos, const char *marker, size_t mark
   linenr_T lnum = pos.lnum;
 
   // Allocate a new line: old-line + 'cms'-start + marker + 'cms'-end
-  char *line = ml_get_buf(buf, lnum, false);
+  char *line = ml_get_buf(buf, lnum);
   size_t line_len = strlen(line);
   size_t added = 0;
 
@@ -1661,7 +1661,7 @@ static void foldDelMarker(buf_T *buf, linenr_T lnum, char *marker, size_t marker
   }
 
   char *cms = buf->b_p_cms;
-  char *line = ml_get_buf(buf, lnum, false);
+  char *line = ml_get_buf(buf, lnum);
   for (char *p = line; *p != NUL; p++) {
     if (strncmp(p, marker, markerlen) != 0) {
       continue;
@@ -1704,8 +1704,9 @@ static void foldDelMarker(buf_T *buf, linenr_T lnum, char *marker, size_t marker
 /// @return the text for a closed fold
 ///
 /// Otherwise the result is in allocated memory.
-char *get_foldtext(win_T *wp, linenr_T lnum, linenr_T lnume, foldinfo_T foldinfo, char *buf)
-  FUNC_ATTR_NONNULL_ARG(1)
+char *get_foldtext(win_T *wp, linenr_T lnum, linenr_T lnume, foldinfo_T foldinfo, char *buf,
+                   VirtText *vt)
+  FUNC_ATTR_NONNULL_ALL
 {
   char *text = NULL;
   // an error occurred when evaluating 'fdt' setting
@@ -1752,8 +1753,22 @@ char *get_foldtext(win_T *wp, linenr_T lnum, linenr_T lnume, foldinfo_T foldinfo
       current_sctx = wp->w_p_script_ctx[WV_FDT].script_ctx;
 
       emsg_off++;  // handle exceptions, but don't display errors
-      text = eval_to_string_safe(wp->w_p_fdt,
-                                 was_set_insecurely(wp, "foldtext", OPT_LOCAL));
+
+      Object obj = eval_foldtext(wp);
+      if (obj.type == kObjectTypeArray) {
+        Error err = ERROR_INIT;
+        *vt = parse_virt_text(obj.data.array, &err, NULL);
+        if (!ERROR_SET(&err)) {
+          *buf = NUL;
+          text = buf;
+        }
+        api_clear_error(&err);
+      } else if (obj.type == kObjectTypeString) {
+        text = obj.data.string.data;
+        obj = NIL;
+      }
+      api_free_object(obj);
+
       emsg_off--;
 
       if (text == NULL || did_emsg) {
@@ -2874,7 +2889,7 @@ static void foldlevelIndent(fline_T *flp)
   linenr_T lnum = flp->lnum + flp->off;
 
   buf_T *buf = flp->wp->w_buffer;
-  char *s = skipwhite(ml_get_buf(buf, lnum, false));
+  char *s = skipwhite(ml_get_buf(buf, lnum));
 
   // empty line or lines starting with a character in 'foldignore': level
   // depends on surrounding lines
@@ -2931,7 +2946,7 @@ static void foldlevelExpr(fline_T *flp)
   const bool save_keytyped = KeyTyped;
 
   int c;
-  const int n = eval_foldexpr(flp->wp->w_p_fde, &c);
+  const int n = eval_foldexpr(flp->wp, &c);
   KeyTyped = save_keytyped;
 
   switch (c) {
@@ -3036,7 +3051,7 @@ static void foldlevelMarker(fline_T *flp)
   flp->start = 0;
   flp->lvl_next = flp->lvl;
 
-  char *s = ml_get_buf(flp->wp->w_buffer, flp->lnum + flp->off, false);
+  char *s = ml_get_buf(flp->wp->w_buffer, flp->lnum + flp->off);
   while (*s) {
     if (*s == cstart
         && strncmp(s + 1, startmarker, foldstartmarkerlen - 1) == 0) {
@@ -3322,10 +3337,25 @@ void f_foldtextresult(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   foldinfo_T info = fold_info(curwin, lnum);
   if (info.fi_lines > 0) {
-    char *text = get_foldtext(curwin, lnum, lnum + info.fi_lines - 1, info, buf);
+    VirtText vt = VIRTTEXT_EMPTY;
+    char *text = get_foldtext(curwin, lnum, lnum + info.fi_lines - 1, info, buf, &vt);
     if (text == buf) {
       text = xstrdup(text);
     }
+    if (kv_size(vt) > 0) {
+      assert(*text == NUL);
+      for (size_t i = 0; i < kv_size(vt);) {
+        int attr = 0;
+        char *new_text = next_virt_text_chunk(vt, &i, &attr);
+        if (new_text == NULL) {
+          break;
+        }
+        new_text = concat_str(text, new_text);
+        xfree(text);
+        text = new_text;
+      }
+    }
+    clear_virttext(&vt);
     rettv->vval.v_string = text;
   }
 

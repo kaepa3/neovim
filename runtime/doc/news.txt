@@ -89,6 +89,8 @@ The following new APIs and features were added.
 
 • Added inline virtual text support to |nvim_buf_set_extmark()|.
 
+• 'foldtext' now supports virtual text format. |fold-foldtext|
+
 • The terminal buffer now supports reflow (wrapped lines adapt when the buffer
   is resized horizontally). Note: Lines that are not visible and kept in
   |'scrollback'| are not reflown.
@@ -120,6 +122,8 @@ The following new APIs and features were added.
     indicator to see if a server supports a feature. Instead use
     `client.supports_method(<method>)`. It considers both the dynamic
     capabilities and static `server_capabilities`.
+  • Added a new `anchor_bias` option to |lsp-handlers| to aid in positioning of
+    floating windows.
 
 • Treesitter
   • Bundled parsers and queries (highlight, folds) for Markdown, Python, and
@@ -131,6 +135,11 @@ The following new APIs and features were added.
   • `@injection.language` now has smarter resolution and will now fallback to language aliases and/or attempt lower case variants of the text.
     language via aliases (e.g., filetype) registered via
     `vim.treesitter.language.register`.
+  • The `#set!` directive now supports `injection.self` and `injection.parent` for injecting either the current node's language
+    or the parent LanguageTree's language, respectively.
+  • Added `vim.treesitter.query.edit()`, for live editing of treesitter
+    queries.
+  • Improved error messages for query parsing.
 
 • |vim.ui.open()| opens URIs using the system default handler (macOS `open`,
   Windows `explorer`, Linux `xdg-open`, etc.)
@@ -147,6 +156,18 @@ The following new APIs and features were added.
 
 • Functions that take a severity as an optional parameter (e.g.
   |vim.diagnostic.get()|) now also accept a list of severities |vim.diagnostic.severity|
+
+• New RPC client type `msgpack-rpc` is added for `nvim_set_client_info` to
+  support fully MessagePack-RPC compliant clients.
+
+• Floating windows can now show footer with new `footer` and `footer_pos`
+  config fields. Uses |hl-FloatFooter| by default.
+
+• The |:terminal| command now accepts some |:command-modifiers| (specifically
+  |:horizontal| and those that affect splitting a window).
+
+• |vim.lsp.util.locations_to_items()| sets the `user_data` of each item to the
+  original LSP `Location` or `LocationLink`.
 
 ==============================================================================
 CHANGED FEATURES                                                 *news-changed*
@@ -202,6 +223,20 @@ The following changes to existing APIs or features add new behavior.
   "virtual_text" table, which gives users more control over how diagnostic
   virtual text is displayed.
 
+• Extmarks now fully support multi-line ranges, and a single extmark can be
+  used to highlight a range of arbitrary length. The |nvim_buf_set_extmark()|
+  API function already allowed you to define such ranges, but highlight regions
+  were not rendered consistently for a range that covers more than one line break.
+  This has now been fixed. Signs defined as part of a multi-line extmark also
+  apply to every line in the range, not just the first.
+  In addition, |nvim_buf_get_extmarks()| has gained an "overlap" option to
+  return such ranges even if they started before the specified position.
+
+• LSP hover and signature help now use Treesitter for highlighting of Markdown
+  content.
+  Note that syntax highlighting of code examples requires a matching parser
+  and may be affected by custom queries.
+
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
 
@@ -211,6 +246,9 @@ The following deprecated functions or APIs were removed.
   - :Vimuntar command removed.
 
 • Support for legacy treesitter injection queries is removed.
+
+• 'shortmess' flags:
+  - |shm-f| is removed. Always uses "(3 of 5)", never "(file 3 of 5)"
 
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
@@ -237,7 +275,11 @@ release.
   - |vim.lsp.util.get_progress_messages()|	Use |vim.lsp.status()| instead.
   - |vim.lsp.get_active_clients()|		Use |vim.lsp.get_clients()| instead.
   - |vim.lsp.for_each_buffer_client()|		Use |vim.lsp.get_clients()| instead.
+  - |vim.lsp.util.trim_empty_lines()|		Use |vim.split()| with `trimempty` instead.
 
 • `vim.loop` has been renamed to `vim.uv`.
+
+• vim.treesitter.languagetree functions:
+  - |LanguageTree:for_each_child()|	Use |LanguageTree:children()| (non-recursive) instead.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

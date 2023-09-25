@@ -108,8 +108,11 @@ error('Cannot require a meta file')
 --- @field border? any
 --- @field title? any
 --- @field title_pos? string
+--- @field footer? any
+--- @field footer_pos? string
 --- @field style? string
 --- @field noautocmd? boolean
+--- @field fixed? boolean
 
 --- @class vim.api.keyset.get_autocmds
 --- @field event? any
@@ -120,10 +123,18 @@ error('Cannot require a meta file')
 --- @class vim.api.keyset.get_commands
 --- @field builtin? boolean
 
+--- @class vim.api.keyset.get_extmarks
+--- @field limit? integer
+--- @field details? boolean
+--- @field hl_name? boolean
+--- @field overlap? boolean
+--- @field type? string
+
 --- @class vim.api.keyset.get_highlight
 --- @field id? integer
 --- @field name? string
 --- @field link? boolean
+--- @field create? boolean
 
 --- @class vim.api.keyset.highlight
 --- @field bold? boolean

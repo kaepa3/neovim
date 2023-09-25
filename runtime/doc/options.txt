@@ -189,6 +189,8 @@ opt+=val" the expansion is done before the adding or removing.
 
 Handling of local options			*local-options*
 
+Note: The following also applies to |global-local| options.
+
 Some of the options only apply to a window or buffer.  Each window or buffer
 has its own copy of this option, thus each can have its own value.  This
 allows you to set 'list' in one window but not in another.  And set
@@ -237,6 +239,30 @@ You will get back the 'list' value as it was the last time you edited "one".
 The options local to a window are remembered for each buffer.  This also
 happens when the buffer is not loaded, but they are lost when the buffer is
 wiped out |:bwipe|.
+
+Special local window options			*local-noglobal*
+
+The following local window options won't be copied over when new windows are
+created, thus they behave slightly differently:
+
+	Option		Reason	~
+	'previewwindow'	there can only be a single one
+	'scroll'	specific to existing window
+	'winfixheight'	specific to existing window
+	'winfixwidth'	specific to existing window
+
+Special local buffer options
+
+The following local buffer options won't be copied over when new buffers are
+created, thus they behave slightly differently:
+
+	Option		Reason	~
+	'filetype'	explicitly set by autocommands
+	'syntax'	explicitly set by autocommands
+	'bufhidden'	denote |special-buffers|
+	'buftype'	denote |special-buffers|
+	'readonly'	will be detected automatically
+	'modified'	will be detected automatically
 
 							*:setl* *:setlocal*
 :setl[ocal][!] ...	Like ":set" but set only the value local to the
@@ -310,7 +336,6 @@ used.  Thus it does the same as: >
 	:setlocal path=
 Note: In the future more global options can be made |global-local|.  Using
 ":setlocal" on a global option might work differently then.
-
 
 						*option-value-function*
 Some options ('completefunc', 'omnifunc', 'operatorfunc', 'quickfixtextfunc',
@@ -920,7 +945,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	backups if you don't care about losing the file.
 
 	Note that environment variables are not expanded.  If you want to use
-	$HOME you must expand it explicitly, e.g.: >
+	$HOME you must expand it explicitly, e.g.: >vim
 		:let &backupskip = escape(expand('$HOME'), '\') .. '/tmp/*'
 
 <	Note that the default also makes sure that "crontab -e" works (when a
@@ -1070,7 +1095,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'bufhidden'* *'bh'*
 'bufhidden' 'bh'	string	(default "")
-			local to buffer
+			local to buffer  |local-noglobal|
 	This option specifies what happens when a buffer is no longer
 	displayed in a window:
 	  <empty>	follow the global 'hidden' option
@@ -1102,7 +1127,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'buftype'* *'bt'* *E382*
 'buftype' 'bt'		string	(default "")
-			local to buffer
+			local to buffer  |local-noglobal|
 	The value of this option specifies the type of a buffer:
 	  <empty>	normal buffer
 	  acwrite	buffer will always be written with |BufWriteCmd|s
@@ -2408,7 +2433,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'filetype'* *'ft'*
 'filetype' 'ft'		string	(default "")
-			local to buffer
+			local to buffer  |local-noglobal|
 	When this option is set, the FileType autocommand event is triggered.
 	All autocommands that match with the value of this option will be
 	executed.  Thus the value of 'filetype' is used in place of the file
@@ -2440,8 +2465,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 	and the value of that item:
 
 	  item		default		Used for ~
-	  stl		' ' or '^'	statusline of the current window
-	  stlnc		' ' or '='	statusline of the non-current windows
+	  stl		' '		statusline of the current window
+	  stlnc		' '		statusline of the non-current windows
 	  wbr		' '		window bar
 	  horiz		'─' or '-'	horizontal separators |:split|
 	  horizup	'┴' or '-'	upwards facing horizontal separator
@@ -2460,9 +2485,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	  eob		'~'		empty lines at the end of a buffer
 	  lastline	'@'		'display' contains lastline/truncate
 
-	Any one that is omitted will fall back to the default.  For "stl" and
-	"stlnc" the space will be used when there is highlighting, '^' or '='
-	otherwise.
+	Any one that is omitted will fall back to the default.
 
 	Note that "horiz", "horizup", "horizdown", "vertleft", "vertright" and
 	"verthoriz" are only used when 'laststatus' is 3, since only vertical
@@ -2876,10 +2899,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 	   n-v-c-sm:block,i-ci-ve:ver25-Cursor,r-cr-o:hor20
 				In Normal et al. modes, use a block cursor
 				with the default colors defined by the host
-				terminal.  In Insert-likes modes, use
+				terminal.  In Insert-like modes, use
 				a vertical bar cursor with colors from
-				"Cursor" highlight group.  In Replace-likes
-				modes, use a underline cursor with
+				"Cursor" highlight group.  In Replace-like
+				modes, use an underline cursor with
 				default colors.
 	   i-ci:ver30-iCursor-blinkwait300-blinkon200-blinkoff150
 				In Insert and Command-line Insert mode, use a
@@ -3210,9 +3233,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 			*'ignorecase'* *'ic'* *'noignorecase'* *'noic'*
 'ignorecase' 'ic'	boolean	(default off)
 			global
-	Ignore case in search patterns.  Also used when searching in the tags
-	file.
-	Also see 'smartcase' and 'tagcase'.
+	Ignore case in search patterns, completion, and when searching the tags file.
+	See also 'smartcase' and 'tagcase'.
 	Can be overruled by using "\c" or "\C" in the pattern, see
 	|/ignorecase|.
 
@@ -3545,12 +3567,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 'jumpoptions' 'jop'	string	(default "")
 			global
 	List of words that change the behavior of the |jumplist|.
-	  stack         Make the jumplist behave like the tagstack or like a
-	                web browser.  Relative location of entries in the
-			jumplist is preserved at the cost of discarding
-			subsequent entries when navigating backwards in the
-			jumplist and then jumping to a location.
-			|jumplist-stack|
+	  stack         Make the jumplist behave like the tagstack.
+			Relative location of entries in the jumplist is
+			preserved at the cost of discarding subsequent entries
+			when navigating backwards in the jumplist and then
+			jumping to a location.  |jumplist-stack|
 
 	  view          When moving through the jumplist, |changelist|,
 			|alternate-file| or using |mark-motions| try to
@@ -4084,7 +4105,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 				*'modified'* *'mod'* *'nomodified'* *'nomod'*
 'modified' 'mod'	boolean	(default off)
-			local to buffer
+			local to buffer  |local-noglobal|
 	When on, the buffer is considered to be modified.  This option is set
 	when:
 	1. A change was made to the text since it was last written.  Using the
@@ -4234,8 +4255,9 @@ A jump table for the options with a short description can be found at |Q_op|.
 'mousescroll'		string	(default "ver:3,hor:6")
 			global
 	This option controls the number of lines / columns to scroll by when
-	scrolling with a mouse. The option is a comma separated list of parts.
-	Each part consists of a direction and a count as follows:
+	scrolling with a mouse wheel (|scroll-mouse-wheel|). The option is
+	a comma-separated list. Each part consists of a direction and a count
+	as follows:
 		direction:count,direction:count
 	Direction is one of either "hor" or "ver". "hor" controls horizontal
 	scrolling and "ver" controls vertical scrolling. Count sets the amount
@@ -4532,7 +4554,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 		*'previewwindow'* *'pvw'* *'nopreviewwindow'* *'nopvw'* *E590*
 'previewwindow' 'pvw'	boolean	(default off)
-			local to window
+			local to window  |local-noglobal|
 	Identifies the preview window.  Only one window can have this option
 	set.  It's normally not set directly, but by using one of the commands
 	|:ptag|, |:pedit|, etc.
@@ -4602,7 +4624,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 				*'readonly'* *'ro'* *'noreadonly'* *'noro'*
 'readonly' 'ro'		boolean	(default off)
-			local to buffer
+			local to buffer  |local-noglobal|
 	If on, writes fail unless you use a '!'.  Protects you from
 	accidentally overwriting a file.  Default on when Vim is started
 	in read-only mode ("vim -R") or when the executable is called "view".
@@ -4864,7 +4886,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'scroll'* *'scr'*
 'scroll' 'scr'		number	(default half the window height)
-			local to window
+			local to window  |local-noglobal|
 	Number of lines to scroll with CTRL-U and CTRL-D commands.  Will be
 	set to half the number of lines in the window when the window size
 	changes.  This may happen when enabling the |status-line| or
@@ -5361,13 +5383,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	function to get the effective shiftwidth value.
 
 					*'shortmess'* *'shm'* *E1336*
-'shortmess' 'shm'	string	(default "filnxtToOCF")
+'shortmess' 'shm'	string	(default "ilnxtToOCF")
 			global
 	This option helps to avoid all the |hit-enter| prompts caused by file
 	messages, for example  with CTRL-G, and to avoid some other messages.
 	It is a list of flags:
 	 flag	meaning when present	~
-	  f	use "(3 of 5)" instead of "(file 3 of 5)"		*shm-f*
 	  i	use "[noeol]" instead of "[Incomplete last line]"	*shm-i*
 	  l	use "999L, 888B" instead of "999 lines, 888 bytes"	*shm-l*
 	  m	use "[+]" instead of "[Modified]"			*shm-m*
@@ -6214,7 +6235,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'syntax'* *'syn'*
 'syntax' 'syn'		string	(default "")
-			local to buffer
+			local to buffer  |local-noglobal|
 	When this option is set, the syntax with this name is loaded, unless
 	syntax highlighting has been switched off with ":syntax off".
 	Otherwise this option does not always reflect the current syntax (the
@@ -7081,7 +7102,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 			*'winfixheight'* *'wfh'* *'nowinfixheight'* *'nowfh'*
 'winfixheight' 'wfh'	boolean	(default off)
-			local to window
+			local to window  |local-noglobal|
 	Keep the window height when windows are opened or closed and
 	'equalalways' is set.  Also for |CTRL-W_=|.  Set by default for the
 	|preview-window| and |quickfix-window|.
@@ -7089,7 +7110,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 			*'winfixwidth'* *'wfw'* *'nowinfixwidth'* *'nowfw'*
 'winfixwidth' 'wfw'	boolean	(default off)
-			local to window
+			local to window  |local-noglobal|
 	Keep the window width when windows are opened or closed and
 	'equalalways' is set.  Also for |CTRL-W_=|.
 	The width may be changed anyway when running out of room.

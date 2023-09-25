@@ -3943,12 +3943,13 @@ static dict_T *create_environment(const dictitem_T *job_env, const bool clear_en
         }
       }
 #ifndef MSWIN
-      // Set COLORTERM to "truecolor" if termguicolors is set and 256
-      // otherwise, but only if it was set in the parent terminal at all
-      dictitem_T *dv = tv_dict_find(env, S_LEN("COLORTERM"));
-      if (dv) {
-        tv_dict_item_remove(env, dv);
-        tv_dict_add_str(env, S_LEN("COLORTERM"), p_tgc ? "truecolor" : "256");
+      // Set COLORTERM to "truecolor" if termguicolors is set
+      if (p_tgc) {
+        dictitem_T *dv = tv_dict_find(env, S_LEN("COLORTERM"));
+        if (dv) {
+          tv_dict_item_remove(env, dv);
+        }
+        tv_dict_add_str(env, S_LEN("COLORTERM"), "truecolor");
       }
 #endif
     }
@@ -6328,7 +6329,7 @@ static void reduce_string(typval_T *argvars, typval_T *expr, typval_T *rettv)
   }
 }
 
-/// Implementaion of reduce() for Blob "argvars[0]" using the function "expr"
+/// Implementation of reduce() for Blob "argvars[0]" using the function "expr"
 /// starting with the optional initial value "argvars[2]" and return the result
 /// in "rettv".
 static void reduce_blob(typval_T *argvars, typval_T *expr, typval_T *rettv)
@@ -6729,7 +6730,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     const char *name = NULL;
     Channel *chan = find_channel(chan_id);
     if (chan) {
-      name = rpc_client_name(chan);
+      name = get_client_info(chan, "name");
     }
     msg_ext_set_kind("rpc_error");
     if (name) {

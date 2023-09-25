@@ -696,6 +696,39 @@ int x = INT_MAX;
       end)
     end)
 
+    describe("when using injection.self", function()
+      it("should inject the source language", function()
+        exec_lua([[
+        parser = vim.treesitter.get_parser(0, "c", {
+          injections = {
+            c = '(preproc_def (preproc_arg) @injection.content (#set! injection.self)) (preproc_function_def value: (preproc_arg) @injection.content (#set! injection.self))'}})
+        parser:parse(true)
+        ]])
+
+        eq("table", exec_lua("return type(parser:children().c)"))
+        eq(5, exec_lua("return #parser:children().c:trees()"))
+        eq({
+          {0, 0, 7, 0},   -- root tree
+          {3, 14, 3, 17}, -- VALUE 123
+          {4, 15, 4, 18}, -- VALUE1 123
+          {5, 15, 5, 18}, -- VALUE2 123
+          {1, 26, 1, 63}, -- READ_STRING(x, y) (char *)read_string((x), (size_t)(y))
+          {2, 29, 2, 66}  -- READ_STRING_OK(x, y) (char *)read_string((x), (size_t)(y))
+        }, get_ranges())
+
+        helpers.feed('ggo<esc>')
+        eq(5, exec_lua("return #parser:children().c:trees()"))
+        eq({
+          {0, 0, 8, 0},   -- root tree
+          {4, 14, 4, 17}, -- VALUE 123
+          {5, 15, 5, 18}, -- VALUE1 123
+          {6, 15, 6, 18}, -- VALUE2 123
+          {2, 26, 2, 63}, -- READ_STRING(x, y) (char *)read_string((x), (size_t)(y))
+          {3, 29, 3, 66}  -- READ_STRING_OK(x, y) (char *)read_string((x), (size_t)(y))
+        }, get_ranges())
+      end)
+    end)
+
     describe("when using the offset directive", function()
       it("should shift the range by the directive amount", function()
         exec_lua([[
@@ -1022,4 +1055,44 @@ int x = INT_MAX;
     ]])
   end)
 
+  it('fails to load queries', function()
+    local function test(exp, cquery)
+      eq(exp, pcall_err(exec_lua, "vim.treesitter.query.parse('c', ...)", cquery))
+    end
+
+    -- Invalid node type
+    test(
+      '.../query.lua:0: Query error at 1:2. Invalid node type "dentifier":\n'..
+      '(dentifier) @variable\n'..
+      ' ^',
+      '(dentifier) @variable')
+
+    -- Impossible pattern
+    test(
+      '.../query.lua:0: Query error at 1:13. Impossible pattern:\n'..
+      '(identifier (identifier) @variable)\n'..
+      '            ^',
+      '(identifier (identifier) @variable)')
+
+    -- Invalid syntax
+    test(
+      '.../query.lua:0: Query error at 1:13. Invalid syntax:\n'..
+      '(identifier @variable\n'..
+      '            ^',
+      '(identifier @variable')
+
+    -- Invalid field name
+    test(
+      '.../query.lua:0: Query error at 1:15. Invalid field name "invalid_field":\n'..
+      '((identifier) invalid_field: (identifier))\n'..
+      '              ^',
+      '((identifier) invalid_field: (identifier))')
+
+    -- Invalid capture name
+    test(
+      '.../query.lua:0: Query error at 3:2. Invalid capture name "ok.capture":\n'..
+      '@ok.capture\n'..
+      ' ^',
+      '((identifier) @id \n(#eq? @id\n@ok.capture\n))')
+  end)
 end)

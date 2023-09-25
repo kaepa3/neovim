@@ -83,6 +83,13 @@ end
 
 local session, loop_running, last_error, method_error
 
+if not is_os('win') then
+  local sigpipe_handler = luv.new_signal()
+  luv.signal_start(sigpipe_handler, "sigpipe", function()
+    print("warning: got SIGPIPE signal. Likely related to a crash in nvim")
+  end)
+end
+
 function module.get_session()
   return session
 end
@@ -848,6 +855,11 @@ end
 function module.testprg(name)
   local ext = module.is_os('win') and '.exe' or ''
   return ('%s/%s%s'):format(module.nvim_dir, name, ext)
+end
+
+function module.is_asan()
+  local version = module.eval('execute("verbose version")')
+  return version:match('-fsanitize=[a-z,]*address')
 end
 
 -- Returns a valid, platform-independent Nvim listen address.

@@ -80,7 +80,7 @@ static const int included_patches[] = {
   2406,
   2405,
   2404,
-  // 2403,
+  2403,
   2402,
   2401,
   2400,
@@ -384,7 +384,7 @@ static const int included_patches[] = {
   2102,
   2101,
   2100,
-  // 2099,
+  2099,
   2098,
   2097,
   2096,
@@ -413,15 +413,15 @@ static const int included_patches[] = {
   2073,
   2072,
   // 2071,
-  // 2070,
-  // 2069,
-  // 2068,
-  // 2067,
-  // 2066,
+  2070,
+  2069,
+  2068,
+  2067,
+  2066,
   2065,
   2064,
   2063,
-  // 2062,
+  2062,
   2061,
   2060,
   2059,
@@ -430,16 +430,16 @@ static const int included_patches[] = {
   2056,
   2055,
   2054,
-  // 2053,
+  2053,
   2052,
   2051,
   2050,
   2049,
-  // 2048,
-  // 2047,
-  // 2046,
+  2048,
+  2047,
+  2046,
   2045,
-  // 2044,
+  2044,
   2043,
   2042,
   2041,
@@ -2837,12 +2837,6 @@ void intro_message(int colon)
       }
     }
   }
-
-  // Make the wait-return message appear just below the text.
-  if (colon) {
-    assert(row <= INT_MAX);
-    msg_row = (int)row;
-  }
 }
 
 static void do_intro_line(long row, char *mesg, int attr)
@@ -2871,8 +2865,8 @@ static void do_intro_line(long row, char *mesg, int attr)
       l += utfc_ptr2len(p + l) - 1;
     }
     assert(row <= INT_MAX && col <= INT_MAX);
-    grid_puts_len(&default_grid, p, l, (int)row, (int)col,
-                  *p == '<' ? HL_ATTR(HLF_8) : attr);
+    grid_puts(&default_grid, p, l, (int)row, (int)col,
+              *p == '<' ? HL_ATTR(HLF_8) : attr);
     col += clen;
   }
 }

@@ -69,7 +69,7 @@ remove existing features, or refactor parts of the code that would change
 user's workflow. In these cases, a deprecation policy is needed to properly
 inform users of the change.
 
-In general, when a feature is slated to be removed it should:
+When a (non-experimental) feature is slated to be removed it should:
 
 1. Be _soft_ deprecated in the _next_ release
   - Use of the deprecated feature will still work.
@@ -106,6 +106,10 @@ Feature removals which may benefit from community input or further discussion
 should also have a tracking issue (which should be linked to in the release
 notes).
 
+Exceptions to this policy may be made (for experimental subsystems or when
+there is broad consensus among maintainers). The rationale for the exception
+should be stated explicitly and publicly.
+
 Third-party dependencies
 ------------------------
 
@@ -141,8 +145,11 @@ These dependencies are "vendored" (inlined), we must update the sources manually
     * Run `scripts/update_terminfo.sh` to update these definitions.
 * `runtime/lua/vim/lsp/_meta/protocol.lua`: LSP specification
     * Run `scripts/gen_lsp.lua` to update.
+* `runtime/lua/vim/_meta/lpeg.lua`: LPeg definitions.
+    * Refer to [`LuaCATS/lpeg`](https://github.com/LuaCATS/lpeg) for updates.
 * `src/bit.c`: only for PUC lua: port of `require'bit'` from luajit https://bitop.luajit.org/
 * [treesitter parsers](https://github.com/neovim/neovim/blob/fcc24e43e0b5f9d801a01ff2b8f78ce8c16dd551/cmake.deps/CMakeLists.txt#L197-L210)
+* `runtime/lua/coxpcall.lua`: coxpcall (only needed for PUC lua, builtin to luajit)
 
 ### Forks
 

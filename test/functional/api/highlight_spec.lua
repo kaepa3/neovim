@@ -439,6 +439,15 @@ describe('API: get highlight', function()
     eq('Highlight id out of bounds', pcall_err(meths.get_hl, 0, { name = 'Test set hl' }))
   end)
 
+  it('nvim_get_hl with create flag', function()
+    eq({}, nvim("get_hl", 0, {name = 'Foo', create = false}))
+    eq(0, funcs.hlexists('Foo'))
+    meths.get_hl(0, {name = 'Bar', create = true})
+    eq(1, funcs.hlexists('Bar'))
+    meths.get_hl(0, {name = 'FooBar'})
+    eq(1, funcs.hlexists('FooBar'))
+  end)
+
   it('can get all highlights in current namespace', function()
     local ns = get_ns()
     meths.set_hl(ns, 'Test_hl', { bg = '#B4BEFE' })
@@ -598,5 +607,22 @@ describe('API: get highlight', function()
   it('should return default flag', function()
     meths.set_hl(0, 'Tried', { fg = "#00ff00", default = true })
     eq({ fg = tonumber('00ff00', 16), default = true }, meths.get_hl(0, { name = 'Tried' }))
+  end)
+
+  it('should not output empty gui and cterm #23474', function()
+    meths.set_hl(0, 'Foo', {default = true})
+    meths.set_hl(0, 'Bar', { default = true, fg = '#ffffff' })
+    meths.set_hl(0, 'FooBar', { default = true, fg = '#ffffff', cterm = {bold = true} })
+    meths.set_hl(0, 'FooBarA', { default = true, fg = '#ffffff', cterm = {bold = true,italic = true}})
+
+    eq('Foo            xxx cleared',
+      exec_capture('highlight Foo'))
+    eq({default = true}, meths.get_hl(0, {name = 'Foo'}))
+    eq('Bar            xxx guifg=#ffffff',
+      exec_capture('highlight Bar'))
+    eq('FooBar         xxx cterm=bold guifg=#ffffff',
+      exec_capture('highlight FooBar'))
+    eq('FooBarA        xxx cterm=bold,italic guifg=#ffffff',
+      exec_capture('highlight FooBarA'))
   end)
 end)

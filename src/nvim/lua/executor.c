@@ -140,8 +140,8 @@ void nlua_error(lua_State *const lstate, const char *const msg)
   }
 
   if (in_script) {
-    os_errmsg(str);
-    os_errmsg("\n");
+    fprintf(stderr, msg, (int)len, str);
+    fprintf(stderr, "\n");
   } else {
     msg_ext_set_kind("lua_error");
     semsg_multiline(msg, (int)len, str);
@@ -1707,7 +1707,7 @@ void ex_luado(exarg_T *const eap)
       break;
     }
     lua_pushvalue(lstate, -1);
-    const char *const old_line = ml_get_buf(curbuf, l, false);
+    const char *const old_line = ml_get_buf(curbuf, l);
     // Get length of old_line here as calling Lua code may free it.
     const size_t old_line_len = strlen(old_line);
     lua_pushstring(lstate, old_line);

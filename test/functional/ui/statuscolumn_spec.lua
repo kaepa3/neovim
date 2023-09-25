@@ -475,7 +475,7 @@ describe('statuscolumn', function()
       aaaaaaaaa                                            |
       {1:virtual-2 15}virt_line1                               |
       {1:virtual-2 15}virt_line2                               |
-      {1:buffer  0 16}{5:^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {4:buffer  0 16}{5:^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
       {5:aaaaaaaaa                                            }|
       {1:virtual-1 16}END                                      |
       {0:~                                                    }|
@@ -532,6 +532,24 @@ describe('statuscolumn', function()
         eq('0 3 r 7', eval("g:testvar"))
         meths.input_mouse('right', 'press', '', 0, 3, 0)
         eq('0 4 r 7', eval("g:testvar"))
+
+        command('rightbelow vsplit')
+        meths.input_mouse('left', 'press', '', 0, 0, 27)
+        eq('0 1 l 4', eval("g:testvar"))
+        meths.input_mouse('right', 'press', '', 0, 3, 27)
+        eq('0 1 r 7', eval("g:testvar"))
+        command('setlocal rightleft')
+        meths.input_mouse('left', 'press', '', 0, 0, 52)
+        eq('0 1 l 4', eval("g:testvar"))
+        meths.input_mouse('right', 'press', '', 0, 3, 52)
+        eq('0 1 r 7', eval("g:testvar"))
+        command('wincmd H')
+        meths.input_mouse('left', 'press', '', 0, 0, 25)
+        eq('0 1 l 4', eval("g:testvar"))
+        meths.input_mouse('right', 'press', '', 0, 3, 25)
+        eq('0 1 r 7', eval("g:testvar"))
+        command('close')
+
         command('set laststatus=2 winbar=%f')
         command('let g:testvar = ""')
         -- Check that winbar click doesn't register as statuscolumn click
@@ -727,6 +745,8 @@ describe('statuscolumn', function()
         end
         return vim.v.lnum .. '%=' .. sign
       end
+      vim.o.number = true
+      vim.o.numberwidth = 2
       vim.o.statuscolumn = "%!v:lua.StatusCol()"
     ]])
     command('sign place 1 line=2 name=sign')

@@ -347,7 +347,7 @@ func Test_normal06_formatprg()
   CheckNotMSWindows
 
   " uses sed to number non-empty lines
-  call writefile(['#!/bin/sh', 'sed ''/./=''|sed ''/./{', 'N', 's/\n/    /', '}'''], 'Xsed_format.sh')
+  call writefile(['#!/bin/sh', 'sed ''/./=''|sed ''/./{', 'N', 's/\n/    /', '}'''], 'Xsed_format.sh', 'D')
   call system('chmod +x ./Xsed_format.sh')
   let text = ['a', '', 'c', '', ' ', 'd', 'e']
   let expected = ['1    a', '', '3    c', '', '5     ', '6    d', '7    e']
@@ -378,11 +378,10 @@ func Test_normal06_formatprg()
   " clean up
   set formatprg=
   setlocal formatprg=
-  call delete('Xsed_format.sh')
 endfunc
 
 func Test_normal07_internalfmt()
-  " basic test for internal formmatter to textwidth of 12
+  " basic test for internal formatter to textwidth of 12
   let list=range(1,11)
   call map(list, 'v:val."    "')
   10new
@@ -1807,30 +1806,21 @@ func Test_normal22_zet()
   " Test for ZZ
   " let shell = &shell
   " let &shell = 'sh'
-
-  " Remove any stale test files from previous run.
-  for file in ['Xfile_Test_normal22_zet']
-    call delete(file)
-  endfor
-
-  call writefile(['1', '2'], 'Xfile_Test_normal22_zet')
+  call writefile(['1', '2'], 'Xn22file', 'D')
   let args = ' -N -i NONE --noplugins -X --headless'
-  call system(GetVimCommand() .. args .. ' -c "%d" -c ":norm! ZZ" Xfile_Test_normal22_zet')
-  let a = readfile('Xfile_Test_normal22_zet')
+  call system(GetVimCommand() .. args .. ' -c "%d" -c ":norm! ZZ" Xn22file')
+  let a = readfile('Xn22file')
   call assert_equal([], a)
   " Test for ZQ
-  call writefile(['1', '2'], 'Xfile_Test_normal22_zet')
-  call system(GetVimCommand() . args . ' -c "%d" -c ":norm! ZQ" Xfile_Test_normal22_zet')
-  let a = readfile('Xfile_Test_normal22_zet')
+  call writefile(['1', '2'], 'Xn22file')
+  call system(GetVimCommand() . args . ' -c "%d" -c ":norm! ZQ" Xn22file')
+  let a = readfile('Xn22file')
   call assert_equal(['1', '2'], a)
 
   " Unsupported Z command
   call assert_beeps('normal! ZW')
 
-  " Nvim: This sometimes hangs the TSAN build.
-  " for file in ['Xfile_Test_normal22_zet']
-  "   call delete(file)
-  " endfor
+  " clean up
   " let &shell = shell
 endfunc
 
@@ -2597,7 +2587,7 @@ func Test_normal33_g_cmd2()
   exe "norm! G0\<c-v>4k4ly"
   exe "norm! gvood"
   call assert_equal(['', 'abfgh', 'abfgh', 'abfgh', 'fgh', 'fgh', 'fgh', 'fgh', 'fgh'], getline(1,'$'))
-  " gv cannot be used  in operator pending mode
+  " gv cannot be used in operator pending mode
   call assert_beeps('normal! cgv')
   " gv should beep without a previously selected visual area
   new
@@ -4112,6 +4102,39 @@ func Test_normal_click_on_double_width_char()
   call Ntest_setmouse(1, 4)
   call feedkeys("\<LeftMouse>", 'xt')
   call assert_equal([0, 1, 4, 0, 4], getcurpos())
+
+  bwipe!
+  let &mouse = save_mouse
+endfunc
+
+func Test_normal_click_on_empty_line()
+  let save_mouse = &mouse
+  set mouse=a
+  botright new
+  call setline(1, ['', '', ''])
+  let row = win_screenpos(0)[0] + 2
+  20vsplit
+  redraw
+
+  call Ntest_setmouse(row, 1)
+  call feedkeys("\<LeftMouse>", 'xt')
+  call assert_equal([0, 3, 1, 0, 1], getcurpos())
+  call Ntest_setmouse(row, 2)
+  call feedkeys("\<LeftMouse>", 'xt')
+  call assert_equal([0, 3, 1, 0, 2], getcurpos())
+  call Ntest_setmouse(row, 10)
+  call feedkeys("\<LeftMouse>", 'xt')
+  call assert_equal([0, 3, 1, 0, 10], getcurpos())
+
+  call Ntest_setmouse(row, 21 + 1)
+  call feedkeys("\<LeftMouse>", 'xt')
+  call assert_equal([0, 3, 1, 0, 1], getcurpos())
+  call Ntest_setmouse(row, 21 + 2)
+  call feedkeys("\<LeftMouse>", 'xt')
+  call assert_equal([0, 3, 1, 0, 2], getcurpos())
+  call Ntest_setmouse(row, 21 + 10)
+  call feedkeys("\<LeftMouse>", 'xt')
+  call assert_equal([0, 3, 1, 0, 10], getcurpos())
 
   bwipe!
   let &mouse = save_mouse

@@ -141,6 +141,7 @@ LSP FUNCTIONS
 						`progress` of |vim.lsp.client|
 - *vim.lsp.get_active_clients()*		Use |vim.lsp.get_clients()|
 - *vim.lsp.for_each_buffer_client()*		Use |vim.lsp.get_clients()|
+- *vim.lsp.util.trim_empty_lines()*		Use |vim.split()| with `trimempty` instead.
 
 TREESITTER FUNCTIONS
 - *vim.treesitter.language.require_language()*	Use |vim.treesitter.language.add()|
@@ -151,6 +152,8 @@ TREESITTER FUNCTIONS
 						and |TSNode:type()| instead.
 - *vim.treesitter.query.get_query()*		Use |vim.treesitter.query.get()|
 						instead.
+- *LanguageTree:for_each_child()*		Use |LanguageTree:children()|
+						(non-recursive) instead.
 
 LUA
 - vim.register_keystroke_callback()	Use |vim.on_key()| instead.

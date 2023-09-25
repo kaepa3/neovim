@@ -210,6 +210,7 @@ local extension = {
   astro = 'astro',
   atl = 'atlas',
   as = 'atlas',
+  zed = 'authzed',
   ahk = 'autohotkey',
   au3 = 'autoit',
   ave = 'ave',
@@ -351,6 +352,7 @@ local extension = {
   bat = 'dosbatch',
   wrap = 'dosini',
   ini = 'dosini',
+  vbp = 'dosini',
   dot = 'dot',
   gv = 'dot',
   drac = 'dracula',
@@ -398,6 +400,7 @@ local extension = {
   EXW = detect.euphoria,
   ex = detect.ex,
   exp = 'expect',
+  f = detect.f,
   factor = 'factor',
   fal = 'falcon',
   fan = 'fan',
@@ -410,8 +413,9 @@ local extension = {
   fish = 'fish',
   focexec = 'focexec',
   fex = 'focexec',
-  fth = 'forth',
   ft = 'forth',
+  fth = 'forth',
+  ['4th'] = 'forth',
   FOR = 'fortran',
   f77 = 'fortran',
   f03 = 'fortran',
@@ -427,7 +431,6 @@ local extension = {
   F77 = 'fortran',
   f95 = 'fortran',
   FPP = 'fortran',
-  f = 'fortran',
   F = 'fortran',
   F08 = 'fortran',
   f08 = 'fortran',
@@ -590,6 +593,7 @@ local extension = {
   ly = 'lilypond',
   ily = 'lilypond',
   liquid = 'liquid',
+  liq = 'liquidsoap',
   cl = 'lisp',
   L = 'lisp',
   lisp = 'lisp',
@@ -667,6 +671,8 @@ local extension = {
   m2 = 'modula2',
   mi = 'modula2',
   lm3 = 'modula3',
+  mojo = 'mojo',
+  ['🔥'] = 'mojo', -- 🙄
   ssc = 'monk',
   monk = 'monk',
   tsc = 'monk',
@@ -694,6 +700,7 @@ local extension = {
   nimble = 'nim',
   ninja = 'ninja',
   nix = 'nix',
+  norg = 'norg',
   nqc = 'nqc',
   roff = 'nroff',
   tmac = 'nroff',
@@ -1023,13 +1030,18 @@ local extension = {
   url = 'urlshortcut',
   usd = 'usd',
   usda = 'usd',
+  v = detect.v,
   vsh = 'v',
   vv = 'v',
+  ctl = 'vb',
+  dob = 'vb',
+  dsm = 'vb',
+  dsr = 'vb',
+  pag = 'vb',
   sba = 'vb',
   vb = 'vb',
-  dsm = 'vb',
-  ctl = 'vb',
   vbs = 'vb',
+  vba = detect.vba,
   vdf = 'vdf',
   vdmpp = 'vdmpp',
   vpp = 'vdmpp',
@@ -1039,7 +1051,6 @@ local extension = {
   vr = 'vera',
   vri = 'vera',
   vrh = 'vera',
-  v = detect.v,
   va = 'verilogams',
   vams = 'verilogams',
   vhdl = 'vhdl',
@@ -1050,7 +1061,6 @@ local extension = {
   vbe = 'vhdl',
   tape = 'vhs',
   vim = 'vim',
-  vba = 'vim',
   mar = 'vmasm',
   cm = 'voscm',
   wrl = 'vrml',
@@ -2060,7 +2070,8 @@ end
 --- pattern, if any) and should return a string that will be used as the
 --- buffer's filetype. Optionally, the function can return a second function
 --- value which, when called, modifies the state of the buffer. This can be used
---- to, for example, set filetype-specific buffer variables.
+--- to, for example, set filetype-specific buffer variables. This function will
+--- be called by Nvim before setting the buffer's filetype.
 ---
 --- Filename patterns can specify an optional priority to resolve cases when a
 --- file path matches multiple patterns. Higher priorities are matched first.
@@ -2072,43 +2083,45 @@ end
 --- See $VIMRUNTIME/lua/vim/filetype.lua for more examples.
 ---
 --- Example:
---- <pre>lua
----  vim.filetype.add({
----    extension = {
----      foo = 'fooscript',
----      bar = function(path, bufnr)
----        if some_condition() then
----          return 'barscript', function(bufnr)
----            -- Set a buffer variable
----            vim.b[bufnr].barscript_version = 2
----          end
----        end
----        return 'bar'
----      end,
----    },
----    filename = {
----      ['.foorc'] = 'toml',
----      ['/etc/foo/config'] = 'toml',
----    },
----    pattern = {
----      ['.*/etc/foo/.*'] = 'fooscript',
----      -- Using an optional priority
----      ['.*/etc/foo/.*%.conf'] = { 'dosini', { priority = 10 } },
----      -- A pattern containing an environment variable
----      ['${XDG_CONFIG_HOME}/foo/git'] = 'git',
----      ['README.(%a+)$'] = function(path, bufnr, ext)
----        if ext == 'md' then
----          return 'markdown'
----        elseif ext == 'rst' then
----          return 'rst'
----        end
----      end,
----    },
----  })
---- </pre>
+---
+--- ```lua
+--- vim.filetype.add({
+---   extension = {
+---     foo = 'fooscript',
+---     bar = function(path, bufnr)
+---       if some_condition() then
+---         return 'barscript', function(bufnr)
+---           -- Set a buffer variable
+---           vim.b[bufnr].barscript_version = 2
+---         end
+---       end
+---       return 'bar'
+---     end,
+---   },
+---   filename = {
+---     ['.foorc'] = 'toml',
+---     ['/etc/foo/config'] = 'toml',
+---   },
+---   pattern = {
+---     ['.*/etc/foo/.*'] = 'fooscript',
+---     -- Using an optional priority
+---     ['.*/etc/foo/.*%.conf'] = { 'dosini', { priority = 10 } },
+---     -- A pattern containing an environment variable
+---     ['${XDG_CONFIG_HOME}/foo/git'] = 'git',
+---     ['README.(%a+)$'] = function(path, bufnr, ext)
+---       if ext == 'md' then
+---         return 'markdown'
+---       elseif ext == 'rst' then
+---         return 'rst'
+---       end
+---     end,
+---   },
+--- })
+--- ```
 ---
 --- To add a fallback match on contents, use
---- <pre>lua
+---
+--- ```lua
 --- vim.filetype.add {
 ---   pattern = {
 ---     ['.*'] = {
@@ -2124,7 +2137,7 @@ end
 ---     },
 ---   },
 --- }
---- </pre>
+--- ```
 ---
 ---@param filetypes vim.filetype.add.filetypes A table containing new filetype maps (see example).
 function M.add(filetypes)
@@ -2247,19 +2260,19 @@ end
 --- Each of the three options is specified using a key to the single argument of this function.
 --- Example:
 ---
---- <pre>lua
----   -- Using a buffer number
----   vim.filetype.match({ buf = 42 })
+--- ```lua
+--- -- Using a buffer number
+--- vim.filetype.match({ buf = 42 })
 ---
----   -- Override the filename of the given buffer
----   vim.filetype.match({ buf = 42, filename = 'foo.c' })
+--- -- Override the filename of the given buffer
+--- vim.filetype.match({ buf = 42, filename = 'foo.c' })
 ---
----   -- Using a filename without a buffer
----   vim.filetype.match({ filename = 'main.lua' })
+--- -- Using a filename without a buffer
+--- vim.filetype.match({ filename = 'main.lua' })
 ---
----   -- Using file contents
----   vim.filetype.match({ contents = {'#!/usr/bin/env bash'} })
---- </pre>
+--- -- Using file contents
+--- vim.filetype.match({ contents = {'#!/usr/bin/env bash'} })
+--- ```
 ---
 ---@param args vim.filetype.match.args Table specifying which matching strategy to use.
 ---                 Accepted keys are:
@@ -2375,11 +2388,16 @@ function M.match(args)
     -- If the function tries to use the filename that is nil then it will fail,
     -- but this enables checks which do not need a filename to still work.
     local ok
-    ok, ft = pcall(require('vim.filetype.detect').match_contents, contents, name, function(ext)
-      return dispatch(extension[ext], name, bufnr)
-    end)
-    if ok and ft then
-      return ft
+    ok, ft, on_detect = pcall(
+      require('vim.filetype.detect').match_contents,
+      contents,
+      name,
+      function(ext)
+        return dispatch(extension[ext], name, bufnr)
+      end
+    )
+    if ok then
+      return ft, on_detect
     end
   end
 end
@@ -2390,9 +2408,10 @@ end
 --- is set, meaning it should respect all FileType autocmds and ftplugin files.
 ---
 --- Example:
---- <pre>lua
----   vim.filetype.get_option('vim', 'commentstring')
---- </pre>
+---
+--- ```lua
+--- vim.filetype.get_option('vim', 'commentstring')
+--- ```
 ---
 --- Note: this uses |nvim_get_option_value()| but caches the result.
 --- This means |ftplugin| and |FileType| autocommands are only

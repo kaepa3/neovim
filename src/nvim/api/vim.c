@@ -96,6 +96,7 @@ Integer nvim_get_hl_id_by_name(String name)
 ///                 - name: (string) Get a highlight definition by name.
 ///                 - id: (integer) Get a highlight definition by id.
 ///                 - link: (boolean, default true) Show linked group name instead of effective definition |:hi-link|.
+///                 - create: (boolean, default true) When highlight group doesn't exist create it.
 ///
 /// @param[out] err Error details, if any.
 /// @return Highlight groups as a map from group name to a highlight definition map as in |nvim_set_hl()|,
@@ -211,10 +212,11 @@ void nvim_set_hl_ns_fast(Integer ns_id, Error *err)
 /// nvim_feedkeys().
 ///
 /// Example:
-/// <pre>vim
-///     :let key = nvim_replace_termcodes("<C-o>", v:true, v:false, v:true)
-///     :call nvim_feedkeys(key, 'n', v:false)
-/// </pre>
+///
+/// ```vim
+/// :let key = nvim_replace_termcodes("<C-o>", v:true, v:false, v:true)
+/// :call nvim_feedkeys(key, 'n', v:false)
+/// ```
 ///
 /// @param keys         to be typed
 /// @param mode         behavior flags, see |feedkeys()|
@@ -912,14 +914,17 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
     goto fail;
   }
 
+  // Only strictly needed for scratch, but could just as well be consistent
+  // and do this now. buffer is created NOW, not when it latter first happen
+  // to reach a window or aucmd_prepbuf() ..
+  buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
+
   if (scratch) {
-    aco_save_T aco;
-    aucmd_prepbuf(&aco, buf);
-    set_option_value("bufhidden", STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL);
-    set_option_value("buftype", STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL);
-    set_option_value("swapfile", BOOLEAN_OPTVAL(false), OPT_LOCAL);
-    set_option_value("modeline", BOOLEAN_OPTVAL(false), OPT_LOCAL);  // 'nomodeline'
-    aucmd_restbuf(&aco);
+    set_string_option_direct_in_buf(buf, "bufhidden", -1, "hide", OPT_LOCAL, 0);
+    set_string_option_direct_in_buf(buf, "buftype", -1, "nofile", OPT_LOCAL, 0);
+    assert(buf->b_ml.ml_mfp->mf_fd < 0);  // ml_open() should not have opened swapfile already
+    buf->b_p_swf = false;
+    buf->b_p_ml = false;
   }
   return buf->b_fnum;
 
@@ -1276,10 +1281,11 @@ void nvim_unsubscribe(uint64_t channel_id, String event)
 /// "#rrggbb" hexadecimal string.
 ///
 /// Example:
-/// <pre>vim
-///     :echo nvim_get_color_by_name("Pink")
-///     :echo nvim_get_color_by_name("#cbcbcb")
-/// </pre>
+///
+/// ```vim
+/// :echo nvim_get_color_by_name("Pink")
+/// :echo nvim_get_color_by_name("#cbcbcb")
+/// ```
 ///
 /// @param name Color name or "#rrggbb" string
 /// @return 24-bit RGB value, or -1 for invalid argument.
@@ -1416,14 +1422,16 @@ ArrayOf(Dictionary) nvim_get_keymap(String mode)
 /// Empty {rhs} is |<Nop>|. |keycodes| are replaced as usual.
 ///
 /// Example:
-/// <pre>vim
-///     call nvim_set_keymap('n', ' <NL>', '', {'nowait': v:true})
-/// </pre>
+///
+/// ```vim
+/// call nvim_set_keymap('n', ' <NL>', '', {'nowait': v:true})
+/// ```
 ///
 /// is equivalent to:
-/// <pre>vim
-///     nmap <nowait> <Space><NL> <Nop>
-/// </pre>
+///
+/// ```vim
+/// nmap <nowait> <Space><NL> <Nop>
+/// ```
 ///
 /// @param channel_id
 /// @param  mode  Mode short-name (map command prefix: "n", "i", "v", "x", …)
@@ -1433,7 +1441,7 @@ ArrayOf(Dictionary) nvim_get_keymap(String mode)
 /// @param  rhs   Right-hand-side |{rhs}| of the mapping.
 /// @param  opts  Optional parameters map: Accepts all |:map-arguments| as keys except |<buffer>|,
 ///               values are booleans (default false). Also:
-///               - "noremap" non-recursive mapping |:noremap|
+///               - "noremap" disables |recursive_mapping|, like |:noremap|
 ///               - "desc" human-readable description.
 ///               - "callback" Lua function called in place of {rhs}.
 ///               - "replace_keycodes" (boolean) When "expr" is true, replace keycodes in the
@@ -1497,7 +1505,10 @@ Array nvim_get_api_info(uint64_t channel_id, Arena *arena)
 ///     - "commit" hash or similar identifier of commit
 /// @param type Must be one of the following values. Client libraries should
 ///             default to "remote" unless overridden by the user.
-///     - "remote" remote client connected to Nvim.
+///     - "remote" remote client connected "Nvim flavored" MessagePack-RPC (responses
+///                must be in reverse order of requests). |msgpack-rpc|
+///     - "msgpack-rpc" remote client connected to Nvim via fully MessagePack-RPC
+///                     compliant protocol.
 ///     - "ui" gui frontend
 ///     - "embedder" application using Nvim as a component (for example,
 ///                  IDE/editor implementing a vim mode).
@@ -1698,6 +1709,8 @@ static void write_msg(String message, bool to_err, bool writeln)
     msg_didout = true; \
     kv_drop(line_buf, kv_size(line_buf)); \
     kv_resize(line_buf, LINE_BUFFER_MIN_SIZE); \
+  } else if (c == NUL) { \
+    kv_push(line_buf, NL); \
   } else { \
     kv_push(line_buf, c); \
   }
@@ -1936,7 +1949,9 @@ Array nvim__inspect_cell(Integer grid, Integer row, Integer col, Arena *arena, E
   }
   ret = arena_array(arena, 3);
   size_t off = g->line_offset[(size_t)row] + (size_t)col;
-  ADD_C(ret, CSTR_AS_OBJ((char *)g->chars[off]));
+  char *sc_buf = arena_alloc(arena, MAX_SCHAR_SIZE, false);
+  schar_get(sc_buf, g->chars[off]);
+  ADD_C(ret, CSTR_AS_OBJ(sc_buf));
   int attr = g->attrs[off];
   ADD_C(ret, DICTIONARY_OBJ(hl_get_attr_by_id(attr, true, arena, err)));
   // will not work first time
@@ -1950,6 +1965,11 @@ void nvim__screenshot(String path)
   FUNC_API_FAST
 {
   ui_call_screenshot(path);
+}
+
+void nvim__invalidate_glyph_cache(void)
+{
+  schar_cache_clear_force();
 }
 
 Object nvim__unpack(String str, Error *err)

@@ -85,6 +85,56 @@ void ui_refresh(void)
   }
 }]]
 
+local injection_text_c = [[
+int x = INT_MAX;
+#define READ_STRING(x, y) (char *)read_string((x), (size_t)(y))
+#define foo void main() { \
+              return 42;  \
+            }
+]]
+
+local injection_grid_c = [[
+  int x = INT_MAX;                                                 |
+  #define READ_STRING(x, y) (char *)read_string((x), (size_t)(y))  |
+  #define foo void main() { \                                      |
+                return 42;  \                                      |
+              }                                                    |
+  ^                                                                 |
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+                                                                   |
+]]
+
+local injection_grid_expected_c = [[
+  {3:int} x = {5:INT_MAX};                                                 |
+  #define {5:READ_STRING}(x, y) ({3:char} *)read_string((x), ({3:size_t})(y))  |
+  #define foo {3:void} main() { \                                      |
+                {4:return} {5:42};  \                                      |
+              }                                                    |
+  ^                                                                 |
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+  {1:~                                                                }|
+                                                                   |
+]]
+
 describe('treesitter highlighting (C)', function()
   local screen
 
@@ -411,34 +461,9 @@ describe('treesitter highlighting (C)', function()
   end)
 
   it("supports injected languages", function()
-    insert([[
-    int x = INT_MAX;
-    #define READ_STRING(x, y) (char *)read_string((x), (size_t)(y))
-    #define foo void main() { \
-                  return 42;  \
-                }
-    ]])
+    insert(injection_text_c)
 
-    screen:expect{grid=[[
-      int x = INT_MAX;                                                 |
-      #define READ_STRING(x, y) (char *)read_string((x), (size_t)(y))  |
-      #define foo void main() { \                                      |
-                    return 42;  \                                      |
-                  }                                                    |
-      ^                                                                 |
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-                                                                       |
-    ]]}
+    screen:expect{grid=injection_grid_c}
 
     exec_lua [[
       local parser = vim.treesitter.get_parser(0, "c", {
@@ -448,26 +473,24 @@ describe('treesitter highlighting (C)', function()
       test_hl = highlighter.new(parser, {queries = {c = hl_query}})
     ]]
 
-    screen:expect{grid=[[
-      {3:int} x = {5:INT_MAX};                                                 |
-      #define {5:READ_STRING}(x, y) ({3:char} *)read_string((x), ({3:size_t})(y))  |
-      #define foo {3:void} main() { \                                      |
-                    {4:return} {5:42};  \                                      |
-                  }                                                    |
-      ^                                                                 |
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-      {1:~                                                                }|
-                                                                       |
-    ]]}
+    screen:expect{grid=injection_grid_expected_c}
+  end)
+
+  it("supports injecting by ft name in metadata['injection.language']", function()
+    insert(injection_text_c)
+
+    screen:expect{grid=injection_grid_c}
+
+    exec_lua [[
+      vim.treesitter.language.register("c", "foo")
+      local parser = vim.treesitter.get_parser(0, "c", {
+        injections = {c = '(preproc_def (preproc_arg) @injection.content (#set! injection.language "fOO")) (preproc_function_def value: (preproc_arg) @injection.content (#set! injection.language "fOO"))'}
+      })
+      local highlighter = vim.treesitter.highlighter
+      test_hl = highlighter.new(parser, {queries = {c = hl_query}})
+    ]]
+
+    screen:expect{grid=injection_grid_expected_c}
   end)
 
   it("supports overriding queries, like ", function()
@@ -811,6 +834,70 @@ describe('treesitter highlighting (help)', function()
       <                                       |
       ^                                        |
                                               |
+    ]]}
+  end)
+
+end)
+
+describe('treesitter highlighting (nested injections)', function()
+  local screen
+
+  before_each(function()
+    screen = Screen.new(80, 7)
+    screen:attach()
+    screen:set_default_attr_ids {
+      [1] = {foreground = Screen.colors.SlateBlue};
+      [2] = {bold = true, foreground = Screen.colors.Brown};
+      [3] = {foreground = Screen.colors.Cyan4};
+      [4] = {foreground = Screen.colors.Fuchsia};
+    }
+  end)
+
+  it("correctly redraws nested injections (GitHub #25252)", function()
+    insert[=[
+function foo() print("Lua!") end
+
+local lorem = {
+    ipsum = {},
+    bar = {},
+}
+vim.cmd([[
+    augroup RustLSP
+    autocmd CursorHold silent! lua vim.lsp.buf.document_highlight()
+    augroup END
+]])
+    ]=]
+
+    exec_lua [[
+      vim.opt.scrolloff = 0
+      vim.bo.filetype = 'lua'
+      vim.treesitter.start()
+    ]]
+
+    -- invalidate the language tree
+    feed("ggi--[[<ESC>04x")
+
+    screen:expect{grid=[[
+      {2:^function} {3:foo}{1:()} {1:print(}{4:"Lua!"}{1:)} {2:end}                                                |
+                                                                                      |
+      {2:local} {3:lorem} {2:=} {1:{}                                                                 |
+          {3:ipsum} {2:=} {1:{},}                                                                 |
+          {3:bar} {2:=} {1:{},}                                                                   |
+      {1:}}                                                                               |
+                                                                                      |
+    ]]}
+
+    -- spam newline insert/delete to invalidate Lua > Vim > Lua region
+    feed("3jo<ESC>ddko<ESC>ddko<ESC>ddko<ESC>ddk0")
+
+    screen:expect{grid=[[
+      {2:function} {3:foo}{1:()} {1:print(}{4:"Lua!"}{1:)} {2:end}                                                |
+                                                                                      |
+      {2:local} {3:lorem} {2:=} {1:{}                                                                 |
+      ^    {3:ipsum} {2:=} {1:{},}                                                                 |
+          {3:bar} {2:=} {1:{},}                                                                   |
+      {1:}}                                                                               |
+                                                                                      |
     ]]}
   end)
 

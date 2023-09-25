@@ -1,6 +1,9 @@
 name: test
 on:
   push:
+    branches:
+      - 'master'
+      - 'release-[0-9]+.[0-9]+'
   pull_request:
     branches:
       - 'master'
@@ -9,7 +12,7 @@ on:
       - 'contrib/**'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.repository_owner == 'neovim' && github.sha || github.ref_name }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -30,15 +33,17 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
-
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
+        run: ./.github/scripts/install_deps.sh
+
+      - name: Install stylua
         run: |
-          ./.github/scripts/install_deps.sh
-          brew install stylua
+          URL=$(curl -L https://api.github.com/repos/JohnnyMorganz/StyLua/releases/latest | jq -r '.assets[] | select(.name == "stylua-linux-x86_64.zip") | .browser_download_url')
+          wget --directory-prefix="$BIN_DIR" "$URL"
+          (cd "$BIN_DIR"; unzip stylua*.zip)
+          echo "$BIN_DIR" >> $GITHUB_PATH
 
       - uses: ./.github/actions/cache
 
@@ -112,7 +117,7 @@ jobs:
     env:
       CC: ${{ matrix.cc }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up environment
         run: |
@@ -213,7 +218,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install dependencies
         run: ./.github/scripts/install_deps.sh
@@ -242,7 +247,7 @@ jobs:
     timeout-minutes: 45
     name: windows
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/cache
       - run: .github/scripts/env.ps1
 
@@ -301,3 +306,41 @@ jobs:
         run: |
           cd test/old/testdir
           mingw32-make VERBOSE=1
+
+  with-external-deps:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo add-apt-repository ppa:neovim-ppa/stable
+          ./.github/scripts/install_deps.sh
+          sudo apt-get install -y \
+            libluajit-5.1-dev \
+            libmsgpack-dev \
+            libtermkey-dev \
+            libunibilium-dev \
+            libuv1-dev \
+            lua-filesystem \
+            lua-lpeg \
+            luajit \
+            lua-luv-dev
+            # libtree-sitter-dev \
+            # libvterm-dev
+
+            # Remove comments from packages once we start using these external
+            # dependencies.
+
+      - uses: ./.github/actions/cache
+
+      - name: Build third-party deps
+        run: |
+          cmake -S cmake.deps --preset external_deps
+          cmake --build .deps
+
+      - name: Build
+        run: |
+          cmake --preset ci
+          cmake --build build

@@ -543,7 +543,7 @@ void do_augroup(char *arg, int del_group)
 
     String name;
     int value;
-    map_foreach(int, &map_augroup_name_to_id, name, value, {
+    map_foreach(&map_augroup_name_to_id, name, value, {
       if (value > 0) {
         msg_puts(name.data);
       } else {
@@ -577,7 +577,7 @@ void free_all_autocmds(void)
   })
   map_destroy(String, &map_augroup_name_to_id);
 
-  map_foreach_value(String, &map_augroup_id_to_name, name, {
+  map_foreach_value(&map_augroup_id_to_name, name, {
     api_free_string(name);
   })
   map_destroy(int, &map_augroup_id_to_name);
@@ -1341,7 +1341,6 @@ void aucmd_restbuf(aco_save_T *aco)
   if (aco->use_aucmd_win_idx >= 0) {
     win_T *awp = aucmd_win[aco->use_aucmd_win_idx].auc_win;
 
-    curbuf->b_nwindows--;
     // Find "awp", it can't be closed, but it may be in another tab page.
     // Do not trigger autocommands here.
     block_autocmds();
@@ -1357,7 +1356,7 @@ void aucmd_restbuf(aco_save_T *aco)
       }
     }
 win_found:
-    ;
+    curbuf->b_nwindows--;
     const bool save_stop_insert_mode = stop_insert_mode;
     // May need to stop Insert mode if we were in a prompt buffer.
     leaving_window(curwin);
@@ -2524,7 +2523,7 @@ static bool arg_autocmd_flag_get(bool *flag, char **cmd_ptr, char *pattern, int 
 }
 
 /// When kFalse: VimSuspend should be triggered next.
-/// When kTrue: VimResume should be triggerd next.
+/// When kTrue: VimResume should be triggered next.
 /// When kNone: Currently triggering VimSuspend or VimResume.
 static TriState pending_vimresume = kFalse;
 

@@ -321,7 +321,7 @@ void ex_align(exarg_T *eap)
     }
     (void)set_indent(new_indent, 0);                    // set indent
   }
-  changed_lines(eap->line1, 0, eap->line2 + 1, 0L, true);
+  changed_lines(curbuf, eap->line1, 0, eap->line2 + 1, 0L, true);
   curwin->w_cursor = save_curpos;
   beginline(BL_WHITE | BL_FIX);
 }
@@ -702,7 +702,7 @@ void ex_sort(exarg_T *eap)
                    (int)count, 0, old_count,
                    lnum - eap->line2, 0, new_count, kExtmarkUndo);
 
-    changed_lines(eap->line1, 0, eap->line2 + 1, -deleted, true);
+    changed_lines(curbuf, eap->line1, 0, eap->line2 + 1, -deleted, true);
   }
 
   curwin->w_cursor.lnum = eap->line1;
@@ -784,7 +784,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
   mark_adjust_nofold(line1, line2, last_line - line2, 0L, kExtmarkNOOP);
 
   disable_fold_update++;
-  changed_lines(last_line - num_lines + 1, 0, last_line + 1, num_lines, false);
+  changed_lines(curbuf, last_line - num_lines + 1, 0, last_line + 1, num_lines, false);
   disable_fold_update--;
 
   int line_off = 0;
@@ -821,7 +821,7 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
                      -(last_line - dest - extra), 0L, kExtmarkNOOP);
 
   disable_fold_update++;
-  changed_lines(last_line - num_lines + 1, 0, last_line + 1, -extra, false);
+  changed_lines(curbuf, last_line - num_lines + 1, 0, last_line + 1, -extra, false);
   disable_fold_update--;
 
   // send update regarding the new lines that were added
@@ -859,9 +859,9 @@ int do_move(linenr_T line1, linenr_T line2, linenr_T dest)
     if (dest > last_line + 1) {
       dest = last_line + 1;
     }
-    changed_lines(line1, 0, dest, 0L, false);
+    changed_lines(curbuf, line1, 0, dest, 0L, false);
   } else {
-    changed_lines(dest + 1, 0, line1 + num_lines, 0L, false);
+    changed_lines(curbuf, dest + 1, 0, line1 + num_lines, 0L, false);
   }
 
   // send nvim_buf_lines_event regarding lines that were deleted
@@ -1124,7 +1124,7 @@ static void do_filter(linenr_T line1, linenr_T line2, exarg_T *eap, char *cmd, b
   curwin->w_cursor.lnum = line1;
   curwin->w_cursor.col = 0;
   changed_line_abv_curs();
-  invalidate_botline();
+  invalidate_botline(curwin);
 
   // When using temp files:
   // 1. * Form temp file names
@@ -2088,7 +2088,7 @@ int getfile(int fnum, char *ffname_arg, char *sfname_arg, int setpm, linenr_T ln
     if (lnum != 0) {
       curwin->w_cursor.lnum = lnum;
     }
-    check_cursor_lnum();
+    check_cursor_lnum(curwin);
     beginline(BL_SOL | BL_FIX);
     retval = GETFILE_SAME_FILE;     // it's in the same file
   } else if (do_ecmd(fnum, ffname, sfname, NULL, lnum,
@@ -2230,7 +2230,15 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
 
   // End Visual mode before switching to another buffer, so the text can be
   // copied into the GUI selection buffer.
+  // Careful: may trigger ModeChanged() autocommand
+
+  // Should we block autocommands here?
   reset_VIsual();
+
+  // autocommands freed window :(
+  if (oldwin != NULL && !win_valid(oldwin)) {
+    oldwin = NULL;
+  }
 
   if ((command != NULL || newlnum > (linenr_T)0)
       && *get_vim_var_str(VV_SWAPCOMMAND) == NUL) {
@@ -2652,7 +2660,7 @@ int do_ecmd(int fnum, char *ffname, char *sfname, exarg_T *eap, linenr_T newlnum
       check_cursor();
     } else if (newlnum > 0) {  // line number from caller or old position
       curwin->w_cursor.lnum = newlnum;
-      check_cursor_lnum();
+      check_cursor_lnum(curwin);
       if (solcol >= 0 && !p_sol) {
         // 'sol' is off: Use last known column.
         curwin->w_cursor.col = solcol;
@@ -2883,7 +2891,7 @@ void ex_append(exarg_T *eap)
     curbuf->b_op_start.col = curbuf->b_op_end.col = 0;
   }
   curwin->w_cursor.lnum = lnum;
-  check_cursor_lnum();
+  check_cursor_lnum(curwin);
   beginline(BL_SOL | BL_FIX);
 
   need_wait_return = false;     // don't use wait_return() now
@@ -2913,7 +2921,7 @@ void ex_change(exarg_T *eap)
   }
 
   // make sure the cursor is not beyond the end of the file now
-  check_cursor_lnum();
+  check_cursor_lnum(curwin);
   deleted_lines_mark(eap->line1, (eap->line2 - lnum));
 
   // ":append" on the line above the deleted lines.
@@ -3169,21 +3177,21 @@ static bool sub_joining_lines(exarg_T *eap, char *pat, const char *sub, const ch
 /// Slightly more memory that is strictly necessary is allocated to reduce the
 /// frequency of memory (re)allocation.
 ///
-/// @param[in,out]  new_start   pointer to the memory for the replacement text
-/// @param[in]      needed_len  amount of memory needed
+/// @param[in,out]  new_start      pointer to the memory for the replacement text
+/// @param[in,out]  new_start_len  pointer to length of new_start
+/// @param[in]      needed_len     amount of memory needed
 ///
 /// @returns pointer to the end of the allocated memory
-static char *sub_grow_buf(char **new_start, int needed_len)
-  FUNC_ATTR_NONNULL_ARG(1) FUNC_ATTR_NONNULL_RET
+static char *sub_grow_buf(char **new_start, int *new_start_len, int needed_len)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_NONNULL_RET
 {
-  int new_start_len = 0;
   char *new_end;
   if (*new_start == NULL) {
     // Get some space for a temporary buffer to do the
     // substitution into (and some extra space to avoid
     // too many calls to xmalloc()/free()).
-    new_start_len = needed_len + 50;
-    *new_start = xmalloc((size_t)new_start_len);
+    *new_start_len = needed_len + 50;
+    *new_start = xmalloc((size_t)(*new_start_len));
     **new_start = NUL;
     new_end = *new_start;
   } else {
@@ -3192,9 +3200,9 @@ static char *sub_grow_buf(char **new_start, int needed_len)
     // extra to avoid too many calls to xmalloc()/free()).
     size_t len = strlen(*new_start);
     needed_len += (int)len;
-    if (needed_len > new_start_len) {
-      new_start_len = needed_len + 50;
-      *new_start = xrealloc(*new_start, (size_t)new_start_len);
+    if (needed_len > *new_start_len) {
+      *new_start_len = needed_len + 50;
+      *new_start = xrealloc(*new_start, (size_t)(*new_start_len));
     }
     new_end = *new_start + len;
   }
@@ -3519,6 +3527,7 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const long cmdpreview_
       colnr_T matchcol;
       colnr_T prev_matchcol = MAXCOL;
       char *new_end, *new_start = NULL;
+      int new_start_len = 0;
       char *p1;
       bool did_sub = false;
       int lastone;
@@ -3564,7 +3573,8 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const long cmdpreview_
       //   accordingly.
       //
       // The new text is built up in new_start[].  It has some extra
-      // room to avoid using xmalloc()/free() too often.
+      // room to avoid using xmalloc()/free() too often.  new_start_len is
+      // the length of the allocated memory at new_start.
       //
       // Make a copy of the old line, so it won't be taken away when
       // updating the screen or handling a multi-line match.  The "old_"
@@ -3878,6 +3888,10 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const long cmdpreview_
           nmatch = curbuf->b_ml.ml_line_count - sub_firstlnum + 1;
           current_match.end.lnum = sub_firstlnum + (linenr_T)nmatch;
           skip_match = true;
+          // safety check
+          if (nmatch < 0) {
+            goto skip;
+          }
         }
 
         // Save the line numbers for the preview buffer
@@ -3943,14 +3957,18 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const long cmdpreview_
             p1 = ml_get(sub_firstlnum + (linenr_T)nmatch - 1);
             nmatch_tl += nmatch - 1;
           }
-          size_t copy_len = (size_t)(regmatch.startpos[0].col - copycol);
-          new_end = sub_grow_buf(&new_start,
+          int copy_len = regmatch.startpos[0].col - copycol;
+          new_end = sub_grow_buf(&new_start, &new_start_len,
                                  (colnr_T)strlen(p1) - regmatch.endpos[0].col
-                                 + (colnr_T)copy_len + sublen + 1);
+                                 + copy_len + sublen + 1);
 
           // copy the text up to the part that matched
-          memmove(new_end, sub_firstline + copycol, copy_len);
+          memmove(new_end, sub_firstline + copycol, (size_t)copy_len);
           new_end += copy_len;
+
+          if (new_start_len - copy_len < sublen) {
+            sublen = new_start_len - copy_len - 1;
+          }
 
           // Finally, at this point we can know where the match actually will
           // start in the new text
@@ -4200,7 +4218,7 @@ skip:
     // the line number before the change (same as adding the number of
     // deleted lines).
     i = curbuf->b_ml.ml_line_count - old_line_count;
-    changed_lines(first_line, 0, last_line - (linenr_T)i, (linenr_T)i, false);
+    changed_lines(curbuf, first_line, 0, last_line - (linenr_T)i, (linenr_T)i, false);
 
     int64_t num_added = last_line - first_line;
     int64_t num_removed = num_added - i;
@@ -4611,15 +4629,15 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
   linenr_T linenr_origbuf = 0;  // last line added to original buffer
   linenr_T next_linenr = 0;     // next line to show for the match
 
-  // Temporarily switch to preview buffer
-  aco_save_T aco;
-
   for (size_t matchidx = 0; matchidx < lines.subresults.size; matchidx++) {
     SubResult match = lines.subresults.items[matchidx];
 
     if (cmdpreview_buf) {
       lpos_T p_start = { 0, match.start.col };  // match starts here in preview
       lpos_T p_end   = { 0, match.end.col };    // ... and ends here
+
+      // You Might Gonna Need It
+      buf_ensure_loaded(cmdpreview_buf);
 
       if (match.pre_match == 0) {
         next_linenr = match.start.lnum;
@@ -4644,7 +4662,7 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
         if (next_linenr == orig_buf->b_ml.ml_line_count + 1) {
           line = "";
         } else {
-          line = ml_get_buf(orig_buf, next_linenr, false);
+          line = ml_get_buf(orig_buf, next_linenr);
           line_size = strlen(line) + (size_t)col_width + 1;
 
           // Reallocate if line not long enough
@@ -4656,14 +4674,11 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
         // Put "|lnum| line" into `str` and append it to the preview buffer.
         snprintf(str, line_size, "|%*" PRIdLINENR "| %s", col_width - 3,
                  next_linenr, line);
-        // Temporarily switch to preview buffer
-        aucmd_prepbuf(&aco, cmdpreview_buf);
         if (linenr_preview == 0) {
-          ml_replace(1, str, true);
+          ml_replace_buf(cmdpreview_buf, 1, str, true);
         } else {
-          ml_append(linenr_preview, str, (colnr_T)line_size, false);
+          ml_append_buf(cmdpreview_buf, linenr_preview, str, (colnr_T)line_size, false);
         }
-        aucmd_restbuf(&aco);
         linenr_preview += 1;
       }
       linenr_origbuf = match.end.lnum;

@@ -112,7 +112,7 @@ M[ms.client_registerCapability] = function(_, result, ctx)
   local client = vim.lsp.get_client_by_id(client_id)
 
   client.dynamic_capabilities:register(result.registrations)
-  for bufnr, _ in ipairs(client.attached_buffers) do
+  for bufnr, _ in pairs(client.attached_buffers) do
     vim.lsp._set_defaults(client, bufnr)
   end
 
@@ -342,20 +342,22 @@ M[ms.textDocument_completion] = function(_, result, _, _)
 end
 
 --- |lsp-handler| for the method "textDocument/hover"
---- <pre>lua
----   vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(
----     vim.lsp.handlers.hover, {
----       -- Use a sharp border with `FloatBorder` highlights
----       border = "single",
----       -- add the title in hover float window
----       title = "hover"
----     }
----   )
---- </pre>
+---
+--- ```lua
+--- vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(
+---   vim.lsp.handlers.hover, {
+---     -- Use a sharp border with `FloatBorder` highlights
+---     border = "single",
+---     -- add the title in hover float window
+---     title = "hover"
+---   }
+--- )
+--- ```
+---
 ---@param config table Configuration table.
 ---     - border:     (default=nil)
 ---         - Add borders to the floating window
----         - See |nvim_open_win()|
+---         - See |vim.lsp.util.open_floating_preview()| for more options.
 function M.hover(_, result, ctx, config)
   config = config or {}
   config.focus_id = ctx.method
@@ -369,15 +371,21 @@ function M.hover(_, result, ctx, config)
     end
     return
   end
-  local markdown_lines = util.convert_input_to_markdown_lines(result.contents)
-  markdown_lines = util.trim_empty_lines(markdown_lines)
-  if vim.tbl_isempty(markdown_lines) then
+  local format = 'markdown'
+  local contents ---@type string[]
+  if type(result.contents) == 'table' and result.contents.kind == 'plaintext' then
+    format = 'plaintext'
+    contents = vim.split(result.contents.value or '', '\n', { trimempty = true })
+  else
+    contents = util.convert_input_to_markdown_lines(result.contents)
+  end
+  if vim.tbl_isempty(contents) then
     if config.silent ~= true then
       vim.notify('No information available')
     end
     return
   end
-  return util.open_floating_preview(markdown_lines, 'markdown', config)
+  return util.open_floating_preview(contents, format, config)
 end
 
 --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_hover
@@ -430,19 +438,24 @@ M[ms.textDocument_typeDefinition] = location_handler
 M[ms.textDocument_implementation] = location_handler
 
 --- |lsp-handler| for the method "textDocument/signatureHelp".
+---
 --- The active parameter is highlighted with |hl-LspSignatureActiveParameter|.
---- <pre>lua
----   vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(
----     vim.lsp.handlers.signature_help, {
----       -- Use a sharp border with `FloatBorder` highlights
----       border = "single"
----     }
----   )
---- </pre>
+---
+--- ```lua
+--- vim.lsp.handlers["textDocument/signatureHelp"] = vim.lsp.with(
+---   vim.lsp.handlers.signature_help, {
+---     -- Use a sharp border with `FloatBorder` highlights
+---     border = "single"
+---   }
+--- )
+--- ```
+---
+---@param result table Response from the language server
+---@param ctx table Client context
 ---@param config table Configuration table.
 ---     - border:     (default=nil)
 ---         - Add borders to the floating window
----         - See |nvim_open_win()|
+---         - See |vim.lsp.util.open_floating_preview()| for more options
 function M.signature_help(_, result, ctx, config)
   config = config or {}
   config.focus_id = ctx.method
@@ -463,7 +476,6 @@ function M.signature_help(_, result, ctx, config)
     vim.tbl_get(client.server_capabilities, 'signatureHelpProvider', 'triggerCharacters')
   local ft = vim.bo[ctx.bufnr].filetype
   local lines, hl = util.convert_signature_help_to_markdown_lines(result, ft, triggers)
-  lines = util.trim_empty_lines(lines)
   if vim.tbl_isempty(lines) then
     if config.silent ~= true then
       print('No signature help available')

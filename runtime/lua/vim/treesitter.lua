@@ -127,6 +127,7 @@ function M.get_parser(bufnr, lang, opts)
       )
     end
   elseif parsers[bufnr] == nil or parsers[bufnr]:lang() ~= lang then
+    assert(lang, 'lang should be valid')
     parsers[bufnr] = M._create_parser(bufnr, lang, opts)
   end
 
@@ -162,7 +163,7 @@ function M.is_ancestor(dest, source)
     return false
   end
 
-  local current = source
+  local current = source ---@type TSNode?
   while current ~= nil do
     if current == dest then
       return true
@@ -441,14 +442,15 @@ end
 --- In this case, add ``vim.bo.syntax = 'on'`` after the call to `start`.
 ---
 --- Example:
---- <pre>lua
+---
+--- ```lua
 --- vim.api.nvim_create_autocmd( 'FileType', { pattern = 'tex',
 ---     callback = function(args)
 ---         vim.treesitter.start(args.buf, 'latex')
 ---         vim.bo[args.buf].syntax = 'on'  -- only if additional legacy syntax is needed
 ---     end
 --- })
---- </pre>
+--- ```
 ---
 ---@param bufnr (integer|nil) Buffer to be highlighted (default: current buffer)
 ---@param lang (string|nil) Language of the parser (default: buffer filetype)
@@ -472,8 +474,8 @@ end
 --- Open a window that displays a textual representation of the nodes in the language tree.
 ---
 --- While in the window, press "a" to toggle display of anonymous nodes, "I" to toggle the
---- display of the source language of each node, and press <Enter> to jump to the node under the
---- cursor in the source buffer.
+--- display of the source language of each node, "o" to toggle the query editor, and press
+--- <Enter> to jump to the node under the cursor in the source buffer.
 ---
 --- Can also be shown with `:InspectTree`. *:InspectTree*
 ---
@@ -490,14 +492,16 @@ end
 ---                        function, it accepts the buffer number of the source buffer as its only
 ---                        argument and should return a string.
 function M.inspect_tree(opts)
-  ---@cast opts InspectTreeOpts
+  ---@diagnostic disable-next-line: invisible
   require('vim.treesitter.dev').inspect_tree(opts)
 end
 
 --- Returns the fold level for {lnum} in the current buffer. Can be set directly to 'foldexpr':
---- <pre>lua
+---
+--- ```lua
 --- vim.wo.foldexpr = 'v:lua.vim.treesitter.foldexpr()'
---- </pre>
+--- ```
+---
 ---@param lnum integer|nil Line number to calculate fold level for
 ---@return string
 function M.foldexpr(lnum)

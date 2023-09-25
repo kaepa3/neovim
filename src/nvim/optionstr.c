@@ -151,13 +151,13 @@ void didset_string_options(void)
   (void)opt_strings_flags(p_vop, p_ssop_values, &vop_flags, true);
   (void)opt_strings_flags(p_fdo, p_fdo_values, &fdo_flags, true);
   (void)opt_strings_flags(p_dy, p_dy_values, &dy_flags, true);
+  (void)opt_strings_flags(p_jop, p_jop_values, &jop_flags, true);
   (void)opt_strings_flags(p_rdb, p_rdb_values, &rdb_flags, true);
   (void)opt_strings_flags(p_tc, p_tc_values, &tc_flags, false);
   (void)opt_strings_flags(p_tpf, p_tpf_values, &tpf_flags, true);
   (void)opt_strings_flags(p_ve, p_ve_values, &ve_flags, true);
   (void)opt_strings_flags(p_swb, p_swb_values, &swb_flags, true);
   (void)opt_strings_flags(p_wop, p_wop_values, &wop_flags, true);
-  (void)opt_strings_flags(p_jop, p_jop_values, &jop_flags, true);
   (void)opt_strings_flags(p_cb, p_cb_values, &cb_flags, true);
 }
 
@@ -406,7 +406,22 @@ void set_string_option_direct_in_win(win_T *wp, const char *name, int opt_idx, c
   unblock_autocmds();
 }
 
+/// Like set_string_option_direct(), but for a buffer-local option in "buf".
+/// Blocks autocommands to avoid the old curwin becoming invalid.
+void set_string_option_direct_in_buf(buf_T *buf, const char *name, int opt_idx, const char *val,
+                                     int opt_flags, int set_sid)
+{
+  buf_T *save_curbuf = curbuf;
+
+  block_autocmds();
+  curbuf = buf;
+  set_string_option_direct(name, opt_idx, val, opt_flags, set_sid);
+  curbuf = save_curbuf;
+  unblock_autocmds();
+}
+
 /// Set a string option to a new value, handling the effects
+/// Must not be called with a hidden option!
 ///
 /// @param[in]  opt_idx  Option to set.
 /// @param[in]  value  New value.
@@ -414,56 +429,86 @@ void set_string_option_direct_in_win(win_T *wp, const char *name, int opt_idx, c
 ///                        #OPT_GLOBAL.
 ///
 /// @return NULL on success, an untranslated error message on error.
-const char *set_string_option(const int opt_idx, const char *const value, const int opt_flags,
-                              char *const errbuf, const size_t errbuflen)
-  FUNC_ATTR_NONNULL_ARG(2) FUNC_ATTR_WARN_UNUSED_RESULT
+const char *set_string_option(const int opt_idx, void *varp_arg, const char *value,
+                              const int opt_flags, bool *value_checked, char *const errbuf,
+                              const size_t errbuflen)
+  FUNC_ATTR_WARN_UNUSED_RESULT
 {
   vimoption_T *opt = get_option(opt_idx);
 
-  if (opt->var == NULL) {  // don't set hidden option
-    return NULL;
+  void *varp = (char **)varp_arg;
+  char *origval_l = NULL;
+  char *origval_g = NULL;
+
+  // When using ":set opt=val" for a global option
+  // with a local value the local value will be
+  // reset, use the global value here.
+  if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0
+      && ((int)opt->indir & PV_BOTH)) {
+    varp = opt->var;
   }
 
-  char *const s = xstrdup(value);
-  char **const varp
-    = (char **)get_varp_scope(opt, ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0
-                                    ? ((opt->indir & PV_BOTH) ? OPT_GLOBAL : OPT_LOCAL)
-                                    : opt_flags));
-  char *const oldval = *varp;
-  char *oldval_l = NULL;
-  char *oldval_g = NULL;
+  // The old value is kept until we are sure that the new value is valid.
+  char *oldval = *(char **)varp;
 
   if ((opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0) {
-    oldval_l = *(char **)get_varp_scope(opt, OPT_LOCAL);
-    oldval_g = *(char **)get_varp_scope(opt, OPT_GLOBAL);
+    origval_l = *(char **)get_varp_scope(opt, OPT_LOCAL);
+    origval_g = *(char **)get_varp_scope(opt, OPT_GLOBAL);
+
+    // A global-local string option might have an empty option as value to
+    // indicate that the global value should be used.
+    if (((int)opt->indir & PV_BOTH) && origval_l == empty_option) {
+      origval_l = origval_g;
+    }
   }
 
-  *varp = s;
-
-  char *const saved_oldval = xstrdup(oldval);
-  char *const saved_oldval_l = (oldval_l != NULL) ? xstrdup(oldval_l) : 0;
-  char *const saved_oldval_g = (oldval_g != NULL) ? xstrdup(oldval_g) : 0;
-  char *const saved_newval = xstrdup(s);
-
-  int value_checked = false;
-  const char *const errmsg = did_set_string_option(opt_idx, varp, oldval, s, errbuf, errbuflen,
-                                                   opt_flags, &value_checked);
-  if (errmsg == NULL) {
-    did_set_option(opt_idx, opt_flags, true, value_checked);
+  char *origval;
+  // When setting the local value of a global option, the old value may be
+  // the global value.
+  if (((int)opt->indir & PV_BOTH) && (opt_flags & OPT_LOCAL)) {
+    origval = *(char **)get_varp_from(opt, curbuf, curwin);
+  } else {
+    origval = oldval;
   }
+
+  *(char **)varp = xstrdup(value != NULL ? value : empty_option);
+
+  char *const saved_origval = (origval != NULL) ? xstrdup(origval) : NULL;
+  char *const saved_oldval_l = (origval_l != NULL) ? xstrdup(origval_l) : 0;
+  char *const saved_oldval_g = (origval_g != NULL) ? xstrdup(origval_g) : 0;
+
+  // newval (and varp) may become invalid if the buffer is closed by
+  // autocommands.
+  char *const saved_newval = xstrdup(*(char **)varp);
+
+  const int secure_saved = secure;
+
+  // When an option is set in the sandbox, from a modeline or in secure
+  // mode, then deal with side effects in secure mode.  Also when the
+  // value was set with the P_INSECURE flag and is not completely
+  // replaced.
+  if ((opt_flags & OPT_MODELINE)
+      || sandbox != 0) {
+    secure = 1;
+  }
+
+  const char *const errmsg = did_set_string_option(curbuf, curwin, opt_idx, varp, oldval, errbuf,
+                                                   errbuflen, opt_flags, value_checked);
+
+  secure = secure_saved;
 
   // call autocommand after handling side effects
   if (errmsg == NULL) {
     if (!starting) {
-      trigger_optionset_string(opt_idx, opt_flags, saved_oldval, saved_oldval_l, saved_oldval_g,
-                               saved_newval);
+      trigger_optionset_string(opt_idx, opt_flags, saved_origval, saved_oldval_l,
+                               saved_oldval_g, saved_newval);
     }
     if (opt->flags & P_UI_OPTION) {
       ui_call_option_set(cstr_as_string(opt->fullname),
-                         STRING_OBJ(cstr_as_string(saved_newval)));
+                         CSTR_AS_OBJ(saved_newval));
     }
   }
-  xfree(saved_oldval);
+  xfree(saved_origval);
   xfree(saved_oldval_l);
   xfree(saved_oldval_g);
   xfree(saved_newval);
@@ -2053,9 +2098,9 @@ static void do_spelllang_source(win_T *win)
 /// @param value_checked  value was checked to be safe, no need to set P_INSECURE
 ///
 /// @return  NULL for success, or an untranslated error message for an error
-static const char *did_set_string_option_for(buf_T *buf, win_T *win, int opt_idx, char **varp,
-                                             char *oldval, const char *value, char *errbuf,
-                                             size_t errbuflen, int opt_flags, int *value_checked)
+const char *did_set_string_option(buf_T *buf, win_T *win, int opt_idx, char **varp, char *oldval,
+                                  char *errbuf, size_t errbuflen, int opt_flags,
+                                  bool *value_checked)
 {
   const char *errmsg = NULL;
   int restore_chartab = false;
@@ -2069,14 +2114,14 @@ static const char *did_set_string_option_for(buf_T *buf, win_T *win, int opt_idx
     .os_idx = opt_idx,
     .os_flags = opt_flags,
     .os_oldval.string = oldval,
-    .os_newval.string = value,
+    .os_newval.string = *varp,
     .os_value_checked = false,
     .os_value_changed = false,
     .os_restore_chartab = false,
     .os_errbuf = errbuf,
     .os_errbuflen = errbuflen,
-    .os_win = curwin,
-    .os_buf = curbuf,
+    .os_win = win,
+    .os_buf = buf,
   };
 
   // Disallow changing some options from secure mode
@@ -2171,13 +2216,6 @@ static const char *did_set_string_option_for(buf_T *buf, win_T *win, int opt_idx
   check_redraw_for(buf, win, opt->flags);
 
   return errmsg;
-}
-
-const char *did_set_string_option(int opt_idx, char **varp, char *oldval, char *value, char *errbuf,
-                                  size_t errbuflen, int opt_flags, int *value_checked)
-{
-  return did_set_string_option_for(curbuf, curwin, opt_idx, varp, oldval, value, errbuf,
-                                   errbuflen, opt_flags, value_checked);
 }
 
 /// Check an option that can be a range of string values.

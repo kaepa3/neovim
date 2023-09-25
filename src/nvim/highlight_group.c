@@ -173,6 +173,7 @@ static const char *highlight_init_both[] = {
   "default link NormalFloat Pmenu",
   "default link FloatBorder WinSeparator",
   "default link FloatTitle Title",
+  "default link FloatFooter Title",
   "default FloatShadow blend=80 guibg=Black",
   "default FloatShadowThrough blend=100 guibg=Black",
   "RedrawDebugNormal cterm=reverse gui=reverse",
@@ -823,7 +824,7 @@ void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
     g->sg_link = 0;
   }
 
-  g->sg_gui = attrs.rgb_ae_attr;
+  g->sg_gui = attrs.rgb_ae_attr &~HL_DEFAULT;
 
   g->sg_rgb_fg = attrs.rgb_fg_color;
   g->sg_rgb_bg = attrs.rgb_bg_color;
@@ -850,7 +851,7 @@ void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
     }
   }
 
-  g->sg_cterm = attrs.cterm_ae_attr;
+  g->sg_cterm = attrs.cterm_ae_attr &~HL_DEFAULT;
   g->sg_cterm_bg = attrs.cterm_bg_color;
   g->sg_cterm_fg = attrs.cterm_fg_color;
   g->sg_cterm_bold = g->sg_cterm & HL_BOLD;
@@ -1440,7 +1441,7 @@ void restore_cterm_colors(void)
 /// @param check_link  if true also check for an existing link.
 ///
 /// @return true if highlight group "idx" has any settings.
-static int hl_has_settings(int idx, bool check_link)
+static bool hl_has_settings(int idx, bool check_link)
 {
   return hl_table[idx].sg_cleared == 0
          && (hl_table[idx].sg_attr != 0
@@ -1568,7 +1569,13 @@ Dictionary ns_get_hl_defs(NS ns_id, Dict(get_highlight) *opts, Arena *arena, Err
   Boolean link = GET_BOOL_OR_TRUE(opts, get_highlight, link);
   int id = -1;
   if (HAS_KEY(opts, get_highlight, name)) {
-    id = syn_check_group(opts->name.data, opts->name.size);
+    Boolean create = GET_BOOL_OR_TRUE(opts, get_highlight, create);
+    id = create ? syn_check_group(opts->name.data, opts->name.size)
+                : syn_name2id_len(opts->name.data, opts->name.size);
+    if (id == 0 && !create) {
+      Dictionary attrs = ARRAY_DICT_INIT;
+      return attrs;
+    }
   } else if (HAS_KEY(opts, get_highlight, id)) {
     id = (int)opts->id;
   }

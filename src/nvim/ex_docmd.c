@@ -906,7 +906,7 @@ void handle_did_throw(void)
   if (messages != NULL) {
     do {
       msglist_T *next = messages->next;
-      emsg(messages->msg);
+      emsg_multiline(messages->msg, messages->multiline);
       xfree(messages->msg);
       xfree(messages->sfile);
       xfree(messages);
@@ -3136,7 +3136,7 @@ int cmd_exists(const char *const name)
 /// "fullcommand" function
 void f_fullcommand(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  char *name = argvars[0].vval.v_string;
+  char *name = (char *)tv_get_string(&argvars[0]);
 
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
@@ -4591,7 +4591,9 @@ static void ex_cquit(exarg_T *eap)
   FUNC_ATTR_NORETURN
 {
   // this does not always pass on the exit code to the Manx compiler. why?
-  getout(eap->addr_count > 0 ? (int)eap->line2 : EXIT_FAILURE);
+  int status = eap->addr_count > 0 ? (int)eap->line2 : EXIT_FAILURE;
+  ui_call_error_exit(status);
+  getout(status);
 }
 
 /// Do preparations for "qall" and "wqall".
@@ -5881,7 +5883,7 @@ static void ex_copymove(exarg_T *eap)
   } else {
     ex_copy(eap->line1, eap->line2, n);
   }
-  u_clearline();
+  u_clearline(curbuf);
   beginline(BL_SOL | BL_FIX);
   ex_may_print(eap);
 }
@@ -7302,12 +7304,31 @@ void set_pressedreturn(bool val)
 static void ex_terminal(exarg_T *eap)
 {
   char ex_cmd[1024];
+  size_t len = 0;
+
+  if (cmdmod.cmod_tab > 0 || cmdmod.cmod_split != 0) {
+    bool multi_mods = false;
+
+    // ex_cmd must be a null terminated string before passing to add_win_cmd_modifiers
+    ex_cmd[0] = '\0';
+
+    len = add_win_cmd_modifiers(ex_cmd, &cmdmod, &multi_mods);
+    assert(len < sizeof(ex_cmd));
+    int result = snprintf(ex_cmd + len, sizeof(ex_cmd) - len, " new");
+    assert(result > 0);
+    len += (size_t)result;
+  } else {
+    int result = snprintf(ex_cmd, sizeof(ex_cmd), "enew%s", eap->forceit ? "!" : "");
+    assert(result > 0);
+    len += (size_t)result;
+  }
+
+  assert(len < sizeof(ex_cmd));
 
   if (*eap->arg != NUL) {  // Run {cmd} in 'shell'.
     char *name = vim_strsave_escaped(eap->arg, "\"\\");
-    snprintf(ex_cmd, sizeof(ex_cmd),
-             ":enew%s | call termopen(\"%s\")",
-             eap->forceit ? "!" : "", name);
+    snprintf(ex_cmd + len, sizeof(ex_cmd) - len,
+             " | call termopen(\"%s\")", name);
     xfree(name);
   } else {  // No {cmd}: run the job with tokenized 'shell'.
     if (*p_sh == NUL) {
@@ -7327,9 +7348,8 @@ static void ex_terminal(exarg_T *eap)
     }
     shell_free_argv(argv);
 
-    snprintf(ex_cmd, sizeof(ex_cmd),
-             ":enew%s | call termopen([%s])",
-             eap->forceit ? "!" : "", shell_argv + 1);
+    snprintf(ex_cmd + len, sizeof(ex_cmd) - len,
+             " | call termopen([%s])", shell_argv + 1);
   }
 
   do_cmdline_cmd(ex_cmd);

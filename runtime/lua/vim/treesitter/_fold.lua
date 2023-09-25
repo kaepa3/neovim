@@ -235,6 +235,8 @@ local M = {}
 ---@type table<integer,TS.FoldInfo>
 local foldinfos = {}
 
+local group = api.nvim_create_augroup('treesitter/fold', {})
+
 --- Update the folds in the windows that contain the buffer and use expr foldmethod (assuming that
 --- the user doesn't use different foldexpr for the same buffer).
 ---
@@ -253,7 +255,15 @@ local function foldupdate(bufnr)
 
   if api.nvim_get_mode().mode == 'i' then
     -- foldUpdate() is guarded in insert mode. So update folds on InsertLeave
+    if #(api.nvim_get_autocmds({
+      group = group,
+      buffer = bufnr,
+    })) > 0 then
+      return
+    end
     api.nvim_create_autocmd('InsertLeave', {
+      group = group,
+      buffer = bufnr,
       once = true,
       callback = do_update,
     })
@@ -289,7 +299,9 @@ local function on_changedtree(bufnr, foldinfo, tree_changes)
       local srow, _, erow = Range.unpack4(change)
       get_folds_levels(bufnr, foldinfo, srow, erow)
     end
-    foldupdate(bufnr)
+    if #tree_changes > 0 then
+      foldupdate(bufnr)
+    end
   end)
 end
 

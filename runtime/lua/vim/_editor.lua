@@ -29,6 +29,7 @@ for k, v in pairs({
   treesitter = true,
   filetype = true,
   loader = true,
+  func = true,
   F = true,
   lsp = true,
   highlight = true,
@@ -70,23 +71,24 @@ vim.log = {
 --- Run a system command
 ---
 --- Examples:
---- <pre>lua
 ---
----   local on_exit = function(obj)
----     print(obj.code)
----     print(obj.signal)
----     print(obj.stdout)
----     print(obj.stderr)
----   end
+--- ```lua
 ---
----   -- Run asynchronously
----   vim.system({'echo', 'hello'}, { text = true }, on_exit)
+--- local on_exit = function(obj)
+---   print(obj.code)
+---   print(obj.signal)
+---   print(obj.stdout)
+---   print(obj.stderr)
+--- end
 ---
----   -- Run synchronously
----   local obj = vim.system({'echo', 'hello'}, { text = true }):wait()
----   -- { code = 0, signal = 0, stdout = 'hello', stderr = '' }
+--- -- Run asynchronously
+--- vim.system({'echo', 'hello'}, { text = true }, on_exit)
 ---
---- </pre>
+--- -- Run synchronously
+--- local obj = vim.system({'echo', 'hello'}, { text = true }):wait()
+--- -- { code = 0, signal = 0, stdout = 'hello', stderr = '' }
+---
+--- ```
 ---
 --- See |uv.spawn()| for more details.
 ---
@@ -104,10 +106,11 @@ vim.log = {
 ---     Handle output from stdout. When passed as a function must have the signature `fun(err: string, data: string)`.
 ---     Defaults to `true`
 ---   - stderr: (boolean|function)
----     Handle output from stdout. When passed as a function must have the signature `fun(err: string, data: string)`.
+---     Handle output from stderr. When passed as a function must have the signature `fun(err: string, data: string)`.
 ---     Defaults to `true`.
 ---   - text: (boolean) Handle stdout and stderr as text. Replaces `\r\n` with `\n`.
----   - timeout: (integer)
+---   - timeout: (integer) Run the command with a time limit. Upon timeout the process is sent the
+---     TERM signal (15) and the exit code is set to 124.
 ---   - detach: (boolean) If true, spawn the child process in a detached state - this will make it
 ---     a process group leader, and will effectively enable the child to keep running after the
 ---     parent exits. Note that the child process will still keep the parent's event loop alive
@@ -116,15 +119,16 @@ vim.log = {
 --- @param on_exit (function|nil) Called when subprocess exits. When provided, the command runs
 ---   asynchronously. Receives SystemCompleted object, see return of SystemObj:wait().
 ---
---- @return SystemObj Object with the fields:
+--- @return vim.SystemObj Object with the fields:
 ---   - pid (integer) Process ID
----   - wait (fun(timeout: integer|nil): SystemCompleted)
+---   - wait (fun(timeout: integer|nil): SystemCompleted) Wait for the process to complete. Upon
+---     timeout the process is sent the KILL signal (9) and the exit code is set to 124.
 ---     - SystemCompleted is an object with the fields:
 ---      - code: (integer)
 ---      - signal: (integer)
 ---      - stdout: (string), nil if stdout argument is passed
 ---      - stderr: (string), nil if stderr argument is passed
----   - kill (fun(signal: integer))
+---   - kill (fun(signal: integer|string))
 ---   - write (fun(data: string|nil)) Requires `stdin=true`. Pass `nil` to close the stream.
 ---   - is_closing (fun(): boolean)
 function vim.system(cmd, opts, on_exit)
@@ -188,6 +192,7 @@ end
 ---@see |vim.print()|
 ---@see https://github.com/kikito/inspect.lua
 ---@see https://github.com/mpeterv/vinspect
+---@return string
 vim.inspect = vim.inspect
 
 do
@@ -197,7 +202,8 @@ do
   --- (such as the |TUI|) pastes text into the editor.
   ---
   --- Example: To remove ANSI color codes when pasting:
-  --- <pre>lua
+  ---
+  --- ```lua
   --- vim.paste = (function(overridden)
   ---   return function(lines, phase)
   ---     for i,line in ipairs(lines) do
@@ -207,7 +213,7 @@ do
   ---     overridden(lines, phase)
   ---   end
   --- end)(vim.paste)
-  --- </pre>
+  --- ```
   ---
   ---@see |paste|
   ---@alias paste_phase -1 | 1 | 2 | 3
@@ -310,18 +316,29 @@ do
   end
 end
 
---- Defers callback `cb` until the Nvim API is safe to call.
+--- Returns a function which calls {fn} via |vim.schedule()|.
+---
+--- The returned function passes all arguments to {fn}.
+---
+--- Example:
+---
+--- ```lua
+--- function notify_readable(_err, readable)
+---   vim.notify("readable? " .. tostring(readable))
+--- end
+--- vim.uv.fs_access(vim.fn.stdpath("config"), "R", vim.schedule_wrap(notify_readable))
+--- ```
 ---
 ---@see |lua-loop-callbacks|
 ---@see |vim.schedule()|
 ---@see |vim.in_fast_event()|
----@param cb function
+---@param fn function
 ---@return function
-function vim.schedule_wrap(cb)
+function vim.schedule_wrap(fn)
   return function(...)
     local args = vim.F.pack_len(...)
     vim.schedule(function()
-      cb(vim.F.unpack_len(args))
+      fn(vim.F.unpack_len(args))
     end)
   end
 end
@@ -358,32 +375,33 @@ local VIM_CMD_ARG_MAX = 20
 --- command.
 ---
 --- Example:
---- <pre>lua
----   vim.cmd('echo 42')
----   vim.cmd([[
----     augroup My_group
----       autocmd!
----       autocmd FileType c setlocal cindent
----     augroup END
----   ]])
 ---
----   -- Ex command :echo "foo"
----   -- Note string literals need to be double quoted.
----   vim.cmd('echo "foo"')
----   vim.cmd { cmd = 'echo', args = { '"foo"' } }
----   vim.cmd.echo({ args = { '"foo"' } })
----   vim.cmd.echo('"foo"')
+--- ```lua
+--- vim.cmd('echo 42')
+--- vim.cmd([[
+---   augroup My_group
+---     autocmd!
+---     autocmd FileType c setlocal cindent
+---   augroup END
+--- ]])
 ---
----   -- Ex command :write! myfile.txt
----   vim.cmd('write! myfile.txt')
----   vim.cmd { cmd = 'write', args = { "myfile.txt" }, bang = true }
----   vim.cmd.write { args = { "myfile.txt" }, bang = true }
----   vim.cmd.write { "myfile.txt", bang = true }
+--- -- Ex command :echo "foo"
+--- -- Note string literals need to be double quoted.
+--- vim.cmd('echo "foo"')
+--- vim.cmd { cmd = 'echo', args = { '"foo"' } }
+--- vim.cmd.echo({ args = { '"foo"' } })
+--- vim.cmd.echo('"foo"')
 ---
----   -- Ex command :colorscheme blue
----   vim.cmd('colorscheme blue')
----   vim.cmd.colorscheme('blue')
---- </pre>
+--- -- Ex command :write! myfile.txt
+--- vim.cmd('write! myfile.txt')
+--- vim.cmd { cmd = 'write', args = { "myfile.txt" }, bang = true }
+--- vim.cmd.write { args = { "myfile.txt" }, bang = true }
+--- vim.cmd.write { "myfile.txt", bang = true }
+---
+--- -- Ex command :colorscheme blue
+--- vim.cmd('colorscheme blue')
+--- vim.cmd.colorscheme('blue')
+--- ```
 ---
 ---@param command string|table Command(s) to execute.
 ---                            If a string, executes multiple lines of Vim script at once. In this
@@ -868,9 +886,10 @@ end
 --- "Pretty prints" the given arguments and returns them unmodified.
 ---
 --- Example:
---- <pre>lua
----   local hl_normal = vim.print(vim.api.nvim_get_hl_by_name('Normal', true))
---- </pre>
+---
+--- ```lua
+--- local hl_normal = vim.print(vim.api.nvim_get_hl(0, { name = 'Normal' }))
+--- ```
 ---
 --- @see |vim.inspect()|
 --- @see |:=|
@@ -897,10 +916,12 @@ end
 --- Translate keycodes.
 ---
 --- Example:
---- <pre>lua
----   local k = vim.keycode
----   vim.g.mapleader = k'<bs>'
---- </pre>
+---
+--- ```lua
+--- local k = vim.keycode
+--- vim.g.mapleader = k'<bs>'
+--- ```
+---
 --- @param str string String to be converted.
 --- @return string
 --- @see |nvim_replace_termcodes()|

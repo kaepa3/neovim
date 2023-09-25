@@ -173,23 +173,10 @@ foreach(CFGNAME ${CMAKE_CONFIGURATION_TYPES})
   set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_${CFGNAME} ${CMAKE_BINARY_DIR}/lib)
 endforeach()
 
-if(NOT LUA_PRG)
-  foreach(CURRENT_LUA_PRG luajit lua5.1 lua5.2 lua)
-    unset(_CHECK_LUA_PRG CACHE)
-    find_program(_CHECK_LUA_PRG ${CURRENT_LUA_PRG})
-
-    if(_CHECK_LUA_PRG)
-      set(LUA_PRG "${_CHECK_LUA_PRG}" CACHE FILEPATH "Path to a program.")
-      break()
-    endif()
-  endforeach()
-  unset(_CHECK_LUA_PRG CACHE)
-endif()
-
+find_program(LUA_PRG NAMES luajit lua5.1 lua5.2 lua)
 if(NOT LUA_PRG)
   message(FATAL_ERROR "Failed to find a Lua 5.1-compatible interpreter")
 endif()
-
 message(STATUS "Using Lua interpreter: ${LUA_PRG}")
 
 # Some of the code generation still relies on stable table ordering in order to
@@ -200,11 +187,9 @@ message(STATUS "Using Lua interpreter: ${LUA_PRG}")
 if(NOT LUA_GEN_PRG)
   set(LUA_GEN_PRG "${LUA_PRG}" CACHE FILEPATH "Path to the lua used for code generation.")
 endif()
-
 message(STATUS "Using Lua interpreter for code generation: ${LUA_GEN_PRG}")
 
 option(COMPILE_LUA "Pre-compile Lua sources into bytecode (for sources that are included in the binary)" ON)
-
 if(COMPILE_LUA AND NOT WIN32)
   if(PREFER_LUA)
     foreach(CURRENT_LUAC_PRG luac5.1 luac)
@@ -221,14 +206,11 @@ if(COMPILE_LUA AND NOT WIN32)
     endif()
   endif()
 endif()
-
 if(LUAC_PRG)
   message(STATUS "Using Lua compiler: ${LUAC_PRG}")
 endif()
 
-#
 # Lint
-#
 option(CI_LINT "Abort if lint programs not found" OFF)
 if(CI_LINT)
   set(LINT_REQUIRED "REQUIRED")
@@ -238,24 +220,21 @@ find_program(STYLUA_PRG stylua ${LINT_REQUIRED})
 
 add_glob_target(
   TARGET lintlua-luacheck
-  COMMAND ${DEPS_BIN_DIR}/luacheck
-  FLAGS -q
+  COMMAND $<TARGET_FILE:nvim>
+  FLAGS -ll ${PROJECT_SOURCE_DIR}/test/lua_runner.lua ${CMAKE_BINARY_DIR}/usr luacheck -q
   GLOB_DIRS runtime/ scripts/ src/ test/
   GLOB_PAT *.lua
-  TOUCH_STRATEGY SINGLE)
-add_dependencies(lintlua-luacheck luacheck)
-
-add_glob_target(
-  TARGET lintlua-stylua
-  COMMAND ${STYLUA_PRG}
-  FLAGS --color=always --check
-  GLOB_DIRS runtime/
-  GLOB_PAT *.lua
   EXCLUDE
-    /runtime/lua/vim/re.lua
-    /runtime/lua/vim/_meta/options.lua
+    runtime/lua/vim/_meta/.*
+    runtime/lua/coxpcall.lua
   TOUCH_STRATEGY SINGLE)
+add_dependencies(lintlua-luacheck lua-dev-deps)
 
+# Don't use add_glob_target as .styluaignore won't be respected.
+# https://github.com/JohnnyMorganz/StyLua/issues/751
+add_custom_target(lintlua-stylua
+  COMMAND ${STYLUA_PRG} --color=always --check .
+  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
 add_custom_target(lintlua)
 add_dependencies(lintlua lintlua-luacheck lintlua-stylua)
 
@@ -276,9 +255,7 @@ add_dependencies(lintcommit nvim)
 add_custom_target(lint)
 add_dependencies(lint clang-tidy lintc lintlua lintsh lintcommit)
 
-#
 # Format
-#
 add_custom_target(formatlua
   COMMAND ${CMAKE_COMMAND}
     -D FORMAT_PRG=${STYLUA_PRG}
@@ -314,4 +291,13 @@ ExternalProject_Add(uncrustify
   CMAKE_CACHE_ARGS ${DEPS_CMAKE_CACHE_ARGS}
   EXCLUDE_FROM_ALL TRUE)
 
-include(BuildLuarocks)
+ExternalProject_Add(lua-dev-deps
+  URL https://github.com/neovim/deps/raw/5a1f71cceb24990a0b15fd9a472a5f549f019248/opt/lua-dev-deps.tar.gz
+  URL_HASH SHA256=27db2495f5eddc7fc191701ec9b291486853530c6125609d3197d03481e8d5a2
+  DOWNLOAD_NO_PROGRESS TRUE
+  DOWNLOAD_DIR ${DEPS_DOWNLOAD_DIR}/lua-dev-deps
+  SOURCE_DIR ${DEPS_SHARE_DIR}
+  CONFIGURE_COMMAND ""
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+  EXCLUDE_FROM_ALL TRUE)

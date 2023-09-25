@@ -492,7 +492,7 @@ static void may_do_incsearch_highlighting(int firstc, int count, incsearch_state
   // first restore the old curwin values, so the screen is
   // positioned in the same way as the actual search command
   restore_viewstate(curwin, &s->old_viewstate);
-  changed_cline_bef_curs();
+  changed_cline_bef_curs(curwin);
   update_topline(curwin);
 
   if (found != 0) {
@@ -1460,7 +1460,7 @@ static int may_do_command_line_next_incsearch(int firstc, int count, incsearch_s
 
     set_search_match(&s->match_end);
     curwin->w_cursor = s->match_start;
-    changed_cline_bef_curs();
+    changed_cline_bef_curs(curwin);
     update_topline(curwin);
     validate_cursor();
     highlight_match = true;
@@ -2410,6 +2410,9 @@ static void cmdpreview_restore_state(CpInfo *cpinfo)
 
     buf->b_changed = cp_bufinfo.save_b_changed;
 
+    // Clear preview highlights.
+    extmark_clear(buf, (uint32_t)cmdpreview_ns, 0, 0, MAXLNUM, MAXCOL);
+
     if (buf->b_u_seq_cur != cp_bufinfo.undo_info.save_b_u_seq_cur) {
       int count = 0;
 
@@ -2439,9 +2442,6 @@ static void cmdpreview_restore_state(CpInfo *cpinfo)
     }
 
     buf->b_p_ul = cp_bufinfo.save_b_p_ul;        // Restore 'undolevels'
-
-    // Clear preview highlights.
-    extmark_clear(buf, (uint32_t)cmdpreview_ns, 0, 0, MAXLNUM, MAXCOL);
   }
 
   for (size_t i = 0; i < cpinfo->win_info.size; i++) {
@@ -4480,7 +4480,7 @@ static int open_cmdwin(void)
   curwin->w_cursor.lnum = curbuf->b_ml.ml_line_count;
   curwin->w_cursor.col = ccline.cmdpos;
   changed_line_abv_curs();
-  invalidate_botline();
+  invalidate_botline(curwin);
   if (ui_has(kUICmdline)) {
     ccline.redraw_state = kCmdRedrawNone;
     ui_call_cmdline_hide(ccline.level);
@@ -4572,7 +4572,8 @@ static int open_cmdwin(void)
       ccline.cmdlen = (int)strlen(ccline.cmdbuff);
       ccline.cmdbufflen = ccline.cmdlen + 1;
       ccline.cmdpos = curwin->w_cursor.col;
-      if (ccline.cmdpos > ccline.cmdlen) {
+      // If the cursor is on the last character, it probably should be after it.
+      if (ccline.cmdpos == ccline.cmdlen - 1 || ccline.cmdpos > ccline.cmdlen) {
         ccline.cmdpos = ccline.cmdlen;
       }
       if (cmdwin_result == K_IGNORE) {

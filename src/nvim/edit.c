@@ -232,7 +232,8 @@ static void insert_enter(InsertState *s)
   may_trigger_modechanged();
   stop_insert_mode = false;
 
-  // need to position cursor again when on a TAB
+  // need to position cursor again when on a TAB and
+  // when on a char with inline virtual text
   if (gchar_cursor() == TAB || curbuf->b_virt_text_inline > 0) {
     curwin->w_valid &= ~(VALID_WROW|VALID_WCOL|VALID_VIRTCOL);
   }
@@ -1448,6 +1449,7 @@ void edit_putchar(int c, bool highlight)
 
     // save the character to be able to put it back
     if (pc_status == PC_STATUS_UNSET) {
+      // TODO(bfredl): save the schar_T instead
       grid_getbytes(&curwin->w_grid, pc_row, pc_col, pc_bytes, &pc_attr);
       pc_status = PC_STATUS_SET;
     }
@@ -1531,7 +1533,7 @@ void edit_unputchar(void)
     if (pc_status == PC_STATUS_RIGHT || pc_status == PC_STATUS_LEFT) {
       redrawWinline(curwin, curwin->w_cursor.lnum);
     } else {
-      grid_puts(&curwin->w_grid, pc_bytes, pc_row, pc_col, pc_attr);
+      grid_puts(&curwin->w_grid, pc_bytes, -1, pc_row, pc_col, pc_attr);
     }
   }
 }
@@ -1707,7 +1709,7 @@ void change_indent(int type, int amount, int round, int replaced, int call_chang
     curwin->w_cursor.col = (colnr_T)new_cursor_col;
   }
   curwin->w_set_curswant = true;
-  changed_cline_bef_curs();
+  changed_cline_bef_curs(curwin);
 
   // May have to adjust the start of the insert.
   if (State & MODE_INSERT) {
@@ -3471,7 +3473,8 @@ static bool ins_esc(long *count, int cmdchar, bool nomove)
 
   State = MODE_NORMAL;
   may_trigger_modechanged();
-  // need to position cursor again when on a TAB
+  // need to position cursor again when on a TAB and
+  // when on a char with inline virtual text
   if (gchar_cursor() == TAB || curbuf->b_virt_text_inline > 0) {
     curwin->w_valid &= ~(VALID_WROW|VALID_WCOL|VALID_VIRTCOL);
   }
@@ -3483,7 +3486,8 @@ static bool ins_esc(long *count, int cmdchar, bool nomove)
   // Otherwise remove the mode message.
   if (reg_recording != 0 || restart_edit != NUL) {
     showmode();
-  } else if (p_smd && (got_int || !skip_showmode())) {
+  } else if (p_smd && (got_int || !skip_showmode())
+             && !(p_ch == 0 && !ui_has(kUIMessages))) {
     msg("");
   }
   // Exit Insert mode
@@ -3577,6 +3581,7 @@ static void ins_insert(int replaceState)
 // Pressed CTRL-O in Insert mode.
 static void ins_ctrl_o(void)
 {
+  restart_VIsual_select = 0;
   if (State & VREPLACE_FLAG) {
     restart_edit = 'V';
   } else if (State & REPLACE_FLAG) {
@@ -3773,7 +3778,7 @@ static bool ins_bs(int c, int mode, int *inserted_space_p)
         // again when auto-formatting.
         if (has_format_option(FO_AUTO)
             && has_format_option(FO_WHITE_PAR)) {
-          char *ptr = ml_get_buf(curbuf, curwin->w_cursor.lnum, true);
+          char *ptr = ml_get_buf_mut(curbuf, curwin->w_cursor.lnum);
           int len;
 
           len = (int)strlen(ptr);
@@ -4426,9 +4431,8 @@ static bool ins_tab(void)
           }
         }
         if (!(State & VREPLACE_FLAG)) {
-          extmark_splice_cols(curbuf, (int)fpos.lnum - 1, change_col,
-                              cursor->col - change_col, fpos.col - change_col,
-                              kExtmarkUndo);
+          inserted_bytes(fpos.lnum, change_col,
+                         cursor->col - change_col, fpos.col - change_col);
         }
       }
       cursor->col -= i;

@@ -831,7 +831,7 @@ static void normal_get_additional_char(NormalState *s)
       // because if it's put back with vungetc() it's too late to apply
       // mapping.
       no_mapping--;
-      while (lang && (s->c = vpeekc()) > 0
+      while ((s->c = vpeekc()) > 0
              && (s->c >= 0x100 || MB_BYTE2LEN(vpeekc()) > 1)) {
         s->c = plain_vgetc();
         if (!utf_iscomposing(s->c)) {
@@ -848,7 +848,9 @@ static void normal_get_additional_char(NormalState *s)
       // but when replaying a recording the next key is already in the
       // typeahead buffer, so record a <Nop> before that to prevent the
       // vpeekc() above from applying wrong mappings when replaying.
+      no_u_sync++;
       gotchars_nop();
+      no_u_sync--;
     }
   }
   no_mapping--;
@@ -1411,7 +1413,6 @@ static int normal_check(VimState *state)
   }
   quit_more = false;
 
-  // it's not safe unless normal_check_safe_state() is called
   state_no_longer_safe(NULL);
 
   // If skip redraw is set (for ":" in wait_return()), don't redraw now.
@@ -1638,7 +1639,7 @@ size_t find_ident_at_pos(win_T *wp, linenr_T lnum, colnr_T startcol, char **text
 
   // if i == 0: try to find an identifier
   // if i == 1: try to find any non-white text
-  char *ptr = ml_get_buf(wp->w_buffer, lnum, false);
+  char *ptr = ml_get_buf(wp->w_buffer, lnum);
   for (i = (find_type & FIND_IDENT) ? 0 : 1; i < 2; i++) {
     // 1. skip to start of identifier/text
     col = startcol;
@@ -2077,18 +2078,16 @@ static void display_showcmd(void)
 
   msg_grid_validate();
   int showcmd_row = Rows - 1;
-  grid_puts_line_start(&msg_grid_adj, showcmd_row);
+  grid_line_start(&msg_grid_adj, showcmd_row);
 
   if (!showcmd_is_clear) {
-    grid_puts(&msg_grid_adj, showcmd_buf, showcmd_row, sc_col,
-              HL_ATTR(HLF_MSG));
+    grid_line_puts(sc_col, showcmd_buf, -1, HL_ATTR(HLF_MSG));
   }
 
   // clear the rest of an old message by outputting up to SHOWCMD_COLS spaces
-  grid_puts(&msg_grid_adj, (char *)"          " + len, showcmd_row,
-            sc_col + len, HL_ATTR(HLF_MSG));
+  grid_line_puts(sc_col + len, (char *)"          " + len, -1, HL_ATTR(HLF_MSG));
 
-  grid_puts_line_flush(false);
+  grid_line_flush(false);
 }
 
 /// When "check" is false, prepare for commands that scroll the window.
@@ -2351,13 +2350,13 @@ bool find_decl(char *ptr, size_t len, bool locally, bool thisblock, int flags_ar
   bool incll;
   int searchflags = flags_arg;
 
-  pat = xmalloc(len + 7);
+  size_t patlen = len + 7;
+  pat = xmalloc(patlen);
 
   // Put "\V" before the pattern to avoid that the special meaning of "."
   // and "~" causes trouble.
-  assert(len <= INT_MAX);
-  sprintf(pat, vim_iswordp(ptr) ? "\\V\\<%.*s\\>" : "\\V%.*s",  // NOLINT(runtime/printf)
-          (int)len, ptr);
+  assert(patlen <= INT_MAX);
+  snprintf(pat, patlen, vim_iswordp(ptr) ? "\\V\\<%.*s\\>" : "\\V%.*s", (int)len, ptr);
   old_pos = curwin->w_cursor;
   save_p_ws = p_ws;
   save_p_scs = p_scs;
@@ -2472,7 +2471,7 @@ bool find_decl(char *ptr, size_t len, bool locally, bool thisblock, int flags_ar
 /// @return  true if able to move cursor, false otherwise.
 static bool nv_screengo(oparg_T *oap, int dir, long dist)
 {
-  int linelen = linetabsize_str(get_cursor_line_ptr());
+  int linelen = (int)linetabsize(curwin, curwin->w_cursor.lnum);
   bool retval = true;
   bool atend = false;
   int col_off1;                 // margin offset for first screen line
@@ -2536,7 +2535,7 @@ static bool nv_screengo(oparg_T *oap, int dir, long dist)
           }
           cursor_up_inner(curwin, 1);
 
-          linelen = linetabsize_str(get_cursor_line_ptr());
+          linelen = (int)linetabsize(curwin, curwin->w_cursor.lnum);
           if (linelen > width1) {
             int w = (((linelen - width1 - 1) / width2) + 1) * width2;
             assert(curwin->w_curswant <= INT_MAX - w);
@@ -2569,7 +2568,7 @@ static bool nv_screengo(oparg_T *oap, int dir, long dist)
           if (curwin->w_curswant >= width1) {
             curwin->w_curswant -= width2;
           }
-          linelen = linetabsize_str(get_cursor_line_ptr());
+          linelen = (int)linetabsize(curwin, curwin->w_cursor.lnum);
         }
       }
     }
@@ -3923,7 +3922,7 @@ static void nv_gotofile(cmdarg_T *cap)
                 buf_hide(curbuf) ? ECMD_HIDE : 0, curwin) == OK
         && cap->nchar == 'F' && lnum >= 0) {
       curwin->w_cursor.lnum = lnum;
-      check_cursor_lnum();
+      check_cursor_lnum(curwin);
       beginline(BL_SOL | BL_FIX);
     }
     xfree(ptr);
@@ -4512,7 +4511,7 @@ static void nv_replace(cmdarg_T *cap)
   // Visual mode "r"
   if (VIsual_active) {
     if (got_int) {
-      reset_VIsual();
+      got_int = false;
     }
     if (had_ctrl_v) {
       // Use a special (negative) number to make a difference between a
@@ -4772,7 +4771,7 @@ static void n_swapchar(cmdarg_T *cap)
           if (u_savesub(curwin->w_cursor.lnum) == false) {
             break;
           }
-          u_clearline();
+          u_clearline(curbuf);
         }
       } else {
         break;
@@ -4783,7 +4782,7 @@ static void n_swapchar(cmdarg_T *cap)
   check_cursor();
   curwin->w_set_curswant = true;
   if (did_change) {
-    changed_lines(startpos.lnum, startpos.col, curwin->w_cursor.lnum + 1,
+    changed_lines(curbuf, startpos.lnum, startpos.col, curwin->w_cursor.lnum + 1,
                   0L, true);
     curbuf->b_op_start = startpos;
     curbuf->b_op_end = curwin->w_cursor;
@@ -5364,7 +5363,7 @@ static void nv_gi_cmd(cmdarg_T *cap)
 {
   if (curbuf->b_last_insert.mark.lnum != 0) {
     curwin->w_cursor = curbuf->b_last_insert.mark;
-    check_cursor_lnum();
+    check_cursor_lnum(curwin);
     int i = (int)strlen(get_cursor_line_ptr());
     if (curwin->w_cursor.col > (colnr_T)i) {
       if (virtual_active()) {
@@ -5493,7 +5492,7 @@ static void nv_g_cmd(cmdarg_T *cap)
   case 'M':
     oap->motion_type = kMTCharWise;
     oap->inclusive = false;
-    i = linetabsize_str(get_cursor_line_ptr());
+    i = (int)linetabsize(curwin, curwin->w_cursor.lnum);
     if (cap->count0 > 0 && cap->count0 <= 100) {
       coladvance((colnr_T)(i * cap->count0 / 100));
     } else {

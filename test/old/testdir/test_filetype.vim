@@ -97,6 +97,7 @@ func s:GetFilenameChecks() abort
     \ 'asterisk': ['asterisk/file.conf', 'asterisk/file.conf-file', 'some-asterisk/file.conf', 'some-asterisk/file.conf-file'],
     \ 'astro': ['file.astro'],
     \ 'atlas': ['file.atl', 'file.as'],
+    \ 'authzed': ['file.zed'],
     \ 'autohotkey': ['file.ahk'],
     \ 'autoit': ['file.au3'],
     \ 'automake': ['GNUmakefile.am', 'makefile.am', 'Makefile.am'],
@@ -195,7 +196,7 @@ func s:GetFilenameChecks() abort
     \ 'dnsmasq': ['/etc/dnsmasq.conf', '/etc/dnsmasq.d/file', 'any/etc/dnsmasq.conf', 'any/etc/dnsmasq.d/file'],
     \ 'dockerfile': ['Containerfile', 'Dockerfile', 'dockerfile', 'file.Dockerfile', 'file.dockerfile', 'Dockerfile.debian', 'Containerfile.something'],
     \ 'dosbatch': ['file.bat'],
-    \ 'dosini': ['/etc/yum.conf', 'file.ini', 'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file', '/etc/yum.repos.d/file', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap'],
+    \ 'dosini': ['/etc/yum.conf', 'file.ini', 'npmrc', '.npmrc', 'php.ini', 'php.ini-5', 'php.ini-file', '/etc/yum.repos.d/file', 'any/etc/yum.conf', 'any/etc/yum.repos.d/file', 'file.wrap', 'file.vbp'],
     \ 'dot': ['file.dot', 'file.gv'],
     \ 'dracula': ['file.drac', 'file.drc', 'filelvs', 'filelpe', 'drac.file', 'lpe', 'lvs', 'some-lpe', 'some-lvs'],
     \ 'dtd': ['file.dtd'],
@@ -236,7 +237,7 @@ func s:GetFilenameChecks() abort
     \ 'fish': ['file.fish'],
     \ 'focexec': ['file.fex', 'file.focexec'],
     \ 'form': ['file.frm'],
-    \ 'forth': ['file.ft', 'file.fth'],
+    \ 'forth': ['file.ft', 'file.fth', 'file.4th'],
     \ 'fortran': ['file.f', 'file.for', 'file.fortran', 'file.fpp', 'file.ftn', 'file.f77', 'file.f90', 'file.f95', 'file.f03', 'file.f08'],
     \ 'fpcmake': ['file.fpc'],
     \ 'framescript': ['file.fsl'],
@@ -362,6 +363,7 @@ func s:GetFilenameChecks() abort
     \ 'lilo': ['lilo.conf', 'lilo.conf-file'],
     \ 'lilypond': ['file.ly', 'file.ily'],
     \ 'limits': ['/etc/limits', '/etc/anylimits.conf', '/etc/anylimits.d/file.conf', '/etc/limits.conf', '/etc/limits.d/file.conf', '/etc/some-limits.conf', '/etc/some-limits.d/file.conf', 'any/etc/limits', 'any/etc/limits.conf', 'any/etc/limits.d/file.conf', 'any/etc/some-limits.conf', 'any/etc/some-limits.d/file.conf'],
+    \ 'liquidsoap': ['file.liq'],
     \ 'liquid': ['file.liquid'],
     \ 'lisp': ['file.lsp', 'file.lisp', 'file.asd', 'file.el', 'file.cl', '.emacs', '.sawfishrc', 'sbclrc', '.sbclrc'],
     \ 'lite': ['file.lite', 'file.lt'],
@@ -427,6 +429,7 @@ func s:GetFilenameChecks() abort
     \ 'mrxvtrc': ['mrxvtrc', '.mrxvtrc'],
     \ 'msidl': ['file.odl', 'file.mof'],
     \ 'msql': ['file.msql'],
+    \ 'mojo': ['file.mojo', 'file.🔥'],
     \ 'mupad': ['file.mu'],
     \ 'mush': ['file.mush'],
     \ 'muttrc': ['Muttngrc', 'Muttrc', '.muttngrc', '.muttngrc-file', '.muttrc', '.muttrc-file', '/.mutt/muttngrc', '/.mutt/muttngrc-file', '/.mutt/muttrc', '/.mutt/muttrc-file', '/.muttng/muttngrc', '/.muttng/muttngrc-file', '/.muttng/muttrc', '/.muttng/muttrc-file', '/etc/Muttrc.d/file', '/etc/Muttrc.d/file.rc', 'Muttngrc-file', 'Muttrc-file', 'any/.mutt/muttngrc', 'any/.mutt/muttngrc-file', 'any/.mutt/muttrc', 'any/.mutt/muttrc-file', 'any/.muttng/muttngrc', 'any/.muttng/muttngrc-file', 'any/.muttng/muttrc', 'any/.muttng/muttrc-file', 'any/etc/Muttrc.d/file', 'muttngrc', 'muttngrc-file', 'muttrc', 'muttrc-file'],
@@ -442,6 +445,7 @@ func s:GetFilenameChecks() abort
     \ 'nim': ['file.nim', 'file.nims', 'file.nimble'],
     \ 'ninja': ['file.ninja'],
     \ 'nix': ['file.nix'],
+    \ 'norg': ['file.norg'],
     \ 'nqc': ['file.nqc'],
     \ 'nroff': ['file.tr', 'file.nr', 'file.roff', 'file.tmac', 'file.mom', 'tmac.file'],
     \ 'nsis': ['file.nsi', 'file.nsh'],
@@ -681,7 +685,7 @@ func s:GetFilenameChecks() abort
     \ 'usw2kagtlog': ['usw2kagt.log', 'USW2KAGT.LOG', 'usw2kagt.file.log', 'USW2KAGT.FILE.LOG', 'file.usw2kagt.log', 'FILE.USW2KAGT.LOG'],
     \ 'v': ['file.vsh', 'file.vv'],
     \ 'vala': ['file.vala'],
-    \ 'vb': ['file.sba', 'file.vb', 'file.vbs', 'file.dsm', 'file.ctl'],
+    \ 'vb': ['file.sba', 'file.vb', 'file.vbs', 'file.dsm', 'file.ctl', 'file.dob', 'file.dsr'],
     \ 'vdf': ['file.vdf'],
     \ 'vdmpp': ['file.vpp', 'file.vdmpp'],
     \ 'vdmrt': ['file.vdmrt'],
@@ -691,7 +695,7 @@ func s:GetFilenameChecks() abort
     \ 'vgrindefs': ['vgrindefs'],
     \ 'vhdl': ['file.hdl', 'file.vhd', 'file.vhdl', 'file.vbe', 'file.vst', 'file.vhdl_123', 'file.vho', 'some.vhdl_1', 'some.vhdl_1-file'],
     \ 'vhs': ['file.tape'],
-    \ 'vim': ['file.vim', 'file.vba', '.exrc', '_exrc', 'some-vimrc', 'some-vimrc-file', 'vimrc', 'vimrc-file'],
+    \ 'vim': ['file.vim', '.exrc', '_exrc', 'some-vimrc', 'some-vimrc-file', 'vimrc', 'vimrc-file'],
     \ 'viminfo': ['.viminfo', '_viminfo'],
     \ 'vmasm': ['file.mar'],
     \ 'voscm': ['file.cm'],
@@ -854,6 +858,9 @@ let s:script_checks = {
       \ 'fish': [['#!/path/fish']],
       \ 'forth': [['#!/path/gforth']],
       \ 'icon': [['#!/path/icon']],
+      \ 'crystal': [['#!/path/crystal']],
+      \ 'rexx': [['#!/path/rexx'],
+      \          ['#!/path/regina']],
       \ }
 
 " Various forms of "env" optional arguments.
@@ -1173,6 +1180,54 @@ func Test_ex_file()
   filetype off
 endfunc
 
+func Test_f_file()
+  filetype on
+
+  call writefile(['looks like Fortran'], 'Xfile.f', 'D')
+  split Xfile.f
+  call assert_equal('fortran', &filetype)
+  bwipe!
+
+  let g:filetype_f = 'forth'
+  split Xfile.f
+  call assert_equal('forth', &filetype)
+  bwipe!
+  unlet g:filetype_f
+
+  " Test dist#ft#FTf()
+
+  " Forth
+
+  call writefile(['( Forth inline comment )'], 'Xfile.f')
+  split Xfile.f
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  call writefile(['\ Forth line comment'], 'Xfile.f')
+  split Xfile.f
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  call writefile([': squared ( n -- n^2 )', 'dup * ;'], 'Xfile.f')
+  split Xfile.f
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  " SwiftForth
+
+  call writefile(['{ ================', 'Header comment', '================ }'], 'Xfile.f')
+  split Xfile.f
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  call writefile(['OPTIONAL Maybe Descriptive text'], 'Xfile.f')
+  split Xfile.f
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  filetype off
+endfunc
+
 func Test_foam_file()
   filetype on
   call assert_true(mkdir('0', 'pR'))
@@ -1239,7 +1294,7 @@ func Test_frm_file()
 
   " Visual Basic
 
-  call writefile(['Begin VB.Form Form1'], 'Xfile.frm')
+  call writefile(['VERSION 5.00', 'Begin VB.Form Form1'], 'Xfile.frm')
   split Xfile.frm
   call assert_equal('vb', &filetype)
   bwipe!
@@ -1263,7 +1318,7 @@ func Test_fs_file()
 
   " Test dist#ft#FTfs()
 
-  " Forth (Gforth)
+  " Forth
 
   call writefile(['( Forth inline comment )'], 'Xfile.fs')
   split Xfile.fs
@@ -1276,6 +1331,18 @@ func Test_fs_file()
   bwipe!
 
   call writefile([': squared ( n -- n^2 )', 'dup * ;'], 'Xfile.fs')
+  split Xfile.fs
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  " SwiftForth
+
+  call writefile(['{ ================', 'Header comment', '================ }'], 'Xfile.fs')
+  split Xfile.fs
+  call assert_equal('forth', &filetype)
+  bwipe!
+
+  call writefile(['OPTIONAL Maybe Descriptive text'], 'Xfile.fs')
   split Xfile.fs
   call assert_equal('forth', &filetype)
   bwipe!
@@ -1891,7 +1958,22 @@ func Test_cls_file()
 
   " Rexx
 
-  call writefile(['# rexx'], 'Xfile.cls')
+  call writefile(['#!/usr/bin/rexx'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['#!/usr/bin/regina'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['/* Comment */'], 'Xfile.cls')
+  split Xfile.cls
+  call assert_equal('rexx', &filetype)
+  bwipe!
+
+  call writefile(['::class Foo subclass Bar public'], 'Xfile.cls')
   split Xfile.cls
   call assert_equal('rexx', &filetype)
   bwipe!
@@ -2132,6 +2214,28 @@ func Test_typ_file()
   call assert_equal('typst', &filetype)
   bwipe!
   unlet g:filetype_typ
+
+  filetype off
+endfunc
+
+func Test_vba_file()
+  filetype on
+
+  " Test dist#ft#FTvba()
+
+  " Visual Basic
+
+  call writefile(['looks like Visual Basic'], 'Xfile.vba', 'D')
+  split Xfile.vba
+  call assert_equal('vb', &filetype)
+  bwipe!
+
+  " Vimball Archiver (ft=vim)
+
+  call writefile(['" Vimball Archiver by Charles E. Campbell, Ph.D.', 'UseVimball', 'finish'], 'Xfile.vba', 'D')
+  split Xfile.vba
+  call assert_equal('vim', &filetype)
+  bwipe!
 
   filetype off
 endfunc

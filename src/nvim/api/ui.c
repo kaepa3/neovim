@@ -136,7 +136,7 @@ void remote_ui_wait_for_attach(void)
   }
 
   LOOP_PROCESS_EVENTS_UNTIL(&main_loop, channel->events, -1,
-                            pmap_has(uint64_t)(&connected_uis, CHAN_STDIO));
+                            map_has(uint64_t, &connected_uis, CHAN_STDIO));
 }
 
 /// Activates UI events on the channel.
@@ -158,7 +158,7 @@ void nvim_ui_attach(uint64_t channel_id, Integer width, Integer height, Dictiona
                     Error *err)
   FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
 {
-  if (pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(err, kErrorTypeException,
                   "UI already attached to channel: %" PRId64, channel_id);
     return;
@@ -233,7 +233,7 @@ void ui_attach(uint64_t channel_id, Integer width, Integer height, Boolean enabl
 void nvim_ui_set_focus(uint64_t channel_id, Boolean gained, Error *error)
   FUNC_API_SINCE(11) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(error, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -255,7 +255,7 @@ void nvim_ui_set_focus(uint64_t channel_id, Boolean gained, Error *error)
 void nvim_ui_detach(uint64_t channel_id, Error *err)
   FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(err, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -271,7 +271,7 @@ void remote_ui_stop(UI *ui)
 void nvim_ui_try_resize(uint64_t channel_id, Integer width, Integer height, Error *err)
   FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(err, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -292,7 +292,7 @@ void nvim_ui_try_resize(uint64_t channel_id, Integer width, Integer height, Erro
 void nvim_ui_set_option(uint64_t channel_id, String name, Object value, Error *error)
   FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(error, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -426,7 +426,7 @@ void nvim_ui_try_resize_grid(uint64_t channel_id, Integer grid, Integer width, I
                              Error *err)
   FUNC_API_SINCE(6) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(err, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -448,7 +448,7 @@ void nvim_ui_try_resize_grid(uint64_t channel_id, Integer grid, Integer width, I
 void nvim_ui_pum_set_height(uint64_t channel_id, Integer height, Error *err)
   FUNC_API_SINCE(6) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(err, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -489,7 +489,7 @@ void nvim_ui_pum_set_bounds(uint64_t channel_id, Float width, Float height, Floa
                             Error *err)
   FUNC_API_SINCE(7) FUNC_API_REMOTE_ONLY
 {
-  if (!pmap_has(uint64_t)(&connected_uis, channel_id)) {
+  if (!map_has(uint64_t, &connected_uis, channel_id)) {
     api_set_error(err, kErrorTypeException,
                   "UI not attached to channel: %" PRId64, channel_id);
     return;
@@ -830,10 +830,10 @@ void remote_ui_raw_line(UI *ui, Integer grid, Integer row, Integer startcol, Int
     size_t ncells = (size_t)(endcol - startcol);
     int last_hl = -1;
     uint32_t nelem = 0;
+    bool was_space = false;
     for (size_t i = 0; i < ncells; i++) {
       repeat++;
-      if (i == ncells - 1 || attrs[i] != attrs[i + 1]
-          || strcmp(chunk[i], chunk[i + 1]) != 0) {
+      if (i == ncells - 1 || attrs[i] != attrs[i + 1] || chunk[i] != chunk[i + 1]) {
         if (UI_BUF_SIZE - BUF_POS(data) < 2 * (1 + 2 + sizeof(schar_T) + 5 + 5) + 1) {
           // close to overflowing the redraw buffer. finish this event,
           // flush, and start a new "grid_line" event at the current position.
@@ -858,7 +858,9 @@ void remote_ui_raw_line(UI *ui, Integer grid, Integer row, Integer startcol, Int
         uint32_t csize = (repeat > 1) ? 3 : ((attrs[i] != last_hl) ? 2 : 1);
         nelem++;
         mpack_array(buf, csize);
-        mpack_str(buf, chunk[i]);
+        char sc_buf[MAX_SCHAR_SIZE];
+        schar_get(sc_buf, chunk[i]);
+        mpack_str(buf, sc_buf);
         if (csize >= 2) {
           mpack_uint(buf, (uint32_t)attrs[i]);
           if (csize >= 3) {
@@ -868,9 +870,12 @@ void remote_ui_raw_line(UI *ui, Integer grid, Integer row, Integer startcol, Int
         data->ncells_pending += MIN(repeat, 2);
         last_hl = attrs[i];
         repeat = 0;
+        was_space = chunk[i] == schar_from_ascii(' ');
       }
     }
-    if (endcol < clearcol) {
+    // If the last chunk was all spaces, add a clearing chunk even if there are
+    // no more cells to clear, so there is no ambiguity about what to clear.
+    if (endcol < clearcol || was_space) {
       nelem++;
       data->ncells_pending += 1;
       mpack_array(buf, 3);
@@ -889,8 +894,10 @@ void remote_ui_raw_line(UI *ui, Integer grid, Integer row, Integer startcol, Int
     for (int i = 0; i < endcol - startcol; i++) {
       remote_ui_cursor_goto(ui, row, startcol + i);
       remote_ui_highlight_set(ui, attrs[i]);
-      remote_ui_put(ui, chunk[i]);
-      if (utf_ambiguous_width(utf_ptr2char((char *)chunk[i]))) {
+      char sc_buf[MAX_SCHAR_SIZE];
+      schar_get(sc_buf, chunk[i]);
+      remote_ui_put(ui, sc_buf);
+      if (utf_ambiguous_width(utf_ptr2char(sc_buf))) {
         data->client_col = -1;  // force cursor update
       }
     }

@@ -208,6 +208,23 @@ describe('API/extmarks', function()
     eq({}, get_extmarks(ns2, {0, 0}, {-1, -1}))
   end)
 
+  it('can undo with extmarks (#25147)', function()
+    feed('itest<esc>')
+    set_extmark(ns, 1, 0, 0)
+    set_extmark(ns, 2, 1, 0)
+    eq({ { 1, 0, 0 }, { 2, 1, 0 } }, get_extmarks(ns, {0, 0}, {-1, -1}))
+    feed('dd')
+    eq({ { 1, 1, 0 }, { 2, 1, 0 } }, get_extmarks(ns, {0, 0}, {-1, -1}))
+    curbufmeths.clear_namespace(ns, 0, -1)
+    eq({}, get_extmarks(ns, {0, 0}, {-1, -1}))
+    set_extmark(ns, 1, 0, 0, { right_gravity = false })
+    set_extmark(ns, 2, 1, 0, { right_gravity = false })
+    eq({ { 1, 0, 0 }, { 2, 1, 0 } }, get_extmarks(ns, {0, 0}, {-1, -1}))
+    feed('u')
+    eq({ { 1, 0, 0 }, { 2, 1, 0 } }, get_extmarks(ns, {0, 0}, {-1, -1}))
+    curbufmeths.clear_namespace(ns, 0, -1)
+  end)
+
   it('querying for information and ranges', function()
     --marks = {1, 2, 3}
     --positions = {{0, 0,}, {0, 2}, {0, 3}}
@@ -753,7 +770,14 @@ describe('API/extmarks', function()
       })
     end)
 
-    -- TODO(bfredl): add more tests!
+    it('can get overlapping extmarks', function()
+      set_extmark(ns, 1, 0, 0, {end_row = 5, end_col=0})
+      set_extmark(ns, 2, 2, 5, {end_row = 2, end_col=30})
+      set_extmark(ns, 3, 0, 5, {end_row = 2, end_col=10})
+      set_extmark(ns, 4, 0, 0, {end_row = 1, end_col=0})
+      eq({{ 2, 2, 5 }}, get_extmarks(ns, {2, 0}, {2, -1}, { overlap=false }))
+      eq({{ 1, 0, 0 }, { 3, 0, 5}, {2, 2, 5}}, get_extmarks(ns, {2, 0}, {2, -1}, { overlap=true }))
+    end)
   end)
 
   it('replace works', function()
@@ -1500,16 +1524,19 @@ describe('API/extmarks', function()
       sign_hl_group = "Statement",
       sign_text = ">>",
       spell = true,
-      virt_lines = { { { "lines", "Statement" } }},
+      virt_lines = {
+        { { "lines", "Macro" }, { "???" } },
+        { { "stack", { "Type", "Search" } }, { "!!!" } },
+      },
       virt_lines_above = true,
       virt_lines_leftcol = true,
-      virt_text = { { "text", "Statement" } },
+      virt_text = { { "text", "Macro" }, { "???" }, { "stack", { "Type", "Search" } } },
       virt_text_hide = true,
       virt_text_pos = "right_align",
     })
     set_extmark(ns, marks[2], 0, 0, {
       priority = 0,
-      virt_text = { { "text", "Statement" } },
+      virt_text = { { "", "Macro" }, { "", { "Type", "Search" } }, { "" } },
       virt_text_win_col = 1,
     })
     eq({0, 0, {
@@ -1529,10 +1556,13 @@ describe('API/extmarks', function()
       sign_hl_group = "Statement",
       sign_text = ">>",
       spell = true,
-      virt_lines = { { { "lines", "Statement" } }},
+      virt_lines = {
+        { { "lines", "Macro" }, { "???" } },
+        { { "stack", { "Type", "Search" } }, { "!!!" } },
+      },
       virt_lines_above = true,
       virt_lines_leftcol = true,
-      virt_text = { { "text", "Statement" } },
+      virt_text = { { "text", "Macro" }, { "???" }, { "stack", { "Type", "Search" } } },
       virt_text_hide = true,
       virt_text_pos = "right_align",
     } }, get_extmark_by_id(ns, marks[1], { details = true }))
@@ -1540,7 +1570,7 @@ describe('API/extmarks', function()
       ns_id = 1,
       right_gravity = true,
       priority = 0,
-      virt_text = { { "text", "Statement" } },
+      virt_text = { { "", "Macro" }, { "", { "Type", "Search" } }, { "" } },
       virt_text_hide = false,
       virt_text_pos = "win_col",
       virt_text_win_col = 1,

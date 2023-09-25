@@ -386,6 +386,7 @@ local function get_diagnostics(bufnr, opts, clamp)
 
   local function add(b, d)
     if not opts.lnum or d.lnum == opts.lnum then
+      d = vim.deepcopy(d)
       if clamp and api.nvim_buf_is_loaded(b) then
         local line_count = buf_line_count[b] - 1
         if
@@ -396,7 +397,6 @@ local function get_diagnostics(bufnr, opts, clamp)
           or d.col < 0
           or d.end_col < 0
         then
-          d = vim.deepcopy(d)
           d.lnum = math.max(math.min(d.lnum, line_count), 0)
           d.end_lnum = math.max(math.min(d.end_lnum, line_count), 0)
           d.col = math.max(d.col, 0)
@@ -553,14 +553,16 @@ end
 --- followed by namespace configuration, and finally global configuration.
 ---
 --- For example, if a user enables virtual text globally with
---- <pre>lua
----   vim.diagnostic.config({ virtual_text = true })
---- </pre>
+---
+--- ```lua
+--- vim.diagnostic.config({ virtual_text = true })
+--- ```
 ---
 --- and a diagnostic producer sets diagnostics with
---- <pre>lua
----   vim.diagnostic.set(ns, 0, diagnostics, { virtual_text = false })
---- </pre>
+---
+--- ```lua
+--- vim.diagnostic.set(ns, 0, diagnostics, { virtual_text = false })
+--- ```
 ---
 --- then virtual text will not be enabled for those diagnostics.
 ---
@@ -749,6 +751,8 @@ end
 ---@field user_data? any arbitrary data plugins can add
 
 --- Get current diagnostics.
+---
+--- Modifying diagnostics in the returned table has no effect. To set diagnostics in a buffer, use |vim.diagnostic.set()|.
 ---
 ---@param bufnr integer|nil Buffer number to get diagnostics from. Use 0 for
 ---                        current buffer or nil for all buffers.
@@ -1599,18 +1603,20 @@ end
 --- Parse a diagnostic from a string.
 ---
 --- For example, consider a line of output from a linter:
---- <pre>
+---
+--- ```
 --- WARNING filename:27:3: Variable 'foo' does not exist
---- </pre>
+--- ```
 ---
 --- This can be parsed into a diagnostic |diagnostic-structure|
 --- with:
---- <pre>lua
----   local s = "WARNING filename:27:3: Variable 'foo' does not exist"
----   local pattern = "^(%w+) %w+:(%d+):(%d+): (.+)$"
----   local groups = { "severity", "lnum", "col", "message" }
----   vim.diagnostic.match(s, pattern, groups, { WARNING = vim.diagnostic.WARN })
---- </pre>
+---
+--- ```lua
+--- local s = "WARNING filename:27:3: Variable 'foo' does not exist"
+--- local pattern = "^(%w+) %w+:(%d+):(%d+): (.+)$"
+--- local groups = { "severity", "lnum", "col", "message" }
+--- vim.diagnostic.match(s, pattern, groups, { WARNING = vim.diagnostic.WARN })
+--- ```
 ---
 ---@param str string String to parse diagnostics from.
 ---@param pat string Lua pattern with capture groups.

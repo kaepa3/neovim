@@ -131,15 +131,16 @@ function vim.str_utf_pos(str) end
 --- The result can be added to {index} to get the starting byte of a character.
 ---
 --- Examples:
---- <pre>lua
---- -- The character 'æ' are equal to the bytes '\xc3\xa6' (using UTF-8)
+---
+--- ```lua
+--- -- The character 'æ' is stored as the bytes '\xc3\xa6' (using UTF-8)
 ---
 --- -- Returns 0 because the index is pointing at the first byte of a character
 --- vim.str_utf_start('æ', 1)
 ---
 --- -- Returns -1 because the index is pointing at the second byte of a character
 --- vim.str_utf_start('æ', 2)
---- </pre>
+--- ```
 ---
 --- @param str string
 --- @param index number
@@ -150,15 +151,16 @@ function vim.str_utf_start(str, index) end
 --- to.
 ---
 --- Examples:
---- <pre>lua
---- -- The character 'æ' are equal to the bytes '\xc3\xa6' (using UTF-8)
+---
+--- ```lua
+--- -- The character 'æ' is stored as the bytes '\xc3\xa6' (using UTF-8)
 ---
 --- -- Returns 0 because the index is pointing at the last byte of a character
 --- vim.str_utf_end('æ', 2)
 ---
---- -- Returns 1 because the index is pointing at the second last byte of a character
+--- -- Returns 1 because the index is pointing at the penultimate byte of a character
 --- vim.str_utf_end('æ', 1)
---- </pre>
+--- ```
 ---
 --- @param str string
 --- @param index number
@@ -192,10 +194,10 @@ function vim.str_utfindex(str, index) end
 --- @return string|nil Converted string if conversion succeeds, `nil` otherwise.
 function vim.iconv(str, from, to, opts) end
 
---- Schedules {callback} to be invoked soon by the main event-loop. Useful
+--- Schedules {fn} to be invoked soon by the main event-loop. Useful
 --- to avoid |textlock| or other temporary restrictions.
---- @param callback fun()
-function vim.schedule(callback) end
+--- @param fn function
+function vim.schedule(fn) end
 
 --- Wait for {time} in milliseconds until {callback} returns `true`.
 ---
@@ -204,7 +206,8 @@ function vim.schedule(callback) end
 --- this time.
 ---
 --- Examples:
---- <pre>lua
+---
+--- ```lua
 ---
 --- ---
 --- -- Wait for 100 ms, allowing other events to process
@@ -226,7 +229,7 @@ function vim.schedule(callback) end
 --- if vim.wait(10000, function() return vim.g.timer_result end) then
 ---   print('Only waiting a little bit of time!')
 --- end
---- </pre>
+--- ```
 ---
 --- @param time integer Number of milliseconds to wait
 --- @param callback? fun(): boolean Optional callback. Waits until {callback} returns true
@@ -258,22 +261,23 @@ function vim.wait(time, callback, interval, fast_only) end
 --- likewise experimental).
 ---
 --- Example (stub for a |ui-popupmenu| implementation):
---- <pre>lua
 ---
----   ns = vim.api.nvim_create_namespace('my_fancy_pum')
+--- ```lua
+--- ns = vim.api.nvim_create_namespace('my_fancy_pum')
 ---
----   vim.ui_attach(ns, {ext_popupmenu=true}, function(event, ...)
----     if event == "popupmenu_show" then
----       local items, selected, row, col, grid = ...
----       print("display pum ", #items)
----     elseif event == "popupmenu_select" then
----       local selected = ...
----       print("selected", selected)
----     elseif event == "popupmenu_hide" then
----       print("FIN")
----     end
----   end)
---- </pre>
+--- vim.ui_attach(ns, {ext_popupmenu=true}, function(event, ...)
+---   if event == "popupmenu_show" then
+---     local items, selected, row, col, grid = ...
+---     print("display pum ", #items)
+---   elseif event == "popupmenu_select" then
+---     local selected = ...
+---     print("selected", selected)
+---   elseif event == "popupmenu_hide" then
+---     print("FIN")
+---   end
+--- end)
+--- ```
+---
 --- @param ns integer
 --- @param options table<string, any>
 --- @param callback fun()
