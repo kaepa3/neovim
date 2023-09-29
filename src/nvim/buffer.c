@@ -206,7 +206,7 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags_arg)
   int flags = flags_arg;
   int retval = OK;
   bufref_T old_curbuf;
-  long old_tw = curbuf->b_p_tw;
+  OptInt old_tw = curbuf->b_p_tw;
   int read_fifo = false;
   bool silent = shortmess(SHM_FILEINFO);
 
@@ -354,6 +354,7 @@ int open_buffer(int read_stdin, exarg_T *eap, int flags_arg)
   // Set last_changedtick to avoid triggering a TextChanged autocommand right
   // after it was added.
   curbuf->b_last_changedtick = buf_get_changedtick(curbuf);
+  curbuf->b_last_changedtick_i = buf_get_changedtick(curbuf);
   curbuf->b_last_changedtick_pum = buf_get_changedtick(curbuf);
 
   // require "!" to overwrite the file, because it wasn't read completely
@@ -964,7 +965,7 @@ void goto_buffer(exarg_T *eap, int start, int dir, int count)
 void handle_swap_exists(bufref_T *old_curbuf)
 {
   cleanup_T cs;
-  long old_tw = curbuf->b_p_tw;
+  OptInt old_tw = curbuf->b_p_tw;
   buf_T *buf;
 
   if (swap_exists_action == SEA_QUIT) {
@@ -1531,7 +1532,7 @@ void set_curbuf(buf_T *buf, int action)
   buf_T *prevbuf;
   int unload = (action == DOBUF_UNLOAD || action == DOBUF_DEL
                 || action == DOBUF_WIPE);
-  long old_tw = curbuf->b_p_tw;
+  OptInt old_tw = curbuf->b_p_tw;
 
   setpcmark();
   if ((cmdmod.cmod_flags & CMOD_KEEPALT) == 0) {
@@ -2857,7 +2858,7 @@ void buflist_list(exarg_T *eap)
                    buf == curbuf ? (int64_t)curwin->w_cursor.lnum : (int64_t)buflist_findlnum(buf));
     }
 
-    msg_outtrans(IObuff);
+    msg_outtrans(IObuff, 0);
     line_breakcheck();
   }
 
@@ -3182,7 +3183,7 @@ void fileinfo(int fullname, int shorthelp, int dont_truncate)
                    (curbuf->b_flags & BF_NOTEDITED) && !dontwrite
                    ? _("[Not edited]") : "",
                    (curbuf->b_flags & BF_NEW) && !dontwrite
-                   ? new_file_message() : "",
+                   ? _("[New]") : "",
                    (curbuf->b_flags & BF_READERR)
                    ? _("[Read errors]") : "",
                    curbuf->b_p_ro
@@ -3229,10 +3230,10 @@ void fileinfo(int fullname, int shorthelp, int dont_truncate)
     msg_start();
     n = msg_scroll;
     msg_scroll = true;
-    msg(buffer);
+    msg(buffer, 0);
     msg_scroll = n;
   } else {
-    p = msg_trunc_attr(buffer, false, 0);
+    p = msg_trunc(buffer, false, 0);
     if (restart_edit != 0 || (msg_scrolled && !need_wait_return)) {
       // Need to repeat the message after redrawing when:
       // - When restart_edit is set (otherwise there will be a delay

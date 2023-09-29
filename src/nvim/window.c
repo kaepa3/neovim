@@ -380,7 +380,7 @@ newwindow:
   case 'T':
     CHECK_CMDWIN;
     if (one_window(curwin)) {
-      msg(_(m_onlyone));
+      msg(_(m_onlyone), 0);
     } else {
       tabpage_T *oldtab = curtab;
 
@@ -3972,7 +3972,7 @@ void close_others(int message, int forceit)
   if (one_nonfloat() && !lastwin->w_floating) {
     if (message
         && !autocmd_busy) {
-      msg(_(m_onlyone));
+      msg(_(m_onlyone), 0);
     }
     return;
   }
@@ -5741,7 +5741,7 @@ void win_size_restore(garray_T *gap)
 {
   if (win_count() * 2 + 1 == gap->ga_len
       && ((int *)gap->ga_data)[0] ==
-      (int)ROWS_AVAIL + global_stl_height() - last_stl_height(false)) {
+      ROWS_AVAIL + global_stl_height() - last_stl_height(false)) {
     // The order matters, because frames contain other frames, but it's
     // difficult to get right. The easy way out is to do it twice.
     for (int j = 0; j < 2; j++) {
@@ -6764,7 +6764,7 @@ void win_new_width(win_T *wp, int width)
 
 void win_comp_scroll(win_T *wp)
 {
-  const long old_w_p_scr = wp->w_p_scr;
+  const OptInt old_w_p_scr = wp->w_p_scr;
 
   wp->w_p_scr = wp->w_height_inner / 2;
   if (wp->w_p_scr == 0) {

@@ -799,11 +799,10 @@ int lookup_color(const int idx, const bool foreground, TriState *const boldp)
 void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
 {
   int idx = id - 1;  // Index is ID minus one.
-
   bool is_default = attrs.rgb_ae_attr & HL_DEFAULT;
 
   // Return if "default" was used and the group already has settings
-  if (is_default && hl_has_settings(idx, true)) {
+  if (is_default && hl_has_settings(idx, true) && !dict->force) {
     return;
   }
 
@@ -1524,7 +1523,7 @@ static void highlight_list_one(const int id)
     didh = true;
     msg_puts_attr("links to", HL_ATTR(HLF_D));
     msg_putchar(' ');
-    msg_outtrans(hl_table[hl_table[id - 1].sg_link - 1].sg_name);
+    msg_outtrans(hl_table[hl_table[id - 1].sg_link - 1].sg_name, 0);
   }
 
   if (!didh) {
@@ -1657,7 +1656,7 @@ static bool highlight_list_arg(const int id, bool didh, const int type, int iarg
       msg_puts_attr(name, HL_ATTR(HLF_D));
       msg_puts_attr("=", HL_ATTR(HLF_D));
     }
-    msg_outtrans(ts);
+    msg_outtrans(ts, 0);
   }
   return didh;
 }
@@ -1787,7 +1786,7 @@ bool syn_list_header(const bool did_header, const int outlen, const int id, bool
     if (got_int) {
       return true;
     }
-    msg_outtrans(hl_table[id - 1].sg_name);
+    msg_outtrans(hl_table[id - 1].sg_name, 0);
     name_col = msg_col;
     endcol = 15;
   } else if ((ui_has(kUIMessages) || msg_silent) && !force_newline) {

@@ -69,8 +69,6 @@ static const char e_backupext_and_patchmode_are_equal[]
   = N_("E589: 'backupext' and 'patchmode' are equal");
 static const char e_showbreak_contains_unprintable_or_wide_character[]
   = N_("E595: 'showbreak' contains unprintable or wide character");
-static const char e_internal_error_shortmess_too_long[]
-  = N_("E1336: Internal error: shortmess too long");
 
 static char *(p_ambw_values[]) = { "single", "double", NULL };
 static char *(p_bg_values[]) = { "light", "dark", NULL };
@@ -134,11 +132,12 @@ static char *(p_rdb_values[]) = { "compositor", "nothrottle", "invalid", "nodelt
 static char *(p_sloc_values[]) = { "last", "statusline", "tabline", NULL };
 
 /// All possible flags for 'shm'.
-static char SHM_ALL[] = { SHM_RO, SHM_MOD, SHM_FILE, SHM_LAST, SHM_TEXT, SHM_LINES, SHM_NEW,
+/// the literal chars before 0 are removed flags. these are safely ignored
+static char SHM_ALL[] = { SHM_RO, SHM_MOD, SHM_LINES,
                           SHM_WRI, SHM_ABBREVIATIONS, SHM_WRITE, SHM_TRUNC, SHM_TRUNCALL,
                           SHM_OVER, SHM_OVERALL, SHM_SEARCH, SHM_ATTENTION, SHM_INTRO,
                           SHM_COMPLETIONMENU, SHM_COMPLETIONSCAN, SHM_RECORDING, SHM_FILEINFO,
-                          SHM_SEARCHCOUNT, 0, };
+                          SHM_SEARCHCOUNT, 'n', 'f', 'x', 'i', 0, };
 
 /// After setting various option values: recompute variables that depend on
 /// option values.
@@ -528,8 +527,8 @@ static bool valid_filetype(const char *val)
 /// @return error message, NULL if it's OK.
 const char *did_set_mousescroll(optset_T *args FUNC_ATTR_UNUSED)
 {
-  long vertical = -1;
-  long horizontal = -1;
+  OptInt vertical = -1;
+  OptInt horizontal = -1;
 
   char *string = p_mousescroll;
 
@@ -543,7 +542,7 @@ const char *did_set_mousescroll(optset_T *args FUNC_ATTR_UNUSED)
       return e_invarg;
     }
 
-    long *direction;
+    OptInt *direction;
 
     if (memcmp(string, "ver:", 4) == 0) {
       direction = &vertical;
@@ -1945,7 +1944,7 @@ const char *did_set_varsofttabstop(optset_T *args)
     return e_invarg;
   }
 
-  long *oldarray = buf->b_p_vsts_array;
+  colnr_T *oldarray = buf->b_p_vsts_array;
   if (tabstop_set(*varp, &(buf->b_p_vsts_array))) {
     xfree(oldarray);
   } else {
@@ -1976,7 +1975,7 @@ const char *did_set_vartabstop(optset_T *args)
     return e_invarg;
   }
 
-  long *oldarray = buf->b_p_vts_array;
+  colnr_T *oldarray = buf->b_p_vts_array;
   if (tabstop_set(*varp, &(buf->b_p_vts_array))) {
     xfree(oldarray);
     if (foldmethodIsIndent(win)) {
@@ -2267,36 +2266,6 @@ static int opt_strings_flags(const char *val, char **values, unsigned *flagp, bo
 int check_ff_value(char *p)
 {
   return check_opt_strings(p, p_ff_values, false);
-}
-
-static char shm_buf[SHM_LEN];
-static int set_shm_recursive = 0;
-
-/// Save the actual shortmess Flags and clear them temporarily to avoid that
-/// file messages overwrites any output from the following commands.
-///
-/// Caller must make sure to first call save_clear_shm_value() and then
-/// restore_shm_value() exactly the same number of times.
-void save_clear_shm_value(void)
-{
-  if (strlen(p_shm) >= SHM_LEN) {
-    iemsg(e_internal_error_shortmess_too_long);
-    return;
-  }
-
-  if (++set_shm_recursive == 1) {
-    STRCPY(shm_buf, p_shm);
-    set_option_value_give_err("shm", STATIC_CSTR_AS_OPTVAL(""), 0);
-  }
-}
-
-/// Restore the shortmess Flags set from the save_clear_shm_value() function.
-void restore_shm_value(void)
-{
-  if (--set_shm_recursive == 0) {
-    set_option_value_give_err("shm", CSTR_AS_OPTVAL(shm_buf), 0);
-    memset(shm_buf, 0, SHM_LEN);
-  }
 }
 
 static const char e_conflicts_with_value_of_listchars[]

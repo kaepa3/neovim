@@ -801,8 +801,8 @@ static char *ex_let_option(char *arg, typval_T *const tv, const bool is_const,
 
   if (op != NULL && *op != '=') {
     if (!hidden && is_num) {  // number or bool
-      Integer cur_n = curval.type == kOptValTypeNumber ? curval.data.number : curval.data.boolean;
-      Integer new_n = newval.type == kOptValTypeNumber ? newval.data.number : newval.data.boolean;
+      OptInt cur_n = curval.type == kOptValTypeNumber ? curval.data.number : curval.data.boolean;
+      OptInt new_n = newval.type == kOptValTypeNumber ? newval.data.number : newval.data.boolean;
 
       switch (*op) {
       case '+':
@@ -1352,7 +1352,7 @@ static void list_one_var(dictitem_T *v, const char *prefix, int *first)
 static void list_one_var_a(const char *prefix, const char *name, const ptrdiff_t name_len,
                            const VarType type, const char *string, int *first)
 {
-  // don't use msg() or msg_attr() to avoid overwriting "v:statusmsg"
+  // don't use msg() to avoid overwriting "v:statusmsg"
   msg_start();
   msg_puts(prefix);
   if (name != NULL) {  // "a:" vars don't have a name stored
@@ -1378,7 +1378,7 @@ static void list_one_var_a(const char *prefix, const char *name, const ptrdiff_t
     msg_putchar(' ');
   }
 
-  msg_outtrans(string);
+  msg_outtrans(string, 0);
 
   if (type == VAR_FUNC || type == VAR_PARTIAL) {
     msg_puts("()");
@@ -1873,7 +1873,7 @@ static OptVal tv_to_optval(typval_T *tv, const char *option, uint32_t flags, boo
         semsg(_("E521: Number required: &%s = '%s'"), option, tv->vval.v_string);
       }
     }
-    value = (flags & P_NUM) ? NUMBER_OPTVAL(n)
+    value = (flags & P_NUM) ? NUMBER_OPTVAL((OptInt)n)
                             : BOOLEAN_OPTVAL(n == 0 ? kFalse : (n >= 1 ? kTrue : kNone));
   } else if ((flags & P_STRING) || is_tty_option(option)) {
     // Avoid setting string option to a boolean or a special value.

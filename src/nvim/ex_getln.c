@@ -127,7 +127,7 @@ typedef struct command_line_state {
   int ignore_drag_release;
   int break_ctrl_c;
   expand_T xpc;
-  long *b_im_ptr;
+  OptInt *b_im_ptr;
   buf_T *b_im_ptr_buf;  ///< buffer where b_im_ptr is valid
 } CommandLineState;
 
@@ -149,7 +149,7 @@ typedef struct cmdpreview_undo_info {
 
 typedef struct cmdpreview_buf_info {
   buf_T *buf;
-  long save_b_p_ul;
+  OptInt save_b_p_ul;
   int save_b_changed;
   varnumber_T save_changedtick;
   CpUndoInfo undo_info;
@@ -1560,7 +1560,7 @@ static int command_line_erase_chars(CommandLineState *s)
 /// language :lmap mappings and/or Input Method.
 static void command_line_toggle_langmap(CommandLineState *s)
 {
-  long *b_im_ptr = buf_valid(s->b_im_ptr_buf) ? s->b_im_ptr : NULL;
+  OptInt *b_im_ptr = buf_valid(s->b_im_ptr_buf) ? s->b_im_ptr : NULL;
   if (map_to_exists_mode("", MODE_LANGMAP, false)) {
     // ":lmap" mappings exists, toggle use of mappings.
     State ^= MODE_LANGMAP;
@@ -2664,7 +2664,7 @@ static void abandon_cmdline(void)
   if (msg_scrolled == 0) {
     compute_cmdrow();
   }
-  msg("");
+  msg("", 0);
   redraw_cmdline = true;
 }
 
@@ -3400,7 +3400,7 @@ static void draw_cmdline(int start, int len)
       }
     }
 
-    msg_outtrans_len(arshape_buf, newlen);
+    msg_outtrans_len(arshape_buf, newlen, 0);
   } else {
 draw_cmdline_no_arabicshape:
     if (kv_size(ccline.last_colors.colors)) {
@@ -3410,12 +3410,10 @@ draw_cmdline_no_arabicshape:
           continue;
         }
         const int chunk_start = MAX(chunk.start, start);
-        msg_outtrans_len_attr(ccline.cmdbuff + chunk_start,
-                              chunk.end - chunk_start,
-                              chunk.attr);
+        msg_outtrans_len(ccline.cmdbuff + chunk_start, chunk.end - chunk_start, chunk.attr);
       }
     } else {
-      msg_outtrans_len(ccline.cmdbuff + start, len);
+      msg_outtrans_len(ccline.cmdbuff + start, len, 0);
     }
   }
 }
