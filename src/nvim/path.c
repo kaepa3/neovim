@@ -2,7 +2,6 @@
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
 #include <assert.h>
-#include <ctype.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -12,10 +11,10 @@
 
 #include "auto/config.h"
 #include "nvim/ascii.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/eval.h"
+#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/file_search.h"
 #include "nvim/fileio.h"
@@ -27,6 +26,7 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
@@ -35,7 +35,6 @@
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
@@ -649,11 +648,13 @@ static size_t do_path_expand(garray_T *gap, const char *path, size_t wildoff, in
       }
       s = p + 1;
     } else if (path_end >= path + wildoff
+#ifdef MSWIN
+               && vim_strchr("*?[~", (uint8_t)(*path_end)) != NULL
+#else
                && (vim_strchr("*?[{~$", (uint8_t)(*path_end)) != NULL
-#ifndef MSWIN
-                   || (!p_fic && (flags & EW_ICASE) && mb_isalpha(utf_ptr2char(path_end)))
+                   || (!p_fic && (flags & EW_ICASE) && mb_isalpha(utf_ptr2char(path_end))))
 #endif
-                   )) {  // NOLINT(whitespace/parens)
+               ) {  // NOLINT(whitespace/parens)
       e = p;
     }
     len = (size_t)(utfc_ptr2len(path_end));
@@ -847,7 +848,7 @@ static void expand_path_option(char *curdir, garray_T *gap)
   char *buf = xmalloc(MAXPATHL);
 
   while (*path_option != NUL) {
-    copy_option_part(&path_option, buf, MAXPATHL, ",");
+    copy_option_part(&path_option, buf, MAXPATHL, " ,");
 
     if (buf[0] == '.' && (buf[1] == NUL || vim_ispathsep(buf[1]))) {
       // Relative to current buffer:

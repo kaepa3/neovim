@@ -5,11 +5,10 @@
 
 #include <assert.h>
 #include <inttypes.h>
-#include <limits.h>
 #include <string.h>
 
-#include "klib/kvec.h"
 #include "lauxlib.h"
+#include "nvim/api/keysets.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
@@ -22,7 +21,6 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
-#include "nvim/log.h"
 #include "nvim/lua/executor.h"
 #include "nvim/macros.h"
 #include "nvim/map.h"
@@ -334,7 +332,7 @@ void update_window_hl(win_T *wp, bool invalid)
     wp->w_ns_hl_active = ns_id;
 
     wp->w_ns_hl_attr = *(NSHlAttr *)pmap_get(int)(&ns_hl_attr, ns_id);
-    if (!wp->w_ns_hl_attr) {
+    if (!wp->w_ns_hl_attr) {  // -V547
       // No specific highlights, use the defaults.
       wp->w_ns_hl_attr = highlight_attr;
     }

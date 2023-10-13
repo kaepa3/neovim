@@ -52,14 +52,16 @@ achieve special effects.  These options come in three forms:
 			  'lines'
 			Warning: This may have a lot of side effects.
 
-						*:set-args* *E487* *E521*
+						*:set-args* *:set=* *E487* *E521*
 :se[t] {option}={value}		or
 :se[t] {option}:{value}
 			Set string or number option to {value}.
 			For numeric options the value can be given in decimal,
 			hex (preceded with 0x) or octal (preceded with '0').
 			The old value can be inserted by typing 'wildchar' (by
-			default this is a <Tab>).  See |cmdline-completion|.
+			default this is a <Tab>).  Many string options with
+			fixed syntax also support completing known values.
+			See |cmdline-completion| and |complete-set-option|.
 			White space between {option} and '=' is allowed and
 			will be ignored.  White space between '=' and {value}
 			is not allowed.
@@ -93,6 +95,9 @@ achieve special effects.  These options come in three forms:
 			When the option is a list of flags, {value} must be
 			exactly as they appear in the option.  Remove flags
 			one by one to avoid problems.
+			The individual values from a comma separated list or
+			list of flags can be inserted by typing 'wildchar'.
+			See |complete-set-option|.
 			Also see |:set-args| above.
 
 The {option} arguments to ":set" may be repeated.  For example: >
@@ -131,10 +136,26 @@ To include white space in a string option value it has to be preceded with a
 backslash.  To include a backslash you have to use two.  Effectively this
 means that the number of backslashes in an option value is halved (rounded
 down).
+In options 'path', 'cdpath', and 'tags', spaces have to be preceded with three
+backslashes instead becuase they can be separated by either commas or spaces.
+Comma-separated options like 'backupdir' and 'tags' will also require commas
+to be escaped with two backslashes, whereas this is not needed for
+non-comma-separated ones like 'makeprg'.
+When setting options using |:let| and |literal-string|, you need to use one
+fewer layer of backslash.
 A few examples: >
-   :set tags=tags\ /usr/tags	    results in "tags /usr/tags"
-   :set tags=tags\\,file	    results in "tags\,file"
-   :set tags=tags\\\ file	    results in "tags\ file"
+   :set makeprg=make\ file	    results in "make file"
+   :let &makeprg='make file'	    (same as above)
+   :set makeprg=make\\\ file	    results in "make\ file"
+   :set tags=tags\ /usr/tags	    results in "tags" and "/usr/tags"
+   :set tags=tags\\\ file	    results in "tags file"
+   :let &tags='tags\ file'	    (same as above)
+
+   :set makeprg=make,file	    results in "make,file"
+   :set makeprg=make\\,file	    results in "make\,file"
+   :set tags=tags,file		    results in "tags" and "file"
+   :set tags=tags\\,file	    results in "tags,file"
+   :let &tags='tags\,file'	    (same as above)
 
 The "|" character separates a ":set" command from a following command.  To
 include the "|" in the option value, use "\|" instead.  This example sets the
@@ -1961,7 +1982,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 				When omitted a context of six lines is used.
 				When using zero the context is actually one,
 				since folds require a line in between, also
-				for a deleted line.
+				for a deleted line. Set it to a very large
+				value (999999) to disable folding completely.
 				See |fold-diff|.
 
 		iblank		Ignore changes where lines are all blank.  Adds
@@ -2546,7 +2568,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	    "auto":       resize to the minimum amount of folds to display.
 	    "auto:[1-9]": resize to accommodate multiple folds up to the
 			  selected level
-	    0:            to disable foldcolumn
+	    "0":          to disable foldcolumn
 	    "[1-9]":      to display a fixed number of columns
 	See |folding|.
 
@@ -3447,7 +3469,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 
 						*'isfname'* *'isf'*
 'isfname' 'isf'		string	(default for Windows:
-                             "@,48-57,/,\,.,-,_,+,,,#,$,%,{,},[,],:,@-@,!,~,="
+                             "@,48-57,/,\,.,-,_,+,,,#,$,%,{,},[,],@-@,!,~,="
                             otherwise: "@,48-57,/,.,-,_,+,,,#,$,%,~,=")
 			global
 	The characters specified by this option are included in file names and
@@ -4493,6 +4515,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 	option may be relative or absolute.
 	- Use commas to separate directory names: >
 		:set path=.,/usr/local/include,/usr/include
+<	- Spaces can also be used to separate directory names.  To have a
+	  space in a directory name, precede it with an extra backslash, and
+	  escape the space: >
+		:set path=.,/dir/with\\\ space
 <	- To include a comma in a directory name precede it with an extra
 	  backslash: >
 		:set path=.,/dir/with\\,comma
@@ -6416,8 +6442,8 @@ A jump table for the options with a short description can be found at |Q_op|.
 'tags' 'tag'		string	(default "./tags;,tags")
 			global or local to buffer |global-local|
 	Filenames for the tag command, separated by spaces or commas.  To
-	include a space or comma in a file name, precede it with a backslash
-	(see |option-backslash| about including spaces and backslashes).
+	include a space or comma in a file name, precede it with backslashes
+	(see |option-backslash| about including spaces/commas and backslashes).
 	When a file name starts with "./", the '.' is replaced with the path
 	of the current file.  But only when the 'd' flag is not included in
 	'cpoptions'.  Environment variables are expanded |:set_env|.  Also see

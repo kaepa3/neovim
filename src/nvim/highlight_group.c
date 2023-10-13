@@ -10,25 +10,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "klib/kvec.h"
+#include "nvim/api/keysets.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
-#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/garray.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
@@ -37,6 +37,7 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/time.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
@@ -865,9 +866,17 @@ void set_hl_group(int id, HlAttrs attrs, Dict(highlight) *dict, int link_id)
   if (strcmp(g->sg_name_u, "NORMAL") == 0) {
     cterm_normal_fg_color = g->sg_cterm_fg;
     cterm_normal_bg_color = g->sg_cterm_bg;
+    bool did_changed = false;
+    if (normal_bg != g->sg_rgb_bg || normal_fg != g->sg_rgb_fg || normal_sp != g->sg_rgb_sp) {
+      did_changed = true;
+    }
     normal_fg = g->sg_rgb_fg;
     normal_bg = g->sg_rgb_bg;
     normal_sp = g->sg_rgb_sp;
+
+    if (did_changed) {
+      highlight_attr_set_all();
+    }
     ui_default_colors_set();
   } else {
     // a cursor style uses this syn_id, make sure its attribute is updated.
@@ -2282,10 +2291,10 @@ static void highlight_list_two(int cnt, int attr)
 }
 
 /// Function given to ExpandGeneric() to obtain the list of group names.
-const char *get_highlight_name(expand_T *const xp, int idx)
+char *get_highlight_name(expand_T *const xp, int idx)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  return get_highlight_name_ext(xp, idx, true);
+  return (char *)get_highlight_name_ext(xp, idx, true);
 }
 
 /// Obtain a highlight group name.

@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "klib/kvec.h"
 #include "lauxlib.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
@@ -17,7 +18,6 @@
 #include "nvim/eval.h"
 #include "nvim/eval/encode.h"
 #include "nvim/eval/typval.h"
-#include "nvim/event/loop.h"
 #include "nvim/event/rstream.h"
 #include "nvim/event/socket.h"
 #include "nvim/event/wstream.h"
@@ -168,9 +168,6 @@ bool channel_close(uint64_t id, ChannelPart part, const char **error)
       channel_decref(chan);
     }
     break;
-
-  default:
-    abort();
   }
 
   return true;
@@ -917,9 +914,6 @@ Dictionary channel_info(uint64_t id)
   case kChannelStreamSocket:
     stream_desc = "socket";
     break;
-
-  default:
-    abort();
   }
   PUT(info, "stream", CSTR_TO_OBJ(stream_desc));
 

@@ -1,4 +1,4 @@
---- @meta
+--- @meta _
 -- THIS FILE IS GENERATED
 -- DO NOT EDIT
 error('Cannot require a meta file')
@@ -1258,6 +1258,16 @@ function vim.api.nvim_get_hl_by_name(name, rgb) end
 --- @return integer
 function vim.api.nvim_get_hl_id_by_name(name) end
 
+--- Gets the active highlight namespace.
+---
+--- @param opts vim.api.keyset.get_ns Optional parameters
+---             • winid: (number) `window-ID` for retrieving a window's
+---               highlight namespace. A value of -1 is returned when
+---               `nvim_win_set_hl_ns()` has not been called for the window
+---               (or was called with a namespace of -1).
+--- @return integer
+function vim.api.nvim_get_hl_ns(opts) end
+
 --- Gets a list of global (non-buffer-local) `mapping` definitions.
 ---
 --- @param mode string Mode short-name ("n", "i", "v", ...)
@@ -1617,6 +1627,7 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---                 fire from calling this function.
 ---               • fixed: If true when anchor is NW or SW, the float window
 ---                 would be kept fixed even if the window would be truncated.
+---               • hide: If true the floating window will be hidden.
 --- @return integer
 function vim.api.nvim_open_win(buffer, enter, config) end
 

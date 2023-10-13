@@ -3,9 +3,9 @@
 
 // plines.c: calculate the vertical and horizontal size of text in a window
 
-#include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "nvim/ascii.h"
@@ -21,6 +21,7 @@
 #include "nvim/memline.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/plines.h"
 #include "nvim/pos.h"
 #include "nvim/state.h"
@@ -339,9 +340,17 @@ int win_lbr_chartabsize(chartabsize_T *cts, int *headp)
     *headp = head;
   }
 
+  colnr_T vcol_start = 0;  // start from where to consider linebreak
   // If 'linebreak' set check at a blank before a non-blank if the line
   // needs a break here
-  if (wp->w_p_lbr
+  if (wp->w_p_lbr && wp->w_p_wrap && wp->w_width_inner != 0) {
+    char *t = cts->cts_line;
+    while (vim_isbreak((uint8_t)(*t))) {
+      t++;
+    }
+    vcol_start = (colnr_T)(t - cts->cts_line);
+  }
+  if (wp->w_p_lbr && vcol_start <= vcol
       && vim_isbreak((uint8_t)s[0])
       && !vim_isbreak((uint8_t)s[1])
       && wp->w_p_wrap

@@ -29,6 +29,7 @@
 #include "nvim/memfile.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/option_vars.h"
 #include "nvim/sign.h"
 #include "nvim/ui.h"
 #include "nvim/usercmd.h"
@@ -656,7 +657,6 @@ char *arena_memdupz(Arena *arena, const char *buf, size_t size)
 # include "nvim/cmdhist.h"
 # include "nvim/diff.h"
 # include "nvim/edit.h"
-# include "nvim/eval/typval.h"
 # include "nvim/ex_cmds.h"
 # include "nvim/ex_docmd.h"
 # include "nvim/ex_getln.h"
@@ -766,8 +766,6 @@ void free_all_mem(void)
 
   // Free all option values.  Must come after closing windows.
   free_all_options();
-
-  free_arshape_buf();
 
   // Clear registers.
   clear_registers();

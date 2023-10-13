@@ -53,6 +53,8 @@ Defaults					            *nvim-defaults*
 - 'hlsearch' is enabled
 - 'include' defaults to "". The C ftplugin sets it to "^\\s*#\\s*include"
 - 'incsearch' is enabled
+- 'isfname' does not include ":" (on Windows). Drive letters are handled
+  correctly without it. (Use |gF| for filepaths suffixed with ":line:col").
 - 'joinspaces' is disabled
 - 'langnoremap' is enabled
 - 'langremap' is disabled
@@ -138,6 +140,11 @@ nvim_terminal:
 
 nvim_cmdwin:
 - CmdwinEnter: Limits syntax sync to maxlines=1 in the |cmdwin|.
+
+nvim_swapfile:
+- SwapExists: Skips the swapfile prompt (sets |v:swapchoice| to "e") when the
+  swapfile is owned by a running Nvim process. Shows |W325| "Ignoring
+  swapfile…" message.
 
 ==============================================================================
 New Features						       *nvim-features*
@@ -287,13 +294,12 @@ Options:
   'diffopt'     "linematch" feature
   'exrc'        searches for ".nvim.lua", ".nvimrc", or ".exrc" files. The
                 user is prompted whether to trust the file.
-  'fillchars'   flags: "msgsep", "horiz", "horizup",
-                "horizdown", "vertleft", "vertright", "verthoriz"
+  'fillchars'   flags: "msgsep", "horiz", "horizup", "horizdown",
+                "vertleft", "vertright", "verthoriz"
   'foldcolumn'  supports up to 9 dynamic/fixed columns
   'guicursor'   works in the terminal (TUI)
   'inccommand'  shows interactive results for |:substitute|-like commands
                 and |:command-preview| commands
-  'jumpoptions' "stack" behavior
   'jumpoptions' "view" tries to restore the |mark-view| when moving through
   the |jumplist|, |changelist|, |alternate-file| or using |mark-motions|.
   'laststatus'  global statusline support
@@ -304,6 +310,7 @@ Options:
   'signcolumn'  supports up to 9 dynamic/fixed columns
   'statuscolumn' full control of columns using 'statusline' format
   'tabline'     %@Func@foo%X can call any function on mouse-click
+  'termpastefilter'
   'ttimeout', 'ttimeoutlen' behavior was simplified
   'winblend'    pseudo-transparency in floating windows |api-floatwin|
   'winhighlight' window-local highlights
@@ -382,6 +389,7 @@ Upstreamed features					 *nvim-upstreamed*
 These Nvim features were later integrated into Vim.
 
 - 'fillchars' flags: "eob"
+- 'jumpoptions' "stack" behavior
 - 'wildoptions' flags: "pum" enables popupmenu for wildmode completion
 - |<Cmd>|
 - |WinClosed|
@@ -649,9 +657,7 @@ Options:
   *'balloondelay'* *'bdlay'*
   *'ballooneval'* *'beval'* *'noballooneval'* *'nobeval'*
   *'balloonexpr'* *'bexpr'*
-  'backupdir': paths can no longer be separated with spaces.
   bioskey (MS-DOS)
-  'cdpath': paths can no longer be separated with spaces.
   conskey (MS-DOS)
   *'cp'* *'nocompatible'* *'nocp'* *'compatible'* (Nvim is always "nocompatible".)
   'cpoptions' (gjkHw<*- and all POSIX flags were removed)
@@ -716,7 +722,6 @@ Options:
     Use |g8| or |ga|.  See |mbyte-combining|.
   *'maxmem'* Nvim delegates memory-management to the OS.
   *'maxmemtot'* Nvim delegates memory-management to the OS.
-  |'path'|: paths can no longer be separated with spaces.
   printoptions
   *'printdevice'*
   *'printencoding'*

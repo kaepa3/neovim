@@ -6,7 +6,6 @@
 /// Popup menu (PUM)
 
 #include <assert.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -17,9 +16,9 @@
 #include "nvim/charset.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/getchar.h"
+#include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
@@ -32,6 +31,7 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/popupmenu.h"
 #include "nvim/pos.h"
 #include "nvim/strings.h"

@@ -15,7 +15,6 @@
 #include "nvim/drawscreen.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/window.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
@@ -30,7 +29,7 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/pos.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
@@ -420,7 +419,7 @@ static void next_search_hl(win_T *win, match_T *search_hl, match_T *shl, linenr_
   FUNC_ATTR_NONNULL_ARG(2)
 {
   colnr_T matchcol;
-  long nmatched = 0;
+  int nmatched = 0;
   const int called_emsg_before = called_emsg;
 
   // for :{range}s/pat only highlight inside the range

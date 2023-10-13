@@ -27,7 +27,6 @@
 #include "nvim/edit.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/vars.h"
 #include "nvim/eval/window.h"
 #include "nvim/ex_cmds.h"
@@ -52,13 +51,14 @@
 #include "nvim/mark.h"
 #include "nvim/match.h"
 #include "nvim/mbyte.h"
-#include "nvim/memline_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
 #include "nvim/os/os_defs.h"
@@ -990,9 +990,13 @@ void ui_ext_win_position(win_T *wp, bool validate)
     wp->w_grid_alloc.zindex = wp->w_float_config.zindex;
     if (ui_has(kUIMultigrid)) {
       String anchor = cstr_as_string((char *)float_anchor_str[c.anchor]);
-      ui_call_win_float_pos(wp->w_grid_alloc.handle, wp->handle, anchor,
-                            grid->handle, row, col, c.focusable,
-                            wp->w_grid_alloc.zindex);
+      if (!c.hide) {
+        ui_call_win_float_pos(wp->w_grid_alloc.handle, wp->handle, anchor,
+                              grid->handle, row, col, c.focusable,
+                              wp->w_grid_alloc.zindex);
+      } else {
+        ui_call_win_hide(wp->w_grid_alloc.handle);
+      }
     } else {
       bool valid = (wp->w_redr_type == 0);
       if (!valid && !validate) {
@@ -1014,13 +1018,18 @@ void ui_ext_win_position(win_T *wp, bool validate)
       }
       wp->w_winrow = comp_row;
       wp->w_wincol = comp_col;
-      ui_comp_put_grid(&wp->w_grid_alloc, comp_row, comp_col,
-                       wp->w_height_outer, wp->w_width_outer, valid, false);
-      ui_check_cursor_grid(wp->w_grid_alloc.handle);
-      wp->w_grid_alloc.focusable = wp->w_float_config.focusable;
-      if (!valid) {
-        wp->w_grid_alloc.valid = false;
-        redraw_later(wp, UPD_NOT_VALID);
+
+      if (!c.hide) {
+        ui_comp_put_grid(&wp->w_grid_alloc, comp_row, comp_col,
+                         wp->w_height_outer, wp->w_width_outer, valid, false);
+        ui_check_cursor_grid(wp->w_grid_alloc.handle);
+        wp->w_grid_alloc.focusable = wp->w_float_config.focusable;
+        if (!valid) {
+          wp->w_grid_alloc.valid = false;
+          redraw_later(wp, UPD_NOT_VALID);
+        }
+      } else {
+        ui_comp_remove_grid(&wp->w_grid_alloc);
       }
     }
   } else {
@@ -4252,7 +4261,11 @@ int may_open_tabpage(void)
 
   cmdmod.cmod_tab = 0;         // reset it to avoid doing it twice
   postponed_split_tab = 0;
-  return win_new_tabpage(n, NULL);
+  int status = win_new_tabpage(n, NULL);
+  if (status == OK) {
+    apply_autocmds(EVENT_TABNEWENTERED, NULL, NULL, false, curbuf);
+  }
+  return status;
 }
 
 // Create up to "maxcount" tabpages with empty windows.
@@ -6606,8 +6619,8 @@ void scroll_to_fraction(win_T *wp, int prev_height)
     if (lnum < 1) {             // can happen when starting up
       lnum = 1;
     }
-    wp->w_wrow = (int)((long)wp->w_fraction * (long)height - 1L) / FRACTION_MULT;
-    int line_size = plines_win_col(wp, lnum, (long)(wp->w_cursor.col)) - 1;
+    wp->w_wrow = (int)(wp->w_fraction * height - 1L) / FRACTION_MULT;
+    int line_size = plines_win_col(wp, lnum, wp->w_cursor.col) - 1;
     int sline = wp->w_wrow - line_size;
 
     if (sline >= 0) {
@@ -6885,7 +6898,7 @@ char *grab_file_name(int count, linenr_T *file_lnum)
     if (file_lnum != NULL && ptr[len] == ':' && isdigit((uint8_t)ptr[len + 1])) {
       char *p = ptr + len + 1;
 
-      *file_lnum = (linenr_T)getdigits_long(&p, false, 0);
+      *file_lnum = getdigits_int32(&p, false, 0);
     }
     return find_file_name_in_path(ptr, len, options, count, curbuf->b_ffname);
   }
@@ -6934,12 +6947,12 @@ char *file_name_in_line(char *line, int col, int options, int count, char *rel_f
   bool is_url = false;
 
   // Search backward for first char of the file name.
-  // Go one char back to ":" before "//" even when ':' is not in 'isfname'.
+  // Go one char back to ":" before "//", or to the drive letter before ":\" (even if ":"
+  // is not in 'isfname').
   while (ptr > line) {
     if ((len = (size_t)(utf_head_off(line, ptr - 1))) > 0) {
       ptr -= len + 1;
-    } else if (vim_isfilec((uint8_t)ptr[-1])
-               || ((options & FNAME_HYP) && path_is_url(ptr - 1))) {
+    } else if (vim_isfilec((uint8_t)ptr[-1]) || ((options & FNAME_HYP) && path_is_url(ptr - 1))) {
       ptr--;
     } else {
       break;
@@ -6948,14 +6961,13 @@ char *file_name_in_line(char *line, int col, int options, int count, char *rel_f
 
   // Search forward for the last char of the file name.
   // Also allow ":/" when ':' is not in 'isfname'.
-  len = 0;
+  len = path_has_drive_letter(ptr) ? 2 : 0;
   while (vim_isfilec((uint8_t)ptr[len]) || (ptr[len] == '\\' && ptr[len + 1] == ' ')
          || ((options & FNAME_HYP) && path_is_url(ptr + len))
          || (is_url && vim_strchr(":?&=", (uint8_t)ptr[len]) != NULL)) {
     // After type:// we also include :, ?, & and = as valid characters, so that
     // http://google.com:8080?q=this&that=ok works.
-    if ((ptr[len] >= 'A' && ptr[len] <= 'Z')
-        || (ptr[len] >= 'a' && ptr[len] <= 'z')) {
+    if ((ptr[len] >= 'A' && ptr[len] <= 'Z') || (ptr[len] >= 'a' && ptr[len] <= 'z')) {
       if (in_type && path_is_url(ptr + len + 1)) {
         is_url = true;
       }
@@ -7643,4 +7655,30 @@ win_T *lastwin_nofloating(void)
     res = res->w_prev;
   }
   return res;
+}
+
+static int float_zindex_cmp(const void *a, const void *b)
+{
+  return (*(win_T **)b)->w_float_config.zindex - (*(win_T **)a)->w_float_config.zindex;
+}
+
+void win_float_remove(bool bang, int count)
+{
+  kvec_t(win_T *) float_win_arr = KV_INITIAL_VALUE;
+  for (win_T *wp = lastwin; wp && wp->w_floating; wp = wp->w_prev) {
+    kv_push(float_win_arr, wp);
+  }
+  qsort(float_win_arr.items, float_win_arr.size, sizeof(win_T *), float_zindex_cmp);
+  for (size_t i = 0; i < float_win_arr.size; i++) {
+    if (win_close(float_win_arr.items[i], false, false) == FAIL) {
+      break;
+    }
+    if (!bang) {
+      count--;
+      if (count == 0) {
+        break;
+      }
+    }
+  }
+  kv_destroy(float_win_arr);
 }

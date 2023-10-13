@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "auto/config.h"
 #include "nvim/api/private/converter.h"
@@ -20,6 +21,7 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cmdhist.h"
 #include "nvim/cursor.h"
 #include "nvim/edit.h"
@@ -30,7 +32,6 @@
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
-#include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
 #include "nvim/event/process.h"
 #include "nvim/ex_cmds.h"
@@ -60,7 +61,7 @@
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
 #include "nvim/os/fs_defs.h"
@@ -1225,7 +1226,7 @@ fail:
 ///
 /// @return [allocated] NULL when calling function fails, allocated string
 ///                     otherwise.
-char *call_func_retstr(const char *const func, int argc, typval_T *argv)
+void *call_func_retstr(const char *const func, int argc, typval_T *argv)
   FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_MALLOC
 {
   typval_T rettv;
@@ -1298,7 +1299,7 @@ int eval_foldexpr(win_T *wp, int *cp)
       // If the result is a string, check if there is a non-digit before
       // the number.
       char *s = tv.vval.v_string;
-      if (!ascii_isdigit(*s) && *s != '-') {
+      if (*s != NUL && !ascii_isdigit(*s) && *s != '-') {
         *cp = (uint8_t)(*s++);
       }
       retval = atol(s);
@@ -1466,14 +1467,22 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
       }
       return NULL;
     }
-    if (!(lp->ll_tv->v_type == VAR_LIST && lp->ll_tv->vval.v_list != NULL)
-        && !(lp->ll_tv->v_type == VAR_DICT && lp->ll_tv->vval.v_dict != NULL)
-        && !(lp->ll_tv->v_type == VAR_BLOB && lp->ll_tv->vval.v_blob != NULL)) {
+    if (lp->ll_tv->v_type != VAR_LIST
+        && lp->ll_tv->v_type != VAR_DICT
+        && lp->ll_tv->v_type != VAR_BLOB) {
       if (!quiet) {
         emsg(_("E689: Can only index a List, Dictionary or Blob"));
       }
       return NULL;
     }
+
+    // a NULL list/blob works like an empty list/blob, allocate one now.
+    if (lp->ll_tv->v_type == VAR_LIST && lp->ll_tv->vval.v_list == NULL) {
+      tv_list_alloc_ret(lp->ll_tv, kListLenUnknown);
+    } else if (lp->ll_tv->v_type == VAR_BLOB && lp->ll_tv->vval.v_blob == NULL) {
+      tv_blob_alloc_ret(lp->ll_tv);
+    }
+
     if (lp->ll_range) {
       if (!quiet) {
         emsg(_("E708: [:] must come last"));
@@ -1644,7 +1653,7 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
         lp->ll_n1 = 0;
       } else {
         // Is number or string.
-        lp->ll_n1 = (long)tv_get_number(&var1);
+        lp->ll_n1 = (int)tv_get_number(&var1);
       }
       tv_clear(&var1);
 
@@ -1654,7 +1663,7 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
         return NULL;
       }
       if (lp->ll_range && !lp->ll_empty2) {
-        lp->ll_n2 = (long)tv_get_number(&var2);
+        lp->ll_n2 = (int)tv_get_number(&var2);
         tv_clear(&var2);
         if (tv_blob_check_range(bloblen, lp->ll_n1, lp->ll_n2, quiet) == FAIL) {
           return NULL;
@@ -1669,7 +1678,7 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
         lp->ll_n1 = 0;
       } else {
         // Is number or string.
-        lp->ll_n1 = (long)tv_get_number(&var1);
+        lp->ll_n1 = (int)tv_get_number(&var1);
       }
       tv_clear(&var1);
 
@@ -1686,7 +1695,7 @@ char *get_lval(char *const name, typval_T *const rettv, lval_T *const lp, const 
       // When no index given: "lp->ll_empty2" is true.
       // Otherwise "lp->ll_n2" is set to the second index.
       if (lp->ll_range && !lp->ll_empty2) {
-        lp->ll_n2 = (long)tv_get_number(&var2);  // Is number or string.
+        lp->ll_n2 = (int)tv_get_number(&var2);  // Is number or string.
         tv_clear(&var2);
         if (tv_list_check_range_index_two(lp->ll_list,
                                           &lp->ll_n1, lp->ll_li,
@@ -1745,7 +1754,7 @@ void set_var_lval(lval_T *lp, char *endp, typval_T *rettv, int copy, const bool 
         bool error = false;
         const char val = (char)tv_get_number_chk(rettv, &error);
         if (!error) {
-          tv_blob_set_append(lp->ll_blob, (int)lp->ll_n1, (uint8_t)val);
+          tv_blob_set_append(lp->ll_blob, lp->ll_n1, (uint8_t)val);
         }
       }
     } else if (op != NULL && *op != '=') {
@@ -5640,7 +5649,7 @@ void get_user_input(const typval_T *const argvars, typval_T *const rettv, const 
   rettv->v_type = VAR_STRING;
   rettv->vval.v_string = NULL;
 
-  const char *prompt = "";
+  const char *prompt;
   const char *defstr = "";
   typval_T *cancelreturn = NULL;
   typval_T cancelreturn_strarg2 = TV_INITIAL_VALUE;
@@ -5731,7 +5740,7 @@ void get_user_input(const typval_T *const argvars, typval_T *const rettv, const 
       p = lastnl + 1;
       msg_start();
       msg_clr_eos();
-      msg_puts_attr_len(prompt, p - prompt, echo_attr);
+      msg_puts_len(prompt, p - prompt, echo_attr);
       msg_didout = false;
       msg_starthere();
     }
@@ -5913,7 +5922,7 @@ void get_system_output_as_rettv(typval_T *argvars, typval_T *rettv, bool retlist
   char **argv = tv_to_argv(&argvars[0], NULL, &executable);
   if (!argv) {
     if (!executable) {
-      set_vim_var_nr(VV_SHELL_ERROR, (long)-1);
+      set_vim_var_nr(VV_SHELL_ERROR, -1);
     }
     xfree(input);
     return;  // Already did emsg.
@@ -5922,7 +5931,7 @@ void get_system_output_as_rettv(typval_T *argvars, typval_T *rettv, bool retlist
   if (p_verbose > 3) {
     char *cmdstr = shell_argv_to_str(argv);
     verbose_enter_scroll();
-    smsg(_("Executing command: \"%s\""), cmdstr);
+    smsg(0, _("Executing command: \"%s\""), cmdstr);
     msg_puts("\n\n");
     verbose_leave_scroll();
     xfree(cmdstr);
@@ -5943,7 +5952,7 @@ void get_system_output_as_rettv(typval_T *argvars, typval_T *rettv, bool retlist
 
   xfree(input);
 
-  set_vim_var_nr(VV_SHELL_ERROR, (long)status);
+  set_vim_var_nr(VV_SHELL_ERROR, status);
 
   if (res == NULL) {
     if (retlist) {
@@ -6087,9 +6096,6 @@ bool callback_call(Callback *const callback, const int argcount_in, typval_T *co
   case kCallbackNone:
     return false;
     break;
-
-  default:
-    abort();
   }
 
   funcexe_T funcexe = FUNCEXE_INIT;
@@ -6119,7 +6125,7 @@ bool set_ref_in_callback(Callback *callback, int copyID, ht_stack_T **ht_stack,
     return set_ref_in_item(&tv, copyID, ht_stack, list_stack);
     break;
 
-  default:
+  case kCallbackLua:
     abort();
   }
   return false;
@@ -6230,7 +6236,7 @@ void timer_due_cb(TimeWatcher *tw, void *data)
   timer_decref(timer);
 }
 
-uint64_t timer_start(const long timeout, const int repeat_count, const Callback *const callback)
+uint64_t timer_start(const int64_t timeout, const int repeat_count, const Callback *const callback)
 {
   timer_T *timer = xmalloc(sizeof *timer);
   timer->refcount = 1;
@@ -7121,7 +7127,7 @@ void set_vim_var_char(int c)
 /// Set v:count to "count" and v:count1 to "count1".
 ///
 /// @param set_prevcount  if true, first set v:prevcount from v:count.
-void set_vcount(long count, long count1, int set_prevcount)
+void set_vcount(int64_t count, int64_t count1, bool set_prevcount)
 {
   if (set_prevcount) {
     vimvars[VV_PREVCOUNT].vv_nr = vimvars[VV_COUNT].vv_nr;
@@ -8093,13 +8099,6 @@ void ex_execute(exarg_T *eap)
   }
 
   if (ret != FAIL && ga.ga_data != NULL) {
-    if (eap->cmdidx == CMD_echomsg || eap->cmdidx == CMD_echoerr) {
-      // Mark the already saved text as finishing the line, so that what
-      // follows is displayed on a new line when scrolling back at the
-      // more prompt.
-      msg_sb_eol();
-    }
-
     if (eap->cmdidx == CMD_echomsg) {
       msg_ext_set_kind("echomsg");
       msg(ga.ga_data, echo_attr);
@@ -8107,7 +8106,7 @@ void ex_execute(exarg_T *eap)
       // We don't want to abort following commands, restore did_emsg.
       int save_did_emsg = did_emsg;
       msg_ext_set_kind("echoerr");
-      emsg(ga.ga_data);
+      emsg_multiline(ga.ga_data, true);
       if (!force_abort) {
         did_emsg = save_did_emsg;
       }
@@ -8296,7 +8295,7 @@ void option_last_set_msg(LastSet last_set)
     msg_puts(p);
     if (last_set.script_ctx.sc_lnum > 0) {
       msg_puts(_(line_msg));
-      msg_outnum((long)last_set.script_ctx.sc_lnum);
+      msg_outnum(last_set.script_ctx.sc_lnum);
     }
     if (should_free) {
       xfree(p);

@@ -28,7 +28,7 @@ typedef struct {
 #include "nvim/mapping_defs.h"
 #include "nvim/mark_defs.h"
 #include "nvim/marktree.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/pos.h"
 #include "nvim/statusline_defs.h"
 #include "nvim/undo_defs.h"
@@ -274,8 +274,8 @@ typedef struct qf_info_S qf_info_T;
 typedef struct {
   proftime_T total;             // total time used
   proftime_T slowest;           // time of slowest call
-  long count;                   // nr of times used
-  long match;                   // nr of times matched
+  int count;                    // nr of times used
+  int match;                    // nr of times matched
 } syn_time_T;
 
 // These are items normally related to a buffer.  But when using ":ownsyntax"
@@ -440,10 +440,10 @@ struct file_buffer {
   disptick_T b_mod_tick_decor;  // last display tick decoration providers
                                 // where invoked
 
-  long b_mtime;                 // last change time of original file
-  long b_mtime_ns;              // nanoseconds of last change time
-  long b_mtime_read;            // last change time when reading
-  long b_mtime_read_ns;         // nanoseconds of last read time
+  int64_t b_mtime;              // last change time of original file
+  int64_t b_mtime_ns;           // nanoseconds of last change time
+  int64_t b_mtime_read;         // last change time when reading
+  int64_t b_mtime_read_ns;      // nanoseconds of last read time
   uint64_t b_orig_size;         // size of original file in bytes
   int b_orig_mode;              // mode of original file
   time_t b_last_used;           // time when the buffer was last used; used
@@ -488,13 +488,13 @@ struct file_buffer {
   u_header_T *b_u_newhead;     // pointer to newest header; may not be valid
                                // if b_u_curhead is not NULL
   u_header_T *b_u_curhead;     // pointer to current header
-  int b_u_numhead;              // current number of headers
-  bool b_u_synced;              // entry lists are synced
-  long b_u_seq_last;            // last used undo sequence number
-  long b_u_save_nr_last;        // counter for last file write
-  long b_u_seq_cur;             // uh_seq of header below which we are now
-  time_t b_u_time_cur;          // uh_time of header below which we are now
-  long b_u_save_nr_cur;         // file write nr after which we are now
+  int b_u_numhead;             // current number of headers
+  bool b_u_synced;             // entry lists are synced
+  int b_u_seq_last;            // last used undo sequence number
+  int b_u_save_nr_last;        // counter for last file write
+  int b_u_seq_cur;             // uh_seq of header below which we are now
+  time_t b_u_time_cur;         // uh_time of header below which we are now
+  int b_u_save_nr_cur;         // file write nr after which we are now
 
   // variables for "U" command in undo.c
   char *b_u_line_ptr;           // saved line for "U" command
@@ -967,6 +967,7 @@ typedef struct {
   int footer_width;
   bool noautocmd;
   bool fixed;
+  bool hide;
 } FloatConfig;
 
 #define FLOAT_CONFIG_INIT ((FloatConfig){ .height = 0, .width = 0, \
@@ -977,6 +978,7 @@ typedef struct {
                                           .zindex = kZIndexFloatDefault, \
                                           .style = kWinStyleUnused, \
                                           .noautocmd = false, \
+                                          .hide = false, \
                                           .fixed = false })
 
 // Structure to store last cursor position and topline.  Used by check_lnums()
@@ -987,6 +989,45 @@ typedef struct {
   pos_T w_cursor_save;  // original cursor position
   pos_T w_cursor_corr;  // corrected cursor position
 } pos_save_T;
+
+/// Characters from the 'listchars' option.
+typedef struct {
+  int eol;
+  int ext;
+  int prec;
+  int nbsp;
+  int space;
+  int tab1;  ///< first tab character
+  int tab2;  ///< second tab character
+  int tab3;  ///< third tab character
+  int lead;
+  int trail;
+  int *multispace;
+  int *leadmultispace;
+  int conceal;
+} lcs_chars_T;
+
+/// Characters from the 'fillchars' option.
+typedef struct {
+  int stl;
+  int stlnc;
+  int wbr;
+  int horiz;
+  int horizup;
+  int horizdown;
+  int vert;
+  int vertleft;
+  int vertright;
+  int verthoriz;
+  int fold;
+  int foldopen;    ///< when fold is open
+  int foldclosed;  ///< when fold is closed
+  int foldsep;     ///< continuous fold marker
+  int diff;
+  int msgsep;
+  int eob;
+  int lastline;
+} fcs_chars_T;
 
 /// Structure which contains all information that belongs to a window.
 ///
@@ -1043,44 +1084,11 @@ struct window_S {
 
   linenr_T w_last_cursor_lnum_rnu;  ///< cursor lnum when 'rnu' was last redrawn
 
-  // 'listchars' characters. Defaults set in set_chars_option().
-  struct {
-    int eol;
-    int ext;
-    int prec;
-    int nbsp;
-    int space;
-    int tab1;                       ///< first tab character
-    int tab2;                       ///< second tab character
-    int tab3;                       ///< third tab character
-    int lead;
-    int trail;
-    int *multispace;
-    int *leadmultispace;
-    int conceal;
-  } w_p_lcs_chars;
+  /// 'listchars' characters. Defaults set in set_chars_option().
+  lcs_chars_T w_p_lcs_chars;
 
-  // 'fillchars' characters. Defaults set in set_chars_option().
-  struct {
-    int stl;
-    int stlnc;
-    int wbr;
-    int horiz;
-    int horizup;
-    int horizdown;
-    int vert;
-    int vertleft;
-    int vertright;
-    int verthoriz;
-    int fold;
-    int foldopen;                    ///< when fold is open
-    int foldclosed;                  ///< when fold is closed
-    int foldsep;                     ///< continuous fold marker
-    int diff;
-    int msgsep;
-    int eob;
-    int lastline;
-  } w_p_fcs_chars;
+  /// 'fillchars' characters. Defaults set in set_chars_option().
+  fcs_chars_T w_p_fcs_chars;
 
   // "w_topline", "w_leftcol" and "w_skipcol" specify the offsets for
   // displaying the buffer.
@@ -1260,7 +1268,7 @@ struct window_S {
   int w_briopt_list;                // additional indent for lists
   int w_briopt_vcol;                // indent for specific column
 
-  long w_scbind_pos;
+  int w_scbind_pos;
 
   ScopeDictDictItem w_winvar;  ///< Variable for "w:" dictionary.
   dict_T *w_vars;  ///< Dictionary with w: variables.

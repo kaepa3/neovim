@@ -33,7 +33,6 @@
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/extmark.h"
-#include "nvim/extmark_defs.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
 #include "nvim/garray.h"
@@ -48,6 +47,7 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/os.h"
@@ -82,7 +82,7 @@ static bool diff_need_update = false;  // ex_diffupdate needs to be called
 #define ALL_WHITE_DIFF (DIFF_IWHITE | DIFF_IWHITEALL | DIFF_IWHITEEOL)
 static int diff_flags = DIFF_INTERNAL | DIFF_FILLER | DIFF_CLOSE_OFF;
 
-static long diff_algorithm = 0;
+static int diff_algorithm = 0;
 static int linematch_lines = 0;
 
 #define LBUFLEN 50               // length of line in diff file
@@ -764,7 +764,7 @@ static int diff_write_buffer(buf_T *buf, mmfile_t *m, linenr_T start, linenr_T e
     buf->b_diff_failed = true;
     if (p_verbose > 0) {
       verbose_enter();
-      smsg(_("Not enough memory to use internal diff for buffer \"%s\""),
+      smsg(0, _("Not enough memory to use internal diff for buffer \"%s\""),
            buf->b_fname);
       verbose_leave();
     }
@@ -2467,6 +2467,7 @@ int diffopt_changed(void)
 
   char *p = p_dip;
   while (*p != NUL) {
+    // Note: Keep this in sync with p_dip_values
     if (strncmp(p, "filler", 6) == 0) {
       p += 6;
       diff_flags_new |= DIFF_FILLER;
@@ -2513,6 +2514,7 @@ int diffopt_changed(void)
       p += 8;
       diff_flags_new |= DIFF_INTERNAL;
     } else if (strncmp(p, "algorithm:", 10) == 0) {
+      // Note: Keep this in sync with p_dip_algorithm_values.
       p += 10;
       if (strncmp(p, "myers", 5) == 0) {
         p += 5;
@@ -3133,7 +3135,7 @@ static void diffgetput(const int addr_count, const int idx_cur, const int idx_fr
 
       if (added != 0) {
         // Adjust marks.  This will change the following entries!
-        mark_adjust(lnum, lnum + count - 1, (long)MAXLNUM, added, kExtmarkNOOP);
+        mark_adjust(lnum, lnum + count - 1, MAXLNUM, added, kExtmarkNOOP);
         if (curwin->w_cursor.lnum >= lnum) {
           // Adjust the cursor position if it's in/after the changed
           // lines.
@@ -3144,7 +3146,7 @@ static void diffgetput(const int addr_count, const int idx_cur, const int idx_fr
           }
         }
       }
-      extmark_adjust(curbuf, lnum, lnum + count - 1, (long)MAXLNUM, added, kExtmarkUndo);
+      extmark_adjust(curbuf, lnum, lnum + count - 1, MAXLNUM, added, kExtmarkUndo);
       changed_lines(curbuf, lnum, 0, lnum + count, added, true);
 
       if (did_free) {
@@ -3400,7 +3402,7 @@ linenr_T diff_lnum_win(linenr_T lnum, win_T *wp)
 ///
 static int parse_diff_ed(char *line, diffhunk_T *hunk)
 {
-  long l1, l2;
+  int l1, l2;
 
   // The line must be one of three formats:
   // change: {first}[,{last}]c{first}[,{last}]
@@ -3410,7 +3412,7 @@ static int parse_diff_ed(char *line, diffhunk_T *hunk)
   linenr_T f1 = getdigits_int32(&p, true, 0);
   if (*p == ',') {
     p++;
-    l1 = getdigits_long(&p, true, 0);
+    l1 = getdigits_int(&p, true, 0);
   } else {
     l1 = f1;
   }
@@ -3418,10 +3420,10 @@ static int parse_diff_ed(char *line, diffhunk_T *hunk)
     return FAIL;        // invalid diff format
   }
   int difftype = (uint8_t)(*p++);
-  long f2 = getdigits_long(&p, true, 0);
+  int f2 = getdigits_int(&p, true, 0);
   if (*p == ',') {
     p++;
-    l2 = getdigits_long(&p, true, 0);
+    l2 = getdigits_int(&p, true, 0);
   } else {
     l2 = f2;
   }
@@ -3446,31 +3448,29 @@ static int parse_diff_ed(char *line, diffhunk_T *hunk)
   return OK;
 }
 
-///
 /// Parses unified diff with zero(!) context lines.
 /// Return FAIL if there is no diff information in "line".
-///
 static int parse_diff_unified(char *line, diffhunk_T *hunk)
 {
   // Parse unified diff hunk header:
   // @@ -oldline,oldcount +newline,newcount @@
   char *p = line;
   if (*p++ == '@' && *p++ == '@' && *p++ == ' ' && *p++ == '-') {
-    long oldcount;
-    long newline;
-    long newcount;
-    long oldline = getdigits_long(&p, true, 0);
+    int oldcount;
+    linenr_T newline;
+    int newcount;
+    linenr_T oldline = getdigits_int32(&p, true, 0);
     if (*p == ',') {
       p++;
-      oldcount = getdigits_long(&p, true, 0);
+      oldcount = getdigits_int(&p, true, 0);
     } else {
       oldcount = 1;
     }
     if (*p++ == ' ' && *p++ == '+') {
-      newline = getdigits_long(&p, true, 0);
+      newline = getdigits_int(&p, true, 0);
       if (*p == ',') {
         p++;
-        newcount = getdigits_long(&p, true, 0);
+        newcount = getdigits_int(&p, true, 0);
       } else {
         newcount = 1;
       }
@@ -3488,9 +3488,9 @@ static int parse_diff_unified(char *line, diffhunk_T *hunk)
       newline = 1;
     }
 
-    hunk->lnum_orig = (linenr_T)oldline;
+    hunk->lnum_orig = oldline;
     hunk->count_orig = oldcount;
-    hunk->lnum_new = (linenr_T)newline;
+    hunk->lnum_new = newline;
     hunk->count_new = newcount;
 
     return OK;
@@ -3499,11 +3499,9 @@ static int parse_diff_unified(char *line, diffhunk_T *hunk)
   return FAIL;
 }
 
-///
 /// Callback function for the xdl_diff() function.
 /// Stores the diff output in a grow array.
-///
-static int xdiff_out(long start_a, long count_a, long start_b, long count_b, void *priv)
+static int xdiff_out(int start_a, int count_a, int start_b, int count_b, void *priv)
 {
   diffout_T *dout = (diffout_T *)priv;
   GA_APPEND(diffhunk_T, &(dout->dout_ga), ((diffhunk_T){

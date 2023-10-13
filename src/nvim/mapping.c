@@ -4,14 +4,16 @@
 // mapping.c: Code for mappings and abbreviations.
 
 #include <assert.h>
-#include <inttypes.h>
 #include <lauxlib.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "nvim/api/keysets.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
@@ -19,6 +21,7 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -37,11 +40,14 @@
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
+#include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
+#include "nvim/types.h"
 #include "nvim/vim.h"
 
 /// List used for abbreviations.
@@ -2068,7 +2074,7 @@ void f_hasmapto(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 ///
 /// @return  A Dictionary.
 static Dictionary mapblock_fill_dict(const mapblock_T *const mp, const char *lhsrawalt,
-                                     const long buffer_value, const bool compatible)
+                                     const int buffer_value, const bool compatible)
   FUNC_ATTR_NONNULL_ARG(1)
 {
   Dictionary dict = ARRAY_DICT_INIT;
@@ -2688,7 +2694,7 @@ ArrayOf(Dictionary) keymap_array(String mode, buf_T *buf)
   int int_mode = get_map_mode(&p, 0);
 
   // Determine the desired buffer value
-  long buffer_value = (buf == NULL) ? 0 : buf->handle;
+  int buffer_value = (buf == NULL) ? 0 : buf->handle;
 
   for (int i = 0; i < MAX_MAPHASH; i++) {
     for (const mapblock_T *current_maphash = get_maphash(i, buf);

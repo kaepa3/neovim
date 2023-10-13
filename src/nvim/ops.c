@@ -49,6 +49,8 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/input.h"
 #include "nvim/os/time.h"
 #include "nvim/plines.h"
@@ -215,7 +217,7 @@ int get_extra_op_char(int optype)
 /// handle a shift operation
 void op_shift(oparg_T *oap, int curs_top, int amount)
 {
-  long i;
+  int i;
   int block_col = 0;
 
   if (u_save((linenr_T)(oap->start.lnum - 1),
@@ -290,7 +292,7 @@ void op_shift(oparg_T *oap, int curs_top, int amount)
 /// @param call_changed_bytes  call changed_bytes()
 void shift_line(int left, int round, int amount, int call_changed_bytes)
 {
-  const int sw_val = (int)get_sw_value_indent(curbuf);
+  const int sw_val = get_sw_value_indent(curbuf);
 
   int count = get_indent();  // get current indent
 
@@ -336,7 +338,7 @@ static void shift_block(oparg_T *oap, int amount)
   const int oldstate = State;
   char *newp;
   const int oldcol = curwin->w_cursor.col;
-  const int sw_val = (int)get_sw_value_indent(curbuf);
+  const int sw_val = get_sw_value_indent(curbuf);
   const int ts_val = (int)curbuf->b_p_ts;
   struct block_def bd;
   int incr;
@@ -632,7 +634,7 @@ static void block_insert(oparg_T *oap, char *s, int b_insert, struct block_def *
 /// Handle reindenting a block of lines.
 void op_reindent(oparg_T *oap, Indenter how)
 {
-  long i = 0;
+  int i = 0;
   linenr_T first_changed = 0;
   linenr_T last_changed = 0;
   linenr_T start_lnum = curwin->w_cursor.lnum;
@@ -645,8 +647,8 @@ void op_reindent(oparg_T *oap, Indenter how)
 
   // Save for undo.  Do this once for all lines, much faster than doing this
   // for each line separately, especially when undoing.
-  if (u_savecommon(curbuf, start_lnum - 1, start_lnum + (linenr_T)oap->line_count,
-                   start_lnum + (linenr_T)oap->line_count, false) == OK) {
+  if (u_savecommon(curbuf, start_lnum - 1, start_lnum + oap->line_count,
+                   start_lnum + oap->line_count, false) == OK) {
     char *l;
     int amount;
     for (i = oap->line_count - 1; i >= 0 && !got_int; i--) {
@@ -656,7 +658,7 @@ void op_reindent(oparg_T *oap, Indenter how)
       if (i > 1
           && (i % 50 == 0 || i == oap->line_count - 1)
           && oap->line_count > p_report) {
-        smsg(_("%" PRId64 " lines to indent... "), (int64_t)i);
+        smsg(0, _("%" PRId64 " lines to indent... "), (int64_t)i);
       }
 
       // Be vi-compatible: For lisp indenting the first line is not
@@ -691,7 +693,7 @@ void op_reindent(oparg_T *oap, Indenter how)
   // there is no change still need to remove the Visual highlighting.
   if (last_changed != 0) {
     changed_lines(curbuf, first_changed, 0,
-                  oap->is_VIsual ? start_lnum + (linenr_T)oap->line_count :
+                  oap->is_VIsual ? start_lnum + oap->line_count :
                   last_changed + 1, 0L, true);
   } else if (oap->is_VIsual) {
     redraw_curbuf_later(UPD_INVERTED);
@@ -699,9 +701,7 @@ void op_reindent(oparg_T *oap, Indenter how)
 
   if (oap->line_count > p_report) {
     i = oap->line_count - (i + 1);
-    smsg(NGETTEXT("%" PRId64 " line indented ",
-                  "%" PRId64 " lines indented ", i),
-         (int64_t)i);
+    smsg(0, NGETTEXT("%" PRId64 " line indented ", "%" PRId64 " lines indented ", i), (int64_t)i);
   }
   if ((cmdmod.cmod_flags & CMOD_LOCKMARKS) == 0) {
     // set '[ and '] marks
@@ -983,10 +983,12 @@ static int stuff_yank(int regname, char *p)
   yankreg_T *reg = get_yank_register(regname, YREG_YANK);
   if (is_append_register(regname) && reg->y_array != NULL) {
     char **pp = &(reg->y_array[reg->y_size - 1]);
-    char *lp = xmalloc(strlen(*pp) + strlen(p) + 1);
-    STRCPY(lp, *pp);
-    // TODO(philix): use xstpcpy() in stuff_yank()
-    STRCAT(lp, p);
+    const size_t ppl = strlen(*pp);
+    const size_t pl = strlen(p);
+    char *lp = xmalloc(ppl + pl + 1);
+    memcpy(lp, *pp, ppl);
+    memcpy(lp + ppl, p, pl);
+    *(lp + ppl + pl) = NUL;
     xfree(p);
     xfree(*pp);
     *pp = lp;
@@ -1717,8 +1719,8 @@ int op_delete(oparg_T *oap)
       pos_T curpos;
 
       // save deleted and changed lines for undo
-      if (u_save((linenr_T)(curwin->w_cursor.lnum - 1),
-                 (linenr_T)(curwin->w_cursor.lnum + oap->line_count)) == FAIL) {
+      if (u_save(curwin->w_cursor.lnum - 1,
+                 curwin->w_cursor.lnum + oap->line_count) == FAIL) {
         return FAIL;
       }
 
@@ -2109,8 +2111,7 @@ void op_tilde(oparg_T *oap)
   }
 
   if (oap->line_count > p_report) {
-    smsg(NGETTEXT("%" PRId64 " line changed",
-                  "%" PRId64 " lines changed", oap->line_count),
+    smsg(0, NGETTEXT("%" PRId64 " line changed", "%" PRId64 " lines changed", oap->line_count),
          (int64_t)oap->line_count);
   }
 }
@@ -2203,9 +2204,9 @@ bool swapchar(int op_type, pos_T *pos)
 }
 
 /// Insert and append operators for Visual mode.
-void op_insert(oparg_T *oap, long count1)
+void op_insert(oparg_T *oap, int count1)
 {
-  long pre_textlen = 0;
+  int pre_textlen = 0;
   char *firstline;
   colnr_T ind_pre_col = 0;
   int ind_pre_vcol = 0;
@@ -2252,7 +2253,7 @@ void op_insert(oparg_T *oap, long count1)
     if (oap->op_type == OP_APPEND) {
       firstline += bd.textlen;
     }
-    pre_textlen = (long)strlen(firstline);
+    pre_textlen = (int)strlen(firstline);
   }
 
   if (oap->op_type == OP_APPEND) {
@@ -2401,7 +2402,7 @@ void op_insert(oparg_T *oap, long count1)
     } else {
       firstline += add;
     }
-    long ins_len = (long)strlen(firstline) - pre_textlen - offset;
+    int ins_len = (int)strlen(firstline) - pre_textlen - offset;
     if (pre_textlen >= 0 && ins_len > 0) {
       char *ins_text = xstrnsave(firstline, (size_t)ins_len);
       // block handled here
@@ -2422,8 +2423,8 @@ void op_insert(oparg_T *oap, long count1)
 int op_change(oparg_T *oap)
 {
   int retval;
-  long pre_textlen = 0;
-  long pre_indent = 0;
+  int pre_textlen = 0;
+  int pre_indent = 0;
   char *firstline;
   struct block_def bd;
 
@@ -2457,8 +2458,8 @@ int op_change(oparg_T *oap)
       coladvance_force(getviscol());
     }
     firstline = ml_get(oap->start.lnum);
-    pre_textlen = (long)strlen(firstline);
-    pre_indent = (long)getwhitecols(firstline);
+    pre_textlen = (int)strlen(firstline);
+    pre_indent = (int)getwhitecols(firstline);
     bd.textcol = curwin->w_cursor.col;
   }
 
@@ -2479,25 +2480,25 @@ int op_change(oparg_T *oap)
   // Don't repeat the insert when Insert mode ended with CTRL-C.
   if (oap->motion_type == kMTBlockWise
       && oap->start.lnum != oap->end.lnum && !got_int) {
-    long ins_len;
+    int ins_len;
     // Auto-indenting may have changed the indent.  If the cursor was past
     // the indent, exclude that indent change from the inserted text.
     firstline = ml_get(oap->start.lnum);
     if (bd.textcol > (colnr_T)pre_indent) {
-      long new_indent = (long)getwhitecols(firstline);
+      int new_indent = (int)getwhitecols(firstline);
 
       pre_textlen += new_indent - pre_indent;
       bd.textcol += (colnr_T)(new_indent - pre_indent);
     }
 
-    ins_len = (long)strlen(firstline) - pre_textlen;
+    ins_len = (int)strlen(firstline) - pre_textlen;
     if (ins_len > 0) {
-      long offset;
+      int offset;
       char *newp;
       char *oldp;
       // Subsequent calls to ml_get() flush the firstline data - take a
       // copy of the inserted text.
-      char *ins_text = xmalloc((size_t)(ins_len + 1));
+      char *ins_text = xmalloc((size_t)ins_len + 1);
       xstrlcpy(ins_text, firstline + bd.textcol, (size_t)ins_len + 1);
       for (linenr_T linenr = oap->start.lnum + 1; linenr <= oap->end.lnum;
            linenr++) {
@@ -2527,7 +2528,7 @@ int op_change(oparg_T *oap)
           STRMOVE(newp + offset, oldp);
           ml_replace(linenr, newp, false);
           extmark_splice_cols(curbuf, (int)linenr - 1, bd.textcol,
-                              0, vpos.coladd + (int)ins_len, kExtmarkUndo);
+                              0, vpos.coladd + ins_len, kExtmarkUndo);
         }
       }
       check_cursor();
@@ -2783,12 +2784,12 @@ static void op_yank_reg(oparg_T *oap, bool message, yankreg_T *reg, bool append)
         update_screen();
       }
       if (yank_type == kMTBlockWise) {
-        smsg(NGETTEXT("block of %" PRId64 " line yanked%s",
-                      "block of %" PRId64 " lines yanked%s", yanklines),
+        smsg(0, NGETTEXT("block of %" PRId64 " line yanked%s",
+                         "block of %" PRId64 " lines yanked%s", yanklines),
              (int64_t)yanklines, namebuf);
       } else {
-        smsg(NGETTEXT("%" PRId64 " line yanked%s",
-                      "%" PRId64 " lines yanked%s", yanklines),
+        smsg(0, NGETTEXT("%" PRId64 " line yanked%s",
+                         "%" PRId64 " lines yanked%s", yanklines),
              (int64_t)yanklines, namebuf);
       }
     }
@@ -2904,7 +2905,7 @@ static void do_autocmd_textyankpost(oparg_T *oap, yankreg_T *reg)
 ///               PUT_LINE          force linewise put (":put")
 ///               PUT_BLOCK_INNER   in block mode, do not add trailing spaces
 /// @param dir    BACKWARD for 'P', FORWARD for 'p'
-void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
+void do_put(int regname, yankreg_T *reg, int dir, int count, int flags)
 {
   char *ptr;
   char *newp;
@@ -2933,7 +2934,7 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
   pos_T old_pos;
   char *insert_string = NULL;
   bool allocated = false;
-  long cnt;
+  int cnt;
   const pos_T orig_start = curbuf->b_op_start;
   const pos_T orig_end = curbuf->b_op_end;
   unsigned cur_ve_flags = get_ve_flags();
@@ -3321,7 +3322,8 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
         break;
       }
 
-      totlen = (size_t)(count * (yanklen + spaces) + bd.startspaces + bd.endspaces);
+      totlen = (size_t)count * (size_t)(yanklen + spaces) + (size_t)bd.startspaces +
+               (size_t)bd.endspaces;
       newp = xmalloc(totlen + oldlen + 1);
 
       // copy part up to cursor to new line
@@ -3334,7 +3336,7 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
       ptr += bd.startspaces;
 
       // insert the new text
-      for (long j = 0; j < count; j++) {
+      for (int j = 0; j < count; j++) {
         memmove(ptr, y_array[i], (size_t)yanklen);
         ptr += yanklen;
 
@@ -3447,7 +3449,7 @@ void do_put(int regname, yankreg_T *reg, int dir, long count, int flags)
         // multiplication overflow
         emsg(_(e_resulting_text_too_long));
       } else {
-        totlen = (size_t)(count * yanklen);
+        totlen = (size_t)count * (size_t)yanklen;
         do {
           oldp = ml_get(lnum);
           oldlen = strlen(oldp);
@@ -4167,7 +4169,7 @@ int do_join(size_t count, int insert_space, int save_undo, int use_formatoptions
   // have moved up (last line deleted), so the current lnum is kept in t.
   t = curwin->w_cursor.lnum;
   curwin->w_cursor.lnum++;
-  del_lines((long)count - 1, false);
+  del_lines((int)count - 1, false);
   curwin->w_cursor.lnum = t;
   curbuf_splice_pending--;
   curbuf->deleted_bytes2 = 0;
@@ -4452,8 +4454,7 @@ void op_addsub(oparg_T *oap, linenr_T Prenum1, bool g_cmd)
     }
 
     if (change_cnt > p_report) {
-      smsg(NGETTEXT("%" PRId64 " lines changed",
-                    "%" PRId64 " lines changed", change_cnt),
+      smsg(0, NGETTEXT("%" PRId64 " lines changed", "%" PRId64 " lines changed", change_cnt),
            (int64_t)change_cnt);
     }
   }
@@ -5340,7 +5341,7 @@ void cursor_pos_info(dict_T *dict)
     linenr_T lnum;
     int eol_size;
     varnumber_T last_check = 100000L;
-    long line_count_selected = 0;
+    int line_count_selected = 0;
     if (get_fileformat(curbuf) == EOL_DOS) {
       eol_size = 2;
     } else {
@@ -5399,7 +5400,7 @@ void cursor_pos_info(dict_T *dict)
       if (l_VIsual_active
           && lnum >= min_pos.lnum && lnum <= max_pos.lnum) {
         char *s = NULL;
-        long len = 0L;
+        int len = 0L;
 
         switch (l_VIsual_mode) {
         case Ctrl_V:
@@ -5407,7 +5408,7 @@ void cursor_pos_info(dict_T *dict)
           block_prep(&oparg, &bd, lnum, false);
           virtual_op = kNone;
           s = bd.textstart;
-          len = (long)bd.textlen;
+          len = bd.textlen;
           break;
         case 'V':
           s = ml_get(lnum);
@@ -5430,7 +5431,7 @@ void cursor_pos_info(dict_T *dict)
           if (lnum == curbuf->b_ml.ml_line_count
               && !curbuf->b_p_eol
               && (curbuf->b_p_bin || !curbuf->b_p_fixeol)
-              && (long)strlen(s) < len) {
+              && (int)strlen(s) < len) {
             byte_count_cursor -= eol_size;
           }
         }
@@ -5571,7 +5572,7 @@ static void op_colon(oparg_T *oap)
     if (oap->start.lnum == curwin->w_cursor.lnum) {
       stuffcharReadbuff('.');
     } else {
-      stuffnumReadbuff((long)oap->start.lnum);
+      stuffnumReadbuff(oap->start.lnum);
     }
 
     // When using !! on a closed fold the range ".!" works best to operate
@@ -5592,7 +5593,7 @@ static void op_colon(oparg_T *oap)
         stuffReadbuff(".+");
         stuffnumReadbuff(oap->line_count - 1);
       } else {
-        stuffnumReadbuff((long)oap->end.lnum);
+        stuffnumReadbuff(oap->end.lnum);
       }
     }
   }
@@ -5998,7 +5999,7 @@ void do_pending_operator(cmdarg_T *cap, int old_col, bool gui_yank)
             resel_VIsual_vcol = oap->end_vcol;
           }
         }
-        resel_VIsual_line_count = (linenr_T)oap->line_count;
+        resel_VIsual_line_count = oap->line_count;
       }
 
       // can't redo yank (unless 'y' is in 'cpoptions') and ":"

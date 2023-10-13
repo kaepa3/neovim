@@ -28,7 +28,7 @@
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval.h"
-#include "nvim/ex_cmds.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_eval.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
@@ -47,6 +47,7 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fs_defs.h"
 #include "nvim/os/input.h"
@@ -211,7 +212,7 @@ int readfile(char *fname, char *sfname, linenr_T from, linenr_T lines_to_skip,
   bool fenc_alloced;                    // fenc_next is in allocated memory
   char *fenc_next = NULL;        // next item in 'fencs' or NULL
   bool advance_fenc = false;
-  long real_size = 0;
+  int real_size = 0;
   iconv_t iconv_fd = (iconv_t)-1;       // descriptor for iconv() or -1
   bool did_iconv = false;               // true when iconv() failed and trying
                                         // 'charconvert' next
@@ -946,11 +947,11 @@ retry:
             size = 0;
           } else {
             int ni;
-            long tlen = 0;
+            int tlen = 0;
             while (true) {
               p = (uint8_t *)ml_get(read_buf_lnum) + read_buf_col;
               int n = (int)strlen((char *)p);
-              if ((int)tlen + n + 1 > size) {
+              if (tlen + n + 1 > size) {
                 // Filled up to "size", append partial line.
                 // Change NL to NUL to reverse the effect done
                 // below.
@@ -1752,7 +1753,7 @@ failed:
         c = true;
       }
 
-      msg_add_lines(c, (long)linecnt, filesize);
+      msg_add_lines(c, linecnt, filesize);
 
       XFREE_CLEAR(keep_msg);
       p = NULL;
@@ -2155,7 +2156,7 @@ bool msg_add_fileformat(int eol_type)
 }
 
 /// Append line and character count to IObuff.
-void msg_add_lines(int insert_space, long lnum, off_T nchars)
+void msg_add_lines(int insert_space, linenr_T lnum, off_T nchars)
 {
   char *p = IObuff + strlen(IObuff);
 
@@ -2176,7 +2177,8 @@ void msg_add_lines(int insert_space, long lnum, off_T nchars)
   }
 }
 
-bool time_differs(const FileInfo *file_info, long mtime, long mtime_ns) FUNC_ATTR_CONST
+bool time_differs(const FileInfo *file_info, int64_t mtime, int64_t mtime_ns)
+  FUNC_ATTR_CONST
 {
 #if defined(__linux__) || defined(MSWIN)
   return file_info->stat.st_mtim.tv_nsec != mtime_ns
@@ -2699,7 +2701,7 @@ int vim_rename(const char *from, const char *to)
   }
 
   // Rename() failed, try copying the file.
-  long perm = os_getperm(from);
+  int perm = os_getperm(from);
   // For systems that support ACL: get the ACL from the original file.
   vim_acl_T acl = os_get_acl(from);
   int fd_in = os_open(from, O_RDONLY, 0);
@@ -2709,7 +2711,7 @@ int vim_rename(const char *from, const char *to)
   }
 
   // Create the new file with same permissions as the original.
-  int fd_out = os_open(to, O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW, (int)perm);
+  int fd_out = os_open(to, O_CREAT|O_EXCL|O_WRONLY|O_NOFOLLOW, perm);
   if (fd_out < 0) {
     close(fd_in);
     os_free_acl(acl);
@@ -2727,7 +2729,7 @@ int vim_rename(const char *from, const char *to)
   }
 
   int n;
-  while ((n = (int)read_eintr(fd_in, buffer, WRITEBUFSIZE)) > 0) {
+  while ((n = read_eintr(fd_in, buffer, WRITEBUFSIZE)) > 0) {
     if (write_eintr(fd_out, buffer, (size_t)n) != n) {
       errmsg = _("E208: Error writing to \"%s\"");
       break;
@@ -2904,7 +2906,7 @@ int buf_check_timestamp(buf_T *buf)
       && (!(file_info_ok = os_fileinfo(buf->b_ffname, &file_info))
           || time_differs(&file_info, buf->b_mtime, buf->b_mtime_ns)
           || (int)file_info.stat.st_mode != buf->b_orig_mode)) {
-    const long prev_b_mtime = buf->b_mtime;
+    const int64_t prev_b_mtime = buf->b_mtime;
 
     retval = 1;
 
@@ -3363,7 +3365,7 @@ int readdir_core(garray_T *gap, const char *path, void *context, CheckItem check
 
   Directory dir;
   if (!os_scandir(&dir, path)) {
-    smsg(_(e_notopen), path);
+    smsg(0, _(e_notopen), path);
     return FAIL;
   }
 
@@ -3822,9 +3824,9 @@ char *file_pat_to_reg_pat(const char *pat, const char *pat_end, char *allow_dirs
 
 /// Version of read() that retries when interrupted by EINTR (possibly
 /// by a SIGWINCH).
-long read_eintr(int fd, void *buf, size_t bufsize)
+int read_eintr(int fd, void *buf, size_t bufsize)
 {
-  long ret;
+  ssize_t ret;
 
   while (true) {
     ret = read(fd, buf, (unsigned)bufsize);
@@ -3832,25 +3834,25 @@ long read_eintr(int fd, void *buf, size_t bufsize)
       break;
     }
   }
-  return ret;
+  return (int)ret;
 }
 
 /// Version of write() that retries when interrupted by EINTR (possibly
 /// by a SIGWINCH).
-long write_eintr(int fd, void *buf, size_t bufsize)
+int write_eintr(int fd, void *buf, size_t bufsize)
 {
-  long ret = 0;
+  int ret = 0;
 
   // Repeat the write() so long it didn't fail, other than being interrupted
   // by a signal.
-  while (ret < (long)bufsize) {
-    long wlen = write(fd, (char *)buf + ret, (unsigned)(bufsize - (size_t)ret));
+  while (ret < (int)bufsize) {
+    ssize_t wlen = write(fd, (char *)buf + ret, (unsigned)(bufsize - (size_t)ret));
     if (wlen < 0) {
       if (errno != EINTR) {
         break;
       }
     } else {
-      ret += wlen;
+      ret += (int)wlen;
     }
   }
   return ret;

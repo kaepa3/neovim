@@ -33,6 +33,7 @@
 #include "nvim/channel.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/context.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
@@ -63,12 +64,12 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
-#include "nvim/hashtab.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/input.h"
+#include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
 #include "nvim/macros.h"
@@ -76,12 +77,10 @@
 #include "nvim/mark.h"
 #include "nvim/math.h"
 #include "nvim/mbyte.h"
-#include "nvim/memfile_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/menu.h"
 #include "nvim/message.h"
-#include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
@@ -89,6 +88,7 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/dl.h"
 #include "nvim/os/fileio.h"
@@ -526,7 +526,7 @@ buf_T *get_buf_arg(typval_T *arg)
 /// "byte2line(byte)" function
 static void f_byte2line(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  long boff = (long)tv_get_number(&argvars[0]) - 1;
+  int boff = (int)tv_get_number(&argvars[0]) - 1;
   if (boff < 0) {
     rettv->vval.v_number = -1;
   } else {
@@ -3172,6 +3172,9 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     "windows",
     "winaltkeys",
     "writebackup",
+#ifdef HAVE_XATTR
+    "xattr",
+#endif
     "nvim",
   };
 
@@ -4987,9 +4990,10 @@ static int msgpackparse_convert_item(const msgpack_object data, const msgpack_un
     tv_list_append_owned_tv(ret_list, tv);
     return OK;
   }
-  default:
+  case MSGPACK_UNPACK_EXTRA_BYTES:
     abort();
   }
+  UNREACHABLE;
 }
 
 static void msgpackparse_unpack_list(const list_T *const list, list_T *const ret_list)
@@ -6882,7 +6886,7 @@ static void f_screenchar(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     c = -1;
   } else {
     char buf[MB_MAXBYTES + 1];
-    grid_getbytes(grid, row, col, buf, NULL);
+    schar_get(buf, grid_getchar(grid, row, col, NULL));
     c = utf_ptr2char(buf);
   }
   rettv->vval.v_number = c;
@@ -6903,7 +6907,7 @@ static void f_screenchars(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   char buf[MB_MAXBYTES + 1];
-  grid_getbytes(grid, row, col, buf, NULL);
+  schar_get(buf, grid_getchar(grid, row, col, NULL));
   int pcc[MAX_MCO];
   int c = utfc_ptr2char(buf, pcc);
   int composing_len = 0;
@@ -6948,7 +6952,7 @@ static void f_screenstring(typval_T *argvars, typval_T *rettv, EvalFuncData fptr
   }
 
   char buf[MB_MAXBYTES + 1];
-  grid_getbytes(grid, row, col, buf, NULL);
+  schar_get(buf, grid_getchar(grid, row, col, NULL));
   rettv->vval.v_string = xstrdup(buf);
 }
 
@@ -8233,7 +8237,7 @@ static void f_swapfilelist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr
 static void f_swapinfo(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   tv_dict_alloc_ret(rettv);
-  get_b0_dict(tv_get_string(argvars), rettv->vval.v_dict);
+  swapfile_dict(tv_get_string(argvars), rettv->vval.v_dict);
 }
 
 /// "swapname(expr)" function
@@ -8705,8 +8709,7 @@ static void f_timer_start(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   if (!callback_from_typval(&callback, &argvars[1])) {
     return;
   }
-  rettv->vval.v_number = (varnumber_T)timer_start((const long)tv_get_number(&argvars[0]), repeat,
-                                                  &callback);
+  rettv->vval.v_number = (varnumber_T)timer_start(tv_get_number(&argvars[0]), repeat, &callback);
 }
 
 /// "timer_stop(timerid)" function

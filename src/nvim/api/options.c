@@ -1,22 +1,24 @@
 // This is an open source non-commercial project. Dear PVS-Studio, please check
 // it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 
+#include <assert.h>
 #include <inttypes.h>
-#include <limits.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "nvim/api/keysets.h"
 #include "nvim/api/options.h"
 #include "nvim/api/private/defs.h"
-#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/autocmd.h"
-#include "nvim/buffer_defs.h"
+#include "nvim/buffer.h"
 #include "nvim/eval/window.h"
 #include "nvim/globals.h"
 #include "nvim/memory.h"
 #include "nvim/option.h"
+#include "nvim/types.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
@@ -144,16 +146,14 @@ static Object optval_as_object(OptVal o)
       return BOOLEAN_OBJ(o.data.boolean);
     case kNone:
       return NIL;
-    default:
-      abort();
     }
+    UNREACHABLE;
   case kOptValTypeNumber:
     return INTEGER_OBJ(o.data.number);
   case kOptValTypeString:
     return STRING_OBJ(o.data.string);
-  default:
-    abort();
   }
+  UNREACHABLE;
 }
 
 /// Consume an API Object and convert it to an OptVal.

@@ -17,7 +17,6 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/ascii.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
@@ -26,7 +25,7 @@
 #include "nvim/macros.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/time.h"
 #include "nvim/types.h"
 #include "nvim/ui.h"
@@ -533,7 +532,7 @@ void ui_comp_raw_line(Integer grid, Integer row, Integer startcol, Integer endco
     compose_debug(row, row + 1, startcol, clearcol, dbghl_composed, true);
     compose_line(row, startcol, clearcol, flags);
   } else {
-    compose_debug(row, row + 1, startcol, endcol, dbghl_normal, false);
+    compose_debug(row, row + 1, startcol, endcol, dbghl_normal, endcol >= clearcol);
     compose_debug(row, row + 1, endcol, clearcol, dbghl_clear, true);
 #ifndef NDEBUG
     for (int i = 0; i < endcol - startcol; i++) {

@@ -31,13 +31,13 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/input.h"
 #include "nvim/pos.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/textformat.h"
 #include "nvim/textobject.h"
-#include "nvim/types.h"
 #include "nvim/undo.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
@@ -822,7 +822,7 @@ void op_format(oparg_T *oap, bool keep_cursor)
     saved_cursor = oap->cursor_start;
   }
 
-  format_lines((linenr_T)oap->line_count, keep_cursor);
+  format_lines(oap->line_count, keep_cursor);
 
   // Leave the cursor at the first non-blank of the last formatted line.
   // If the cursor was moved one line back (e.g. with "Q}") go to the next
@@ -1108,15 +1108,13 @@ void format_lines(linenr_T line_count, bool avoid_fex)
         }
         if (next_leader_len > 0) {
           (void)del_bytes(next_leader_len, false, false);
-          mark_col_adjust(curwin->w_cursor.lnum, (colnr_T)0, 0L,
-                          (long)-next_leader_len, 0);
+          mark_col_adjust(curwin->w_cursor.lnum, 0, 0, -next_leader_len, 0);
         } else if (second_indent > 0) {   // the "leader" for FO_Q_SECOND
           int indent = (int)getwhitecols_curline();
 
           if (indent > 0) {
             (void)del_bytes(indent, false, false);
-            mark_col_adjust(curwin->w_cursor.lnum,
-                            (colnr_T)0, 0L, (long)-indent, 0);
+            mark_col_adjust(curwin->w_cursor.lnum, 0, 0, -indent, 0);
           }
         }
         curwin->w_cursor.lnum--;

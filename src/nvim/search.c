@@ -43,6 +43,7 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/time.h"
@@ -2553,9 +2554,9 @@ static int is_zero_width(char *pattern, int move, pos_T *cur, Direction directio
     // start and end are in the same position.
     do {
       regmatch.startpos[0].col++;
-      nmatched = (int)vim_regexec_multi(&regmatch, curwin, curbuf,
-                                        pos.lnum, regmatch.startpos[0].col,
-                                        NULL, NULL);
+      nmatched = vim_regexec_multi(&regmatch, curwin, curbuf,
+                                   pos.lnum, regmatch.startpos[0].col,
+                                   NULL, NULL);
       if (nmatched != 0) {
         break;
       }
@@ -3798,7 +3799,7 @@ void find_pattern_in_path(char *ptr, Direction dir, size_t len, bool whole, bool
             msg_trunc(IObuff, true, HL_ATTR(HLF_R));
           } else if (p_verbose >= 5) {
             verbose_enter();
-            smsg(_("Searching included file %s"), new_fname);
+            smsg(0, _("Searching included file %s"), new_fname);
             verbose_leave();
           }
         }

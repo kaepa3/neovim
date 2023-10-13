@@ -6,6 +6,7 @@
 // trees and nodes, and could be broken out as a reusable lua package
 
 #include <assert.h>
+#include <ctype.h>
 #include <lauxlib.h>
 #include <limits.h>
 #include <lua.h>
@@ -20,7 +21,6 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/globals.h"
-#include "nvim/lua/executor.h"
 #include "nvim/lua/treesitter.h"
 #include "nvim/macros.h"
 #include "nvim/map.h"
@@ -694,7 +694,7 @@ static int parser_get_timeout(lua_State *L)
     return 0;
   }
 
-  lua_pushinteger(L, (long)ts_parser_timeout_micros(*p));
+  lua_pushinteger(L, (lua_Integer)ts_parser_timeout_micros(*p));
   return 1;
 }
 

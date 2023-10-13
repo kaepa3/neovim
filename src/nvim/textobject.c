@@ -9,7 +9,6 @@
 #include <string.h>
 
 #include "nvim/ascii.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
@@ -24,7 +23,7 @@
 #include "nvim/memory.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
-#include "nvim/option_defs.h"
+#include "nvim/option_vars.h"
 #include "nvim/pos.h"
 #include "nvim/search.h"
 #include "nvim/strings.h"
@@ -734,7 +733,7 @@ int current_sent(oparg_T *oap, int count, bool include)
   bool start_blank;
   int c;
   bool at_start_sent;
-  long ncount;
+  int ncount;
 
   start_pos = curwin->w_cursor;
   pos = start_pos;
@@ -839,7 +838,7 @@ extend:
     }
   }
   if (ncount > 0) {
-    findsent_forward((int)ncount, true);
+    findsent_forward(ncount, true);
   } else {
     decl(&curwin->w_cursor);
   }
@@ -1143,7 +1142,7 @@ int current_tagblock(oparg_T *oap, int count_arg, bool include)
 again:
   // Search backwards for unclosed "<aaa>".
   // Put this position in start_pos.
-  for (long n = 0; n < count; n++) {
+  for (int n = 0; n < count; n++) {
     if (do_searchpair("<[^ \t>/!]\\+\\%(\\_s\\_[^>]\\{-}[^/]>\\|$\\|\\_s\\=>\\)",
                       "",
                       "</[^>]*>", BACKWARD, NULL, 0,

@@ -17,7 +17,6 @@
 #include <string.h>
 #include <time.h>
 
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
@@ -57,6 +56,7 @@
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/os/input.h"
 #include "nvim/os/time.h"
 #include "nvim/plines.h"
@@ -73,7 +73,6 @@
 #include "nvim/tag.h"
 #include "nvim/textformat.h"
 #include "nvim/textobject.h"
-#include "nvim/types.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/vim.h"
@@ -1497,7 +1496,7 @@ static int normal_check(VimState *state)
 /// Set v:prevcount only when "set_prevcount" is true.
 static void set_vcount_ca(cmdarg_T *cap, bool *set_prevcount)
 {
-  long count = cap->count0;
+  int64_t count = cap->count0;
 
   // multiply with cap->opcount the same way as above
   if (cap->opcount != 0) {
@@ -1736,13 +1735,13 @@ static void prep_redo_cmd(cmdarg_T *cap)
 
 /// Prepare for redo of any command.
 /// Note that only the last argument can be a multi-byte char.
-void prep_redo(int regname, long num, int cmd1, int cmd2, int cmd3, int cmd4, int cmd5)
+void prep_redo(int regname, int num, int cmd1, int cmd2, int cmd3, int cmd4, int cmd5)
 {
   prep_redo_num2(regname, num, cmd1, cmd2, 0L, cmd3, cmd4, cmd5);
 }
 
 /// Prepare for redo of any command with extra count after "cmd2".
-void prep_redo_num2(int regname, long num1, int cmd1, int cmd2, long num2, int cmd3, int cmd4,
+void prep_redo_num2(int regname, int num1, int cmd1, int cmd2, int num2, int cmd3, int cmd4,
                     int cmd5)
 {
   ResetRedobuff();
@@ -1857,7 +1856,7 @@ void clear_showcmd(void)
 
   if (VIsual_active && !char_avail()) {
     int cursor_bot = lt(VIsual, curwin->w_cursor);
-    long lines;
+    int lines;
     colnr_T leftcol, rightcol;
     linenr_T top, bot;
 
@@ -2116,8 +2115,7 @@ void do_check_scrollbind(bool check)
           && (curwin->w_topline != old_topline
               || curwin->w_topfill != old_topfill
               || curwin->w_leftcol != old_leftcol)) {
-        check_scrollbind(curwin->w_topline - old_topline,
-                         (long)(curwin->w_leftcol - old_leftcol));
+        check_scrollbind(curwin->w_topline - old_topline, curwin->w_leftcol - old_leftcol);
       }
     } else if (vim_strchr(p_sbo, 'j')) {  // jump flag set in 'scrollopt'
       // When switching between windows, make sure that the relative
@@ -2143,7 +2141,7 @@ void do_check_scrollbind(bool check)
 /// Synchronize any windows that have "scrollbind" set, based on the
 /// number of rows by which the current window has changed
 /// (1998-11-02 16:21:01  R. Edward Ralston <eralston@computer.org>)
-void check_scrollbind(linenr_T topline_diff, long leftcol_diff)
+void check_scrollbind(linenr_T topline_diff, int leftcol_diff)
 {
   bool want_ver;
   bool want_hor;
@@ -2469,7 +2467,7 @@ bool find_decl(char *ptr, size_t len, bool locally, bool thisblock, int flags_ar
 /// 'dist' must be positive.
 ///
 /// @return  true if able to move cursor, false otherwise.
-static bool nv_screengo(oparg_T *oap, int dir, long dist)
+static bool nv_screengo(oparg_T *oap, int dir, int dist)
 {
   int linelen = (int)linetabsize(curwin, curwin->w_cursor.lnum);
   bool retval = true;
@@ -2785,7 +2783,7 @@ static void nv_zet(cmdarg_T *cap)
 {
   colnr_T col;
   int nchar = cap->nchar;
-  long old_fdl = (long)curwin->w_p_fdl;
+  int old_fdl = (int)curwin->w_p_fdl;
   int old_fen = curwin->w_p_fen;
 
   int siso = get_sidescrolloff_value(curwin);
