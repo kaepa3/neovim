@@ -661,6 +661,35 @@ static void finish_exception(except_T *excp)
   discard_exception(excp, true);
 }
 
+/// Save the current exception state in "estate"
+void exception_state_save(exception_state_T *estate)
+{
+  estate->estate_current_exception = current_exception;
+  estate->estate_did_throw = did_throw;
+  estate->estate_need_rethrow = need_rethrow;
+  estate->estate_trylevel = trylevel;
+}
+
+/// Restore the current exception state from "estate"
+void exception_state_restore(exception_state_T *estate)
+{
+  if (current_exception == NULL) {
+    current_exception = estate->estate_current_exception;
+  }
+  did_throw |= estate->estate_did_throw;
+  need_rethrow |= estate->estate_need_rethrow;
+  trylevel |= estate->estate_trylevel;
+}
+
+/// Clear the current exception state
+void exception_state_clear(void)
+{
+  current_exception = NULL;
+  did_throw = false;
+  need_rethrow = false;
+  trylevel = 0;
+}
+
 // Flags specifying the message displayed by report_pending.
 #define RP_MAKE         0
 #define RP_RESUME       1
@@ -1342,7 +1371,7 @@ void ex_catch(exarg_T *eap)
           *end = NUL;
         }
         save_cpo = p_cpo;
-        p_cpo = empty_option;
+        p_cpo = empty_string_option;
         // Disable error messages, it will make current exception
         // invalid
         emsg_off++;

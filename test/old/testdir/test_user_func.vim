@@ -793,5 +793,41 @@ func Test_defer_wrong_arguments()
   call v9.CheckScriptFailure(lines, 'E1013: Argument 1: type mismatch, expected string but got number')
 endfunc
 
+" Test for calling a deferred function after an exception
+func Test_defer_after_exception()
+  let g:callTrace = []
+  func Bar()
+    let g:callTrace += [1]
+    throw 'InnerException'
+  endfunc
+
+  func Defer()
+    let g:callTrace += [2]
+    let g:callTrace += [3]
+    try
+      call Bar()
+    catch /InnerException/
+      let g:callTrace += [4]
+    endtry
+    let g:callTrace += [5]
+    let g:callTrace += [6]
+  endfunc
+
+  func Foo()
+    defer Defer()
+    throw "TestException"
+  endfunc
+
+  try
+    call Foo()
+  catch /TestException/
+    let g:callTrace += [7]
+  endtry
+  call assert_equal([2, 3, 1, 4, 5, 6, 7], g:callTrace)
+
+  delfunc Defer
+  delfunc Foo
+  unlet g:callTrace
+endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab
