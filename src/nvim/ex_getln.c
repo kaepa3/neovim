@@ -715,12 +715,8 @@ static uint8_t *command_line_enter(int firstc, int count, int indent, bool clear
   ExpandInit(&s->xpc);
   ccline.xpc = &s->xpc;
 
-  if (curwin->w_p_rl && *curwin->w_p_rlc == 's'
-      && (s->firstc == '/' || s->firstc == '?')) {
-    cmdmsg_rl = true;
-  } else {
-    cmdmsg_rl = false;
-  }
+  cmdmsg_rl = (curwin->w_p_rl && *curwin->w_p_rlc == 's'
+               && (s->firstc == '/' || s->firstc == '?'));
 
   msg_grid_validate();
 
@@ -1564,11 +1560,7 @@ static int command_line_erase_chars(CommandLineState *s)
 
     XFREE_CLEAR(ccline.cmdbuff);        // no commandline to return
     if (!cmd_silent && !ui_has(kUICmdline)) {
-      if (cmdmsg_rl) {
-        msg_col = Columns;
-      } else {
-        msg_col = 0;
-      }
+      msg_col = 0;
       msg_putchar(' ');                             // delete ':'
     }
     s->is_state.search_start = s->is_state.save_cursor;
@@ -2664,7 +2656,7 @@ static int command_line_changed(CommandLineState *s)
     }
   }
 
-  if (cmdmsg_rl || (p_arshape && !p_tbidi)) {
+  if (p_arshape && !p_tbidi) {
     // Always redraw the whole command line to fix shaping and
     // right-left typing.  Not efficient, but it works.
     // Do it only when there are no characters left to read
@@ -3863,18 +3855,10 @@ void cursorcmd(void)
     return;
   }
 
-  if (cmdmsg_rl) {
-    msg_row = cmdline_row + (ccline.cmdspos / (Columns - 1));
-    msg_col = Columns - (ccline.cmdspos % (Columns - 1)) - 1;
-    if (msg_row <= 0) {
-      msg_row = Rows - 1;
-    }
-  } else {
-    msg_row = cmdline_row + (ccline.cmdspos / Columns);
-    msg_col = ccline.cmdspos % Columns;
-    if (msg_row >= Rows) {
-      msg_row = Rows - 1;
-    }
+  msg_row = cmdline_row + (ccline.cmdspos / Columns);
+  msg_col = ccline.cmdspos % Columns;
+  if (msg_row >= Rows) {
+    msg_row = Rows - 1;
   }
 
   msg_cursor_goto(msg_row, msg_col);
@@ -3886,11 +3870,7 @@ void gotocmdline(bool clr)
     return;
   }
   msg_start();
-  if (cmdmsg_rl) {
-    msg_col = Columns - 1;
-  } else {
-    msg_col = 0;  // always start in column 0
-  }
+  msg_col = 0;  // always start in column 0
   if (clr) {  // clear the bottom line(s)
     msg_clr_eos();  // will reset clear_cmdline
   }
@@ -4241,6 +4221,11 @@ int get_list_range(char **str, int *num1, int *num2)
   if (**str == '-' || ascii_isdigit(**str)) {  // parse "from" part of range
     vim_str2nr(*str, NULL, &len, 0, &num, NULL, 0, false, NULL);
     *str += len;
+    // overflow
+    if (num > INT_MAX) {
+      return FAIL;
+    }
+
     *num1 = (int)num;
     first = true;
   }
@@ -4249,8 +4234,13 @@ int get_list_range(char **str, int *num1, int *num2)
     *str = skipwhite((*str) + 1);
     vim_str2nr(*str, NULL, &len, 0, &num, NULL, 0, false, NULL);
     if (len > 0) {
-      *num2 = (int)num;
       *str = skipwhite((*str) + len);
+      // overflow
+      if (num > INT_MAX) {
+        return FAIL;
+      }
+
+      *num2 = (int)num;
     } else if (!first) {                  // no number given at all
       return FAIL;
     }

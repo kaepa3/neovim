@@ -28,7 +28,7 @@ target_link_libraries(main_lib INTERFACE ${LUV_LIBRARY})
 find_package(Iconv REQUIRED)
 find_package(Lpeg REQUIRED)
 find_package(Libtermkey 0.22 REQUIRED)
-find_package(Libvterm 0.3 REQUIRED)
+find_package(Libvterm 0.3.3 REQUIRED)
 find_package(Msgpack 1.0.0 REQUIRED)
 find_package(Treesitter 0.20.8 REQUIRED)
 find_package(Unibilium 2.0 REQUIRED)
@@ -100,7 +100,8 @@ else()
     -Wdouble-promotion
     -Wmissing-noreturn
     -Wmissing-format-attribute
-    -Wmissing-prototypes)
+    -Wmissing-prototypes
+    -fsigned-char)
 
   if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
     target_compile_options(main_lib INTERFACE -fno-common
@@ -170,11 +171,6 @@ if(CI_BUILD)
   else()
     target_compile_options(main_lib INTERFACE -Werror)
   endif()
-endif()
-
-option(UNSIGNED_CHAR "Set char to be unsigned" OFF)
-if(UNSIGNED_CHAR)
-  target_compile_options(main_lib INTERFACE -funsigned-char)
 endif()
 
 target_compile_definitions(main_lib INTERFACE INCLUDE_GENERATED_DECLARATIONS)
@@ -917,7 +913,10 @@ glob_wrapper(LUA_SOURCES
 add_custom_command(
   OUTPUT ${VIMDOC_FILES}
   COMMAND ${PROJECT_SOURCE_DIR}/scripts/gen_vimdoc.py
-  DEPENDS ${API_SOURCES} ${LUA_SOURCES}
+  DEPENDS
+    nvim
+    ${API_SOURCES}
+    ${LUA_SOURCES}
   WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 )
 
@@ -932,7 +931,7 @@ set(GEN_EVAL_FILES
 
 add_custom_command(
   OUTPUT ${GEN_EVAL_FILES}
-  COMMAND ${PROJECT_SOURCE_DIR}/scripts/gen_eval_files.lua
+  COMMAND $<TARGET_FILE:nvim> -l ${PROJECT_SOURCE_DIR}/scripts/gen_eval_files.lua
   DEPENDS
     ${API_METADATA}
     ${PROJECT_SOURCE_DIR}/scripts/gen_eval_files.lua
