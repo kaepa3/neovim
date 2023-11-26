@@ -1,7 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -17,6 +13,7 @@
 #include "nvim/api/vimscript.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_defs.h"
 #include "nvim/extmark.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
@@ -25,7 +22,6 @@
 #include "nvim/memory.h"
 #include "nvim/option.h"
 #include "nvim/pos.h"
-#include "nvim/types.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/deprecated.c.generated.h"
@@ -158,22 +154,25 @@ Integer nvim_buf_set_virtual_text(Buffer buffer, Integer src_id, Integer line, A
     return 0;
   }
 
-  Decoration *existing = decor_find_virttext(buf, (int)line, ns_id);
+  DecorVirtText *existing = decor_find_virttext(buf, (int)line, ns_id);
 
   if (existing) {
-    clear_virttext(&existing->virt_text);
-    existing->virt_text = virt_text;
-    existing->virt_text_width = width;
+    clear_virttext(&existing->data.virt_text);
+    existing->data.virt_text = virt_text;
+    existing->width = width;
     return src_id;
   }
 
-  Decoration decor = DECORATION_INIT;
-  decor.virt_text = virt_text;
-  decor.virt_text_width = width;
-  decor.priority = 0;
+  DecorVirtText *vt = xmalloc(sizeof *vt);
+  *vt = (DecorVirtText)DECOR_VIRT_TEXT_INIT;
+  vt->data.virt_text = virt_text;
+  vt->width = width;
+  vt->priority = 0;
 
-  extmark_set(buf, ns_id, NULL, (int)line, 0, -1, -1, &decor, true,
-              false, kExtmarkNoUndo, NULL);
+  DecorInline decor = { .ext = true, .data.ext.vt = vt, .data.ext.sh_idx = DECOR_ID_INVALID };
+
+  extmark_set(buf, ns_id, NULL, (int)line, 0, -1, -1, decor, 0, true,
+              false, false, false, NULL);
   return src_id;
 }
 
@@ -694,8 +693,9 @@ static void set_option_to(uint64_t channel_id, void *to, OptReqScope req_scope, 
 
   // For global-win-local options -> setlocal
   // For        win-local options -> setglobal and setlocal (opt_flags == 0)
-  const int opt_flags = (req_scope == kOptReqWin && !(flags & SOPT_GLOBAL)) ? 0 :
-                        (req_scope == kOptReqGlobal) ? OPT_GLOBAL : OPT_LOCAL;
+  const int opt_flags = (req_scope == kOptReqWin && !(flags & SOPT_GLOBAL))
+                        ? 0
+                        : (req_scope == kOptReqGlobal) ? OPT_GLOBAL : OPT_LOCAL;
 
   WITH_SCRIPT_CONTEXT(channel_id, {
     set_option_value_for(name.data, optval, opt_flags, req_scope, to, err);

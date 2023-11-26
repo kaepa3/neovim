@@ -1,10 +1,6 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "nvim/api/keysets.h"
@@ -16,9 +12,10 @@
 #include "nvim/buffer.h"
 #include "nvim/eval/window.h"
 #include "nvim/globals.h"
+#include "nvim/macros.h"
 #include "nvim/memory.h"
 #include "nvim/option.h"
-#include "nvim/types.h"
+#include "nvim/option_vars.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
@@ -91,9 +88,9 @@ static int validate_option_value_args(Dict(option) *opts, char *name, int *scope
     int req_flags = *req_scope == kOptReqBuf ? SOPT_BUF : SOPT_WIN;
     if (!(flags & req_flags)) {
       char *tgt = *req_scope & kOptReqBuf ? "buf" : "win";
-      char *global = flags & SOPT_GLOBAL ? "global ": "";
-      char *req = flags & SOPT_BUF ? "buffer-local " :
-                  flags & SOPT_WIN ? "window-local " : "";
+      char *global = flags & SOPT_GLOBAL ? "global " : "";
+      char *req = flags & SOPT_BUF ? "buffer-local "
+                                   : flags & SOPT_WIN ? "window-local " : "";
 
       api_set_error(err, kErrorTypeValidation, "'%s' cannot be passed for %s%soption '%s'",
                     tgt, global, req, name);
@@ -498,7 +495,7 @@ OptVal get_option_value_strict(char *name, OptReqScope req_scope, void *from, Er
   switchwin_T switchwin;
   aco_save_T aco;
   void *ctx = req_scope == kOptReqWin ? (void *)&switchwin
-                                    : (req_scope == kOptReqBuf ? (void *)&aco : NULL);
+                                      : (req_scope == kOptReqBuf ? (void *)&aco : NULL);
   bool switched = switch_option_context(ctx, req_scope, from, err);
   if (ERROR_SET(err)) {
     return retv;

@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // plines.c: calculate the vertical and horizontal size of text in a window
 
 #include <limits.h>
@@ -11,6 +8,7 @@
 #include "nvim/ascii.h"
 #include "nvim/charset.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_defs.h"
 #include "nvim/diff.h"
 #include "nvim/fold.h"
 #include "nvim/globals.h"
@@ -86,18 +84,18 @@ int linetabsize_col(int startcol, char *s)
 /// @param len
 ///
 /// @return Number of characters the string will take on the screen.
-unsigned win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
+int win_linetabsize(win_T *wp, linenr_T lnum, char *line, colnr_T len)
 {
   chartabsize_T cts;
   init_chartabsize_arg(&cts, wp, lnum, 0, line, line);
   win_linetabsize_cts(&cts, len);
   clear_chartabsize_arg(&cts);
-  return (unsigned)cts.cts_vcol;
+  return cts.cts_vcol;
 }
 
 /// Return the number of cells line "lnum" of window "wp" will take on the
 /// screen, taking into account the size of a tab and inline virtual text.
-unsigned linetabsize(win_T *wp, linenr_T lnum)
+int linetabsize(win_T *wp, linenr_T lnum)
 {
   return win_linetabsize(wp, lnum, ml_get_buf(wp->w_buffer, lnum), (colnr_T)MAXCOL);
 }
@@ -170,9 +168,7 @@ int lbr_chartabsize(chartabsize_T *cts)
 /// @return The number of characters take up on the screen.
 int lbr_chartabsize_adv(chartabsize_T *cts)
 {
-  int retval;
-
-  retval = lbr_chartabsize(cts);
+  int retval = lbr_chartabsize(cts);
   MB_PTR_ADV(cts->cts_ptr);
   return retval;
 }
@@ -227,21 +223,25 @@ int win_lbr_chartabsize(chartabsize_T *cts, int *headp)
       if (mark.pos.row != cts->cts_row || mark.pos.col > col) {
         break;
       } else if (mark.pos.col == col) {
-        if (!mt_end(mark)) {
-          Decoration decor = get_decor(mark);
-          if (decor.virt_text_pos == kVTInline) {
-            if (mt_right(mark)) {
-              cts->cts_cur_text_width_right += decor.virt_text_width;
-            } else {
-              cts->cts_cur_text_width_left += decor.virt_text_width;
+        if (!mt_end(mark) && mark.flags & (MT_FLAG_DECOR_VIRT_TEXT_INLINE)) {
+          DecorInline decor = mt_decor(mark);
+          DecorVirtText *vt = decor.ext ? decor.data.ext.vt : NULL;
+          while (vt) {
+            if (!(vt->flags & kVTIsLines) && vt->pos == kVPosInline) {
+              if (mt_right(mark)) {
+                cts->cts_cur_text_width_right += vt->width;
+              } else {
+                cts->cts_cur_text_width_left += vt->width;
+              }
+              size += vt->width;
+              if (*s == TAB) {
+                // tab size changes because of the inserted text
+                size -= tab_size;
+                tab_size = win_chartabsize(wp, s, vcol + size);
+                size += tab_size;
+              }
             }
-            size += decor.virt_text_width;
-            if (*s == TAB) {
-              // tab size changes because of the inserted text
-              size -= tab_size;
-              tab_size = win_chartabsize(wp, s, vcol + size);
-              size += tab_size;
-            }
+            vt = vt->next;
           }
         }
       }
@@ -402,14 +402,13 @@ static int win_nolbr_chartabsize(chartabsize_T *cts, int *headp)
   win_T *wp = cts->cts_win;
   char *s = cts->cts_ptr;
   colnr_T col = cts->cts_vcol;
-  int n;
 
   if ((*s == TAB) && (!wp->w_p_list || wp->w_p_lcs_chars.tab1)) {
     return tabstop_padding(col,
                            wp->w_buffer->b_p_ts,
                            wp->w_buffer->b_p_vts_array);
   }
-  n = ptr2cells(s);
+  int n = ptr2cells(s);
 
   // Add one cell for a double-width character in the last column of the
   // window, displayed with a ">".
@@ -977,8 +976,8 @@ int64_t win_text_height(win_T *const wp, const linenr_T start_lnum, const int64_
     const int64_t row_off = end_vcol == 0
                             ? 0
                             : (end_vcol <= width1 || width2 <= 0)
-                              ? 1
-                              : 1 + (end_vcol - width1 + width2 - 1) / width2;
+                            ? 1
+                            : 1 + (end_vcol - width1 + width2 - 1) / width2;
     height_sum_nofill += MIN(row_off, height_cur_nofill);
   }
 

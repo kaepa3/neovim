@@ -129,7 +129,7 @@ functionaltest-lua: | nvim
 	$(BUILD_TOOL) -C build functionaltest
 
 FORMAT=formatc formatlua format
-LINT=lintlua lintsh lintc clang-tidy clang-analyzer lintcommit lint
+LINT=lintlua lintsh lintc clang-analyzer lintcommit lint
 TEST=functionaltest unittest
 generated-sources benchmark $(FORMAT) $(LINT) $(TEST) doc: | build/.ran-cmake
 	$(CMAKE_PRG) --build build --target $@
@@ -141,6 +141,7 @@ iwyu: build/.ran-cmake
 	cmake --build build > build/iwyu.log
 	iwyu-fix-includes --only_re="src/nvim" --ignore_re="src/nvim/(auto|map.h|eval/encode.c)" --safe_headers < build/iwyu.log
 	cmake -B build -U ENABLE_IWYU
+	cmake --build build
 
 clean:
 	+test -d build && $(BUILD_TOOL) -C build clean || true

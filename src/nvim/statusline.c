@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <inttypes.h>
 #include <stdbool.h>
@@ -62,11 +59,8 @@ typedef enum {
 /// If inversion is possible we use it. Else '=' characters are used.
 void win_redr_status(win_T *wp)
 {
-  char *p;
-  int len;
   int fillchar;
   int attr;
-  int this_ru_col;
   bool is_stl_global = global_stl_height() > 0;
   static bool busy = false;
 
@@ -95,8 +89,8 @@ void win_redr_status(win_T *wp)
     const int stl_width = is_stl_global ? Columns : wp->w_width;
 
     get_trans_bufname(wp->w_buffer);
-    p = NameBuff;
-    len = (int)strlen(p);
+    char *p = NameBuff;
+    int len = (int)strlen(p);
 
     if ((bt_help(wp->w_buffer)
          || wp->w_p_pvw
@@ -122,7 +116,7 @@ void win_redr_status(win_T *wp)
       // len += (int)strlen(p + len);  // dead assignment
     }
 
-    this_ru_col = ru_col - (Columns - stl_width);
+    int this_ru_col = ru_col - (Columns - stl_width);
     if (this_ru_col < (stl_width + 1) / 2) {
       this_ru_col = (stl_width + 1) / 2;
     }
@@ -130,10 +124,10 @@ void win_redr_status(win_T *wp)
       p = "<";                // No room for file name!
       len = 1;
     } else {
-      int clen = 0, i;
+      int i;
 
       // Count total number of display cells.
-      clen = (int)mb_string2cells(p);
+      int clen = (int)mb_string2cells(p);
 
       // Find first character that will fit.
       // Going from start to end is much faster for DBCS.
@@ -298,7 +292,6 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
   int row;
   int col = 0;
   int maxwidth;
-  int n;
   int fillchar;
   char buf[MAXPATHL];
   char transbuf[MAXPATHL];
@@ -425,7 +418,7 @@ static void win_redr_custom(win_T *wp, bool draw_winbar, bool draw_ruler)
 
   int curattr = attr;
   char *p = buf;
-  for (n = 0; hltab[n].start != NULL; n++) {
+  for (int n = 0; hltab[n].start != NULL; n++) {
     int textlen = (int)(hltab[n].start - p);
     // Make all characters printable.
     size_t tsize = transstr_buf(p, textlen, transbuf, sizeof transbuf, true);
@@ -558,7 +551,7 @@ void win_redr_ruler(win_T *wp)
   // To avoid portability problems we use strlen() here.
   vim_snprintf(buffer, RULER_BUF_LEN, "%" PRId64 ",",
                (wp->w_buffer->b_ml.ml_flags &
-                ML_EMPTY) ? (int64_t)0L : (int64_t)wp->w_cursor.lnum);
+                ML_EMPTY) ? 0 : (int64_t)wp->w_cursor.lnum);
   size_t len = strlen(buffer);
   col_print(buffer + len, RULER_BUF_LEN - len,
             empty_line ? 0 : (int)wp->w_cursor.col + 1,
@@ -1394,7 +1387,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
         xstrlcpy(NameBuff, buf_spname(wp->w_buffer), MAXPATHL);
       } else {
         char *t = (opt == STL_FULLPATH) ? wp->w_buffer->b_ffname
-                                          : wp->w_buffer->b_fname;
+                                        : wp->w_buffer->b_fname;
         home_replace(wp->w_buffer, t, NameBuff, MAXPATHL, true);
       }
       trans_characters(NameBuff, MAXPATHL);
@@ -1514,7 +1507,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
           num = (int)get_vim_var_nr(VV_LNUM);
         }
       } else {
-        num = (wp->w_buffer->b_ml.ml_flags & ML_EMPTY) ? 0L : wp->w_cursor.lnum;
+        num = (wp->w_buffer->b_ml.ml_flags & ML_EMPTY) ? 0 : wp->w_cursor.lnum;
       }
       break;
 
@@ -1593,9 +1586,9 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
     case STL_OFFSET: {
       int l = ml_find_line_or_offset(wp->w_buffer, wp->w_cursor.lnum, NULL,
                                      false);
-      num = (wp->w_buffer->b_ml.ml_flags & ML_EMPTY) || l < 0 ?
-            0L : l + 1 + ((State & MODE_INSERT) == 0 && empty_line ?
-                          0 : (int)wp->w_cursor.col);
+      num = (wp->w_buffer->b_ml.ml_flags & ML_EMPTY) || l < 0
+            ? 0 : l + 1 + ((State & MODE_INSERT) == 0 && empty_line
+                           ? 0 : (int)wp->w_cursor.col);
       break;
     }
     case STL_BYTEVAL_X:
@@ -1659,10 +1652,11 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, char *opt_n
       varnumber_T virtnum = get_vim_var_nr(VV_VIRTNUM);
       for (int i = 0; i < width; i++) {
         if (!fold) {
-          SignTextAttrs *sattr = virtnum ? NULL : sign_get_attr(i, stcp->sattrs, wp->w_scwidth);
+          SignTextAttrs *sattr = virtnum ? NULL : &stcp->sattrs[i];
           p = sattr && sattr->text ? sattr->text : "  ";
-          stl_items[curitem].minwid = -(sattr ? stcp->sign_cul_id ? stcp->sign_cul_id
-                                        : sattr->hl_id : (stcp->use_cul ? HLF_CLS : HLF_SC) + 1);
+          stl_items[curitem].minwid = -(sattr && sattr->text
+                                        ? (stcp->sign_cul_id ? stcp->sign_cul_id : sattr->hl_id)
+                                        : (stcp->use_cul ? HLF_CLS : HLF_SC) + 1);
         }
         stl_items[curitem].type = Highlight;
         stl_items[curitem].start = out_p + buflen;

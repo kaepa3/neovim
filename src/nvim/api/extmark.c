@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,6 +13,7 @@
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_defs.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/drawscreen.h"
 #include "nvim/extmark.h"
@@ -25,8 +23,7 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/pos.h"
-#include "nvim/strings.h"
-#include "nvim/vim.h"
+#include "nvim/sign.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/extmark.c.generated.h"
@@ -84,7 +81,7 @@ Dictionary nvim_get_namespaces(void)
   return retval;
 }
 
-const char *describe_ns(NS ns_id)
+const char *describe_ns(NS ns_id, const char *unknown)
 {
   String name;
   handle_T id;
@@ -93,7 +90,7 @@ const char *describe_ns(NS ns_id)
       return name.data;
     }
   })
-  return "(UNKNOWN PLUGIN)";
+  return unknown;
 }
 
 // Is the Namespace in use?
@@ -103,15 +100,6 @@ bool ns_initialized(uint32_t ns)
     return false;
   }
   return ns < (uint32_t)next_namespace_id;
-}
-
-static Object hl_group_name(int hl_id, bool hl_name)
-{
-  if (hl_name) {
-    return CSTR_TO_OBJ(syn_id2name(hl_id));
-  } else {
-    return INTEGER_OBJ(hl_id);
-  }
 }
 
 Array virt_text_to_array(VirtText vt, bool hl_name)
@@ -144,106 +132,43 @@ Array virt_text_to_array(VirtText vt, bool hl_name)
   return chunks;
 }
 
-static Array extmark_to_array(const ExtmarkInfo *extmark, bool id, bool add_dict, bool hl_name)
+static Array extmark_to_array(MTPair extmark, bool id, bool add_dict, bool hl_name)
 {
+  MTKey start = extmark.start;
   Array rv = ARRAY_DICT_INIT;
   if (id) {
-    ADD(rv, INTEGER_OBJ((Integer)extmark->mark_id));
+    ADD(rv, INTEGER_OBJ((Integer)start.id));
   }
-  ADD(rv, INTEGER_OBJ(extmark->row));
-  ADD(rv, INTEGER_OBJ(extmark->col));
+  ADD(rv, INTEGER_OBJ(start.pos.row));
+  ADD(rv, INTEGER_OBJ(start.pos.col));
 
   if (add_dict) {
     Dictionary dict = ARRAY_DICT_INIT;
 
-    PUT(dict, "ns_id", INTEGER_OBJ((Integer)extmark->ns_id));
+    PUT(dict, "ns_id", INTEGER_OBJ((Integer)start.ns));
 
-    PUT(dict, "right_gravity", BOOLEAN_OBJ(extmark->right_gravity));
+    PUT(dict, "right_gravity", BOOLEAN_OBJ(mt_right(start)));
 
-    if (extmark->end_row >= 0) {
-      PUT(dict, "end_row", INTEGER_OBJ(extmark->end_row));
-      PUT(dict, "end_col", INTEGER_OBJ(extmark->end_col));
-      PUT(dict, "end_right_gravity", BOOLEAN_OBJ(extmark->end_right_gravity));
+    if (extmark.end_pos.row >= 0) {
+      PUT(dict, "end_row", INTEGER_OBJ(extmark.end_pos.row));
+      PUT(dict, "end_col", INTEGER_OBJ(extmark.end_pos.col));
+      PUT(dict, "end_right_gravity", BOOLEAN_OBJ(extmark.end_right_gravity));
     }
 
-    const Decoration *decor = &extmark->decor;
-    if (decor->hl_id) {
-      PUT(dict, "hl_group", hl_group_name(decor->hl_id, hl_name));
-      PUT(dict, "hl_eol", BOOLEAN_OBJ(decor->hl_eol));
-    }
-    if (decor->hl_mode) {
-      PUT(dict, "hl_mode", CSTR_TO_OBJ(hl_mode_str[decor->hl_mode]));
+    if (mt_no_undo(start)) {
+      PUT(dict, "undo_restore", BOOLEAN_OBJ(false));
     }
 
-    if (kv_size(decor->virt_text)) {
-      Array chunks = virt_text_to_array(decor->virt_text, hl_name);
-      PUT(dict, "virt_text", ARRAY_OBJ(chunks));
-      PUT(dict, "virt_text_hide", BOOLEAN_OBJ(decor->virt_text_hide));
-      if (decor->virt_text_pos == kVTWinCol) {
-        PUT(dict, "virt_text_win_col", INTEGER_OBJ(decor->col));
-      }
-      PUT(dict, "virt_text_pos",
-          CSTR_TO_OBJ(virt_text_pos_str[decor->virt_text_pos]));
+    if (mt_invalidate(start)) {
+      PUT(dict, "invalidate", BOOLEAN_OBJ(true));
+    }
+    if (mt_invalid(start)) {
+      PUT(dict, "invalid", BOOLEAN_OBJ(true));
     }
 
-    if (decor->ui_watched) {
-      PUT(dict, "ui_watched", BOOLEAN_OBJ(true));
-    }
+    decor_to_dict_legacy(&dict, mt_decor(start), hl_name);
 
-    if (kv_size(decor->virt_lines)) {
-      Array all_chunks = ARRAY_DICT_INIT;
-      bool virt_lines_leftcol = false;
-      for (size_t i = 0; i < kv_size(decor->virt_lines); i++) {
-        virt_lines_leftcol = kv_A(decor->virt_lines, i).left_col;
-        Array chunks = virt_text_to_array(kv_A(decor->virt_lines, i).line, hl_name);
-        ADD(all_chunks, ARRAY_OBJ(chunks));
-      }
-      PUT(dict, "virt_lines", ARRAY_OBJ(all_chunks));
-      PUT(dict, "virt_lines_above", BOOLEAN_OBJ(decor->virt_lines_above));
-      PUT(dict, "virt_lines_leftcol", BOOLEAN_OBJ(virt_lines_leftcol));
-    }
-
-    if (decor->sign_text) {
-      PUT(dict, "sign_text", CSTR_TO_OBJ(decor->sign_text));
-    }
-
-    // uncrustify:off
-
-    struct { char *name; const int val; } hls[] = {
-      { "sign_hl_group"      , decor->sign_hl_id       },
-      { "number_hl_group"    , decor->number_hl_id     },
-      { "line_hl_group"      , decor->line_hl_id       },
-      { "cursorline_hl_group", decor->cursorline_hl_id },
-      { NULL, 0 },
-    };
-
-    // uncrustify:on
-
-    for (int j = 0; hls[j].name; j++) {
-      if (hls[j].val) {
-        PUT(dict, hls[j].name, hl_group_name(hls[j].val, hl_name));
-      }
-    }
-
-    if (decor->sign_text
-        || decor->hl_id
-        || kv_size(decor->virt_text)
-        || decor->ui_watched) {
-      PUT(dict, "priority", INTEGER_OBJ(decor->priority));
-    }
-
-    if (decor->conceal) {
-      String name = cstr_to_string((char *)&decor->conceal_char);
-      PUT(dict, "conceal", STRING_OBJ(name));
-    }
-
-    if (decor->spell != kNone) {
-      PUT(dict, "spell", BOOLEAN_OBJ(decor->spell == kTrue));
-    }
-
-    if (dict.size) {
-      ADD(rv, DICTIONARY_OBJ(dict));
-    }
+    ADD(rv, DICTIONARY_OBJ(dict));
   }
 
   return rv;
@@ -299,15 +224,15 @@ ArrayOf(Integer) nvim_buf_get_extmark_by_id(Buffer buffer, Integer ns_id,
     }
   }
 
-  ExtmarkInfo extmark = extmark_from_id(buf, (uint32_t)ns_id, (uint32_t)id);
-  if (extmark.row < 0) {
+  MTPair extmark = extmark_from_id(buf, (uint32_t)ns_id, (uint32_t)id);
+  if (extmark.start.pos.row < 0) {
     return rv;
   }
-  return extmark_to_array(&extmark, false, details, hl_name);
+  return extmark_to_array(extmark, false, details, hl_name);
 }
 
-/// Gets |extmarks| in "traversal order" from a |charwise| region defined by
-/// buffer positions (inclusive, 0-indexed |api-indexing|).
+/// Gets |extmarks| (including |signs|) in "traversal order" from a |charwise|
+/// region defined by buffer positions (inclusive, 0-indexed |api-indexing|).
 ///
 /// Region can be given as (row,col) tuples, or valid extmark ids (whose
 /// positions define the bounds). 0 and -1 are understood as (0,0) and (-1,-1)
@@ -423,7 +348,7 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
                                        u_col, (int64_t)limit, reverse, type, opts->overlap);
 
   for (size_t i = 0; i < kv_size(marks); i++) {
-    ADD(rv, ARRAY_OBJ(extmark_to_array(&kv_A(marks, i), true, details, hl_name)));
+    ADD(rv, ARRAY_OBJ(extmark_to_array(kv_A(marks, i), true, details, hl_name)));
   }
 
   kv_destroy(marks);
@@ -519,6 +444,12 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                   the extmark end position (if it exists) will be shifted
 ///                   in when new text is inserted (true for right, false
 ///                   for left). Defaults to false.
+///               - undo_restore : Restore the exact position of the mark
+///                   if text around the mark was deleted and then restored by undo.
+///                   Defaults to true.
+///               - invalidate : boolean that indicates whether to hide the
+///                   extmark if the entirety of its range is deleted. If
+///                   "undo_restore" is false, the extmark is deleted instead.
 ///               - priority: a priority value for the highlight group or sign
 ///                   attribute. For example treesitter highlighting uses a
 ///                   value of 100.
@@ -564,8 +495,14 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
                              Dict(set_extmark) *opts, Error *err)
   FUNC_API_SINCE(7)
 {
-  Decoration decor = DECORATION_INIT;
-  bool has_decor = false;
+  DecorHighlightInline hl = DECOR_HIGHLIGHT_INLINE_INIT;
+  // TODO(bfredl): in principle signs with max one (1) hl group and max 4 bytes of text.
+  // should be a candidate for inlining as well.
+  DecorSignHighlight sign = DECOR_SIGN_HIGHLIGHT_INIT;
+  DecorVirtText virt_text = DECOR_VIRT_TEXT_INIT;
+  DecorVirtText virt_lines = DECOR_VIRT_LINES_INIT;
+  bool has_hl = false;
+  String conceal_char_large = STRING_INIT;
 
   buf_T *buf = find_buffer_by_handle(buffer, err);
   if (!buf) {
@@ -626,11 +563,11 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     Object *opt;
     int *dest;
   } hls[] = {
-    { "hl_group"           , &opts->hl_group           , &decor.hl_id            },
-    { "sign_hl_group"      , &opts->sign_hl_group      , &decor.sign_hl_id       },
-    { "number_hl_group"    , &opts->number_hl_group    , &decor.number_hl_id     },
-    { "line_hl_group"      , &opts->line_hl_group      , &decor.line_hl_id       },
-    { "cursorline_hl_group", &opts->cursorline_hl_group, &decor.cursorline_hl_id },
+    { "hl_group"           , &opts->hl_group           , &hl.hl_id            },
+    { "sign_hl_group"      , &opts->sign_hl_group      , &sign.hl_id       },
+    { "number_hl_group"    , &opts->number_hl_group    , &sign.number_hl_id     },
+    { "line_hl_group"      , &opts->line_hl_group      , &sign.line_hl_id       },
+    { "cursorline_hl_group", &opts->cursorline_hl_group, &sign.cursorline_hl_id },
     { NULL, NULL, NULL },
   };
 
@@ -638,26 +575,33 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
 
   for (int j = 0; hls[j].name && hls[j].dest; j++) {
     if (hls[j].opt->type != kObjectTypeNil) {
+      if (j > 0) {
+        sign.flags |= kSHIsSign;
+      } else {
+        has_hl = true;
+      }
       *hls[j].dest = object_to_hl_id(*hls[j].opt, hls[j].name, err);
       if (ERROR_SET(err)) {
         goto error;
       }
-      has_decor = true;
     }
   }
 
   if (HAS_KEY(opts, set_extmark, conceal)) {
+    hl.flags |= kSHConceal;
+    has_hl = true;
     String c = opts->conceal;
-    decor.conceal = true;
-    if (c.size) {
-      decor.conceal_char = utf_ptr2char(c.data);
+    if (c.size > 0) {
+      if (c.size <= 4) {
+        memcpy(hl.conceal_char, c.data, c.size + (c.size < 4 ? 1 : 0));
+      } else {
+        conceal_char_large = c;
+      }
     }
-    has_decor = true;
   }
 
   if (HAS_KEY(opts, set_extmark, virt_text)) {
-    decor.virt_text = parse_virt_text(opts->virt_text, err, &decor.virt_text_width);
-    has_decor = true;
+    virt_text.data.virt_text = parse_virt_text(opts->virt_text, err, &virt_text.width);
     if (ERROR_SET(err)) {
       goto error;
     }
@@ -666,13 +610,13 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
   if (HAS_KEY(opts, set_extmark, virt_text_pos)) {
     String str = opts->virt_text_pos;
     if (strequal("eol", str.data)) {
-      decor.virt_text_pos = kVTEndOfLine;
+      virt_text.pos = kVPosEndOfLine;
     } else if (strequal("overlay", str.data)) {
-      decor.virt_text_pos = kVTOverlay;
+      virt_text.pos = kVPosOverlay;
     } else if (strequal("right_align", str.data)) {
-      decor.virt_text_pos = kVTRightAlign;
+      virt_text.pos = kVPosRightAlign;
     } else if (strequal("inline", str.data)) {
-      decor.virt_text_pos = kVTInline;
+      virt_text.pos = kVPosInline;
     } else {
       VALIDATE_S(false, "virt_text_pos", str.data, {
         goto error;
@@ -681,26 +625,26 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
   }
 
   if (HAS_KEY(opts, set_extmark, virt_text_win_col)) {
-    decor.col = (int)opts->virt_text_win_col;
-    decor.virt_text_pos = kVTWinCol;
+    virt_text.col = (int)opts->virt_text_win_col;
+    virt_text.pos = kVPosWinCol;
   }
 
-  decor.hl_eol = opts->hl_eol;
-  decor.virt_text_hide = opts->virt_text_hide;
+  hl.flags |= opts->hl_eol ? kSHHlEol : 0;
+  virt_text.flags |= opts->virt_text_hide ? kVTHide : 0;
 
   if (HAS_KEY(opts, set_extmark, hl_mode)) {
     String str = opts->hl_mode;
     if (strequal("replace", str.data)) {
-      decor.hl_mode = kHlModeReplace;
+      virt_text.hl_mode = kHlModeReplace;
     } else if (strequal("combine", str.data)) {
-      decor.hl_mode = kHlModeCombine;
+      virt_text.hl_mode = kHlModeCombine;
     } else if (strequal("blend", str.data)) {
-      if (decor.virt_text_pos == kVTInline) {
+      if (virt_text.pos == kVPosInline) {
         VALIDATE(false, "%s", "cannot use 'blend' hl_mode with inline virtual text", {
           goto error;
         });
       }
-      decor.hl_mode = kHlModeBlend;
+      virt_text.hl_mode = kHlModeBlend;
     } else {
       VALIDATE_S(false, "hl_mode", str.data, {
         goto error;
@@ -718,29 +662,32 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
       });
       int dummig;
       VirtText jtem = parse_virt_text(a.items[j].data.array, err, &dummig);
-      kv_push(decor.virt_lines, ((struct virt_line){ jtem, virt_lines_leftcol }));
+      kv_push(virt_lines.data.virt_lines, ((struct virt_line){ jtem, virt_lines_leftcol }));
       if (ERROR_SET(err)) {
         goto error;
       }
-      has_decor = true;
     }
   }
 
-  decor.virt_lines_above = opts->virt_lines_above;
+  virt_lines.flags |= opts->virt_lines_above ? kVTLinesAbove : 0;
 
   if (HAS_KEY(opts, set_extmark, priority)) {
     VALIDATE_RANGE((opts->priority >= 0 && opts->priority <= UINT16_MAX), "priority", {
       goto error;
     });
-    decor.priority = (DecorPriority)opts->priority;
+    hl.priority = (DecorPriority)opts->priority;
+    sign.priority = (DecorPriority)opts->priority;
+    virt_text.priority = (DecorPriority)opts->priority;
+    virt_lines.priority = (DecorPriority)opts->priority;
   }
 
   if (HAS_KEY(opts, set_extmark, sign_text)) {
-    VALIDATE_S(init_sign_text(&decor.sign_text, opts->sign_text.data),
+    sign.text.ptr = NULL;
+    VALIDATE_S(init_sign_text(NULL, &sign.text.ptr, opts->sign_text.data),
                "sign_text", "", {
       goto error;
     });
-    has_decor = true;
+    sign.flags |= kSHIsSign;
   }
 
   bool right_gravity = GET_BOOL_OR_TRUE(opts, set_extmark, right_gravity);
@@ -752,20 +699,20 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     goto error;
   });
 
-  bool end_right_gravity = opts->end_right_gravity;
-
   size_t len = 0;
 
-  if (!HAS_KEY(opts, set_extmark, spell)) {
-    decor.spell = kNone;
-  } else {
-    decor.spell = opts->spell ? kTrue : kFalse;
-    has_decor = true;
+  if (HAS_KEY(opts, set_extmark, spell)) {
+    hl.flags |= (opts->spell) ? kSHSpellOn : kSHSpellOff;
+    has_hl = true;
   }
 
-  decor.ui_watched = opts->ui_watched;
-  if (decor.ui_watched) {
-    has_decor = true;
+  if (opts->ui_watched) {
+    hl.flags |= kSHUIWatched;
+    if (virt_text.pos == kVPosOverlay) {
+      // TODO(bfredl): in a revised interface this should be the default.
+      hl.flags |= kSHUIWatchedOverlay;
+    }
+    has_hl = true;
   }
 
   VALIDATE_RANGE((line >= 0), "line", {
@@ -814,27 +761,90 @@ Integer nvim_buf_set_extmark(Buffer buffer, Integer ns_id, Integer line, Integer
     col2 = 0;
   }
 
-  // TODO(bfredl): synergize these two branches even more
   if (opts->ephemeral && decor_state.win && decor_state.win->w_buffer == buf) {
-    decor_add_ephemeral((int)line, (int)col, line2, col2, &decor, (uint64_t)ns_id, id);
+    int r = (int)line;
+    int c = (int)col;
+    if (line2 == -1) {
+      line2 = r;
+      col2 = c;
+    }
+
+    if (kv_size(virt_text.data.virt_text)) {
+      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_text, NULL), true);
+    }
+    if (kv_size(virt_lines.data.virt_lines)) {
+      decor_range_add_virt(&decor_state, r, c, line2, col2, decor_put_vt(virt_lines, NULL), true);
+    }
+    if (has_hl) {
+      DecorSignHighlight sh = decor_sh_from_inline(hl, conceal_char_large);
+      decor_range_add_sh(&decor_state, r, c, line2, col2, &sh, true, (uint32_t)ns_id, id);
+    }
+    if (sign.flags & kSHIsSign) {
+      decor_range_add_sh(&decor_state, r, c, line2, col2, &sign, true, (uint32_t)ns_id, id);
+    }
   } else {
     if (opts->ephemeral) {
       api_set_error(err, kErrorTypeException, "not yet implemented");
       goto error;
     }
 
+    uint16_t decor_flags = 0;
+
+    DecorVirtText *decor_alloc = NULL;
+    if (kv_size(virt_text.data.virt_text)) {
+      decor_alloc = decor_put_vt(virt_text, decor_alloc);
+      if (virt_text.pos == kVPosInline) {
+        decor_flags |= MT_FLAG_DECOR_VIRT_TEXT_INLINE;
+      }
+    }
+    if (kv_size(virt_lines.data.virt_lines)) {
+      decor_alloc = decor_put_vt(virt_lines, decor_alloc);
+      decor_flags |= MT_FLAG_DECOR_VIRT_LINES;
+    }
+
+    uint32_t decor_indexed = DECOR_ID_INVALID;
+    if (sign.flags & kSHIsSign) {
+      decor_indexed = decor_put_sh(sign);
+      if (sign.text.ptr != NULL) {
+        decor_flags |= MT_FLAG_DECOR_SIGNTEXT;
+      }
+      if (sign.number_hl_id || sign.line_hl_id || sign.cursorline_hl_id) {
+        decor_flags |= MT_FLAG_DECOR_SIGNHL;
+      }
+    }
+
+    DecorInline decor = DECOR_INLINE_INIT;
+    if (decor_alloc || decor_indexed != DECOR_ID_INVALID || conceal_char_large.size) {
+      if (has_hl) {
+        DecorSignHighlight sh = decor_sh_from_inline(hl, conceal_char_large);
+        sh.next = decor_indexed;
+        decor_indexed = decor_put_sh(sh);
+      }
+      decor.ext = true;
+      decor.data.ext = (DecorExt){ .sh_idx = decor_indexed, .vt = decor_alloc };
+    } else {
+      decor.data.hl = hl;
+    }
+
+    if (has_hl) {
+      decor_flags |= MT_FLAG_DECOR_HL;
+    }
+
     extmark_set(buf, (uint32_t)ns_id, &id, (int)line, (colnr_T)col, line2, col2,
-                has_decor ? &decor : NULL, right_gravity, end_right_gravity,
-                kExtmarkNoUndo, err);
+                decor, decor_flags, right_gravity, opts->end_right_gravity,
+                !GET_BOOL_OR_TRUE(opts, set_extmark, undo_restore),
+                opts->invalidate, err);
     if (ERROR_SET(err)) {
-      goto error;
+      decor_free(decor);
+      return 0;
     }
   }
 
   return (Integer)id;
 
 error:
-  decor_clear(&decor);
+  clear_virttext(&virt_text.data.virt_text);
+  clear_virtlines(&virt_lines.data.virt_lines);
   return 0;
 }
 
@@ -856,11 +866,6 @@ Boolean nvim_buf_del_extmark(Buffer buffer, Integer ns_id, Integer id, Error *er
   VALIDATE_INT(ns_initialized((uint32_t)ns_id), "ns_id", ns_id, {
     return false;
   });
-
-  if (decor_state.running_on_lines) {
-    api_set_error(err, kErrorTypeValidation, "Cannot remove extmarks during on_line callbacks");
-    return false;
-  }
 
   return extmark_del_id(buf, (uint32_t)ns_id, (uint32_t)id);
 }
@@ -946,13 +951,11 @@ Integer nvim_buf_add_highlight(Buffer buffer, Integer ns_id, String hl_group, In
     end_line++;
   }
 
-  Decoration decor = DECORATION_INIT;
-  decor.hl_id = hl_id;
+  DecorInline decor = DECOR_INLINE_INIT;
+  decor.data.hl.hl_id = hl_id;
 
-  extmark_set(buf, ns, NULL,
-              (int)line, (colnr_T)col_start,
-              end_line, (colnr_T)col_end,
-              &decor, true, false, kExtmarkNoUndo, NULL);
+  extmark_set(buf, ns, NULL, (int)line, (colnr_T)col_start, end_line, (colnr_T)col_end,
+              decor, MT_FLAG_DECOR_HL, true, false, false, false, NULL);
   return ns_id;
 }
 
@@ -981,11 +984,6 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
     return;
   });
 
-  if (decor_state.running_on_lines) {
-    api_set_error(err, kErrorTypeValidation, "Cannot remove extmarks during on_line callbacks");
-    return;
-  }
-
   if (line_end < 0 || line_end > MAXLNUM) {
     line_end = MAXLNUM;
   }
@@ -1003,7 +1001,7 @@ void nvim_buf_clear_namespace(Buffer buffer, Integer ns_id, Integer line_start, 
 /// redrawn buffer. |nvim_buf_set_extmark()| can be called to add marks
 /// on a per-window or per-lines basis. Use the `ephemeral` key to only
 /// use the mark for the current screen redraw (the callback will be called
-/// again for the next redraw ).
+/// again for the next redraw).
 ///
 /// Note: this function should not be called often. Rather, the callbacks
 /// themselves can be used to throttle unneeded callbacks. the `on_start`
@@ -1107,13 +1105,13 @@ static bool extmark_get_index_from_obj(buf_T *buf, Integer ns_id, Object obj, in
       });
     }
 
-    ExtmarkInfo extmark = extmark_from_id(buf, (uint32_t)ns_id, (uint32_t)id);
+    MTPair extmark = extmark_from_id(buf, (uint32_t)ns_id, (uint32_t)id);
 
-    VALIDATE_INT((extmark.row >= 0), "mark id (not found)", id, {
+    VALIDATE_INT((extmark.start.pos.row >= 0), "mark id (not found)", id, {
       return false;
     });
-    *row = extmark.row;
-    *col = extmark.col;
+    *row = extmark.start.pos.row;
+    *col = extmark.start.pos.col;
     return true;
 
     // Check if it is a position
@@ -1136,41 +1134,6 @@ static bool extmark_get_index_from_obj(buf_T *buf, Integer ns_id, Object obj, in
       return false;
     });
   }
-}
-// adapted from sign.c:sign_define_init_text.
-// TODO(lewis6991): Consider merging
-static int init_sign_text(char **sign_text, char *text)
-{
-  char *s;
-
-  char *endp = text + (int)strlen(text);
-
-  // Count cells and check for non-printable chars
-  int cells = 0;
-  for (s = text; s < endp; s += utfc_ptr2len(s)) {
-    if (!vim_isprintc(utf_ptr2char(s))) {
-      break;
-    }
-    cells += utf_ptr2cells(s);
-  }
-  // Currently must be empty, one or two display cells
-  if (s != endp || cells > 2) {
-    return FAIL;
-  }
-  if (cells < 1) {
-    return OK;
-  }
-
-  // Allocate one byte more if we need to pad up
-  // with a space.
-  size_t len = (size_t)(endp - text + ((cells == 1) ? 1 : 0));
-  *sign_text = xstrnsave(text, len);
-
-  if (cells == 1) {
-    STRCPY(*sign_text + len - 1, " ");
-  }
-
-  return OK;
 }
 
 VirtText parse_virt_text(Array chunks, Error *err, int *width)

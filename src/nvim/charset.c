@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// @file charset.c
 ///
 /// Code related to character sets.
@@ -22,7 +19,6 @@
 #include "nvim/eval/typval_defs.h"
 #include "nvim/garray.h"
 #include "nvim/globals.h"
-#include "nvim/grid_defs.h"
 #include "nvim/keycodes.h"
 #include "nvim/macros.h"
 #include "nvim/mbyte.h"
@@ -91,10 +87,6 @@ int init_chartab(void)
 int buf_init_chartab(buf_T *buf, int global)
 {
   int c;
-  int c2;
-  int i;
-  bool tilde;
-  bool do_isalpha;
 
   if (global) {
     // Set the default size for printable characters:
@@ -133,7 +125,7 @@ int buf_init_chartab(buf_T *buf, int global)
   // Walk through the 'isident', 'iskeyword', 'isfname' and 'isprint'
   // options Each option is a list of characters, character numbers or
   // ranges, separated by commas, e.g.: "200-210,x,#-178,-"
-  for (i = global ? 0 : 3; i <= 3; i++) {
+  for (int i = global ? 0 : 3; i <= 3; i++) {
     const char *p;
     if (i == 0) {
       // first round: 'isident'
@@ -150,8 +142,8 @@ int buf_init_chartab(buf_T *buf, int global)
     }
 
     while (*p) {
-      tilde = false;
-      do_isalpha = false;
+      bool tilde = false;
+      bool do_isalpha = false;
 
       if ((*p == '^') && (p[1] != NUL)) {
         tilde = true;
@@ -163,7 +155,7 @@ int buf_init_chartab(buf_T *buf, int global)
       } else {
         c = mb_ptr2char_adv(&p);
       }
-      c2 = -1;
+      int c2 = -1;
 
       if ((*p == '-') && (p[1] != NUL)) {
         p++;
@@ -309,15 +301,13 @@ size_t transstr_len(const char *const s, bool untab)
   while (*p) {
     const size_t l = (size_t)utfc_ptr2len(p);
     if (l > 1) {
-      int pcc[MAX_MCO + 1];
-      pcc[0] = utfc_ptr2char(p, &pcc[1]);
-
-      if (vim_isprintc(pcc[0])) {
+      if (vim_isprintc(utf_ptr2char(p))) {
         len += l;
       } else {
-        for (size_t i = 0; i < ARRAY_SIZE(pcc) && pcc[i]; i++) {
+        for (size_t off = 0; off < l; off += (size_t)utf_ptr2len(p + off)) {
+          int c = utf_ptr2char(p + off);
           char hexbuf[9];
-          len += transchar_hex(hexbuf, pcc[i]);
+          len += transchar_hex(hexbuf, c);
         }
       }
       p += l;
@@ -356,16 +346,15 @@ size_t transstr_buf(const char *const s, const ssize_t slen, char *const buf, co
       if (buf_p + l > buf_e) {
         break;  // Exceeded `buf` size.
       }
-      int pcc[MAX_MCO + 1];
-      pcc[0] = utfc_ptr2char(p, &pcc[1]);
 
-      if (vim_isprintc(pcc[0])) {
+      if (vim_isprintc(utf_ptr2char(p))) {
         memmove(buf_p, p, l);
         buf_p += l;
       } else {
-        for (size_t i = 0; i < ARRAY_SIZE(pcc) && pcc[i]; i++) {
+        for (size_t off = 0; off < l; off += (size_t)utf_ptr2len(p + off)) {
+          int c = utf_ptr2char(p + off);
           char hexbuf[9];  // <up to 6 bytes>NUL
-          const size_t hexlen = transchar_hex(hexbuf, pcc[i]);
+          const size_t hexlen = transchar_hex(hexbuf, c);
           if (buf_p + hexlen > buf_e) {
             break;
           }
@@ -434,7 +423,6 @@ char *str_foldcase(char *str, int orglen, char *buf, int buflen)
   FUNC_ATTR_NONNULL_RET
 {
   garray_T ga;
-  int i;
   int len = orglen;
 
 #define GA_CHAR(i) ((char *)ga.ga_data)[i]
@@ -464,7 +452,7 @@ char *str_foldcase(char *str, int orglen, char *buf, int buflen)
   }
 
   // Make each character lower case.
-  i = 0;
+  int i = 0;
   while (STR_CHAR(i) != NUL) {
     int c = utf_ptr2char(STR_PTR(i));
     int olen = utf_ptr2len(STR_PTR(i));
@@ -650,9 +638,9 @@ size_t transchar_hex(char *const buf, const int c)
 
 /// Mirror text "str" for right-left displaying.
 /// Only works for single-byte characters (e.g., numbers).
-void rl_mirror_ascii(char *str)
+void rl_mirror_ascii(char *str, char *end)
 {
-  for (char *p1 = str, *p2 = str + strlen(str) - 1; p1 < p2; p1++, p2--) {
+  for (char *p1 = str, *p2 = (end ? end : str + strlen(str)) - 1; p1 < p2; p1++, p2--) {
     char t = *p1;
     *p1 = *p2;
     *p2 = t;
@@ -914,11 +902,14 @@ bool vim_isprintc_strict(int c)
 /// @param[in]  p  String to skip in.
 ///
 /// @return Pointer to character after the skipped whitespace.
-char *skipwhite(const char *const p)
+char *skipwhite(const char *p)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
   FUNC_ATTR_NONNULL_RET
 {
-  return skipwhite_len(p, strlen(p));
+  while (ascii_iswhite(*p)) {
+    p++;
+  }
+  return (char *)p;
 }
 
 /// Like `skipwhite`, but skip up to `len` characters.
@@ -1167,14 +1158,14 @@ long getdigits_long(char **pp, bool strict, long def)
 /// Gets a int32_t number from a string.
 ///
 /// @see getdigits
-int32_t getdigits_int32(char **pp, bool strict, long def)
+int32_t getdigits_int32(char **pp, bool strict, int32_t def)
 {
   intmax_t number = getdigits(pp, strict, def);
 #if SIZEOF_INTMAX_T > 4
   if (strict) {
     assert(number >= INT32_MIN && number <= INT32_MAX);
   } else if (!(number >= INT32_MIN && number <= INT32_MAX)) {
-    return (int32_t)def;
+    return def;
   }
 #endif
   return (int32_t)number;
@@ -1328,7 +1319,6 @@ void vim_str2nr(const char *const start, int *const prep, int *const len, const 
 
   // Do the conversion manually to avoid sscanf() quirks.
   abort();  // Should’ve used goto earlier.
-  // -V:PARSE_NUMBER:560
 #define PARSE_NUMBER(base, cond, conv) \
   do { \
     const char *const after_prefix = ptr; \

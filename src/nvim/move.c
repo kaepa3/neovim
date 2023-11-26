@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // move.c: Functions for moving the cursor and scrolling text.
 //
 // There are two ways to move the cursor:
@@ -20,7 +17,6 @@
 #include "nvim/buffer.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
-#include "nvim/drawline.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/eval/typval.h"
@@ -44,10 +40,12 @@
 #include "nvim/popupmenu.h"
 #include "nvim/pos.h"
 #include "nvim/search.h"
+#include "nvim/sign_defs.h"
 #include "nvim/strings.h"
 #include "nvim/types.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 
 typedef struct {
   linenr_T lnum;                // line number
@@ -67,8 +65,9 @@ int adjust_plines_for_skipcol(win_T *wp)
   }
 
   int width = wp->w_width_inner - win_col_off(wp);
-  if (wp->w_skipcol >= width) {
-    return (wp->w_skipcol - width) / (width + win_col_off2(wp)) + 1;
+  int w2 = width + win_col_off2(wp);
+  if (wp->w_skipcol >= width && w2 > 0) {
+    return (wp->w_skipcol - width) / w2 + 1;
   }
 
   return 0;
@@ -758,11 +757,10 @@ void validate_cursor_col(void)
 // fold column and sign column (these don't move when scrolling horizontally).
 int win_col_off(win_T *wp)
 {
-  return ((wp->w_p_nu || wp->w_p_rnu || *wp->w_p_stc != NUL) ?
-          (number_width(wp) + (*wp->w_p_stc == NUL)) : 0)
+  return ((wp->w_p_nu || wp->w_p_rnu || *wp->w_p_stc != NUL)
+          ? (number_width(wp) + (*wp->w_p_stc == NUL)) : 0)
          + ((cmdwin_type == 0 || wp != curwin) ? 0 : 1)
-         + win_fdccol_count(wp)
-         + (win_signcol_count(wp) * win_signcol_width(wp));
+         + win_fdccol_count(wp) + (win_signcol_count(wp) * SIGN_WIDTH);
 }
 
 int curwin_col_off(void)
@@ -1240,8 +1238,8 @@ bool scrolldown(linenr_T line_count, int byfold)
           curwin->w_topline = first;
         } else {
           if (do_sms) {
-            int size = (int)win_linetabsize(curwin, curwin->w_topline,
-                                            ml_get(curwin->w_topline), (colnr_T)MAXCOL);
+            int size = win_linetabsize(curwin, curwin->w_topline,
+                                       ml_get(curwin->w_topline), MAXCOL);
             if (size > width1) {
               curwin->w_skipcol = width1;
               size -= width1;
@@ -1337,7 +1335,7 @@ bool scrollup(linenr_T line_count, int byfold)
   if (do_sms || (byfold && hasAnyFolding(curwin)) || win_may_fill(curwin)) {
     int width1 = curwin->w_width_inner - curwin_col_off();
     int width2 = width1 + curwin_col_off2();
-    unsigned size = 0;
+    int size = 0;
     const colnr_T prev_skipcol = curwin->w_skipcol;
 
     if (do_sms) {
@@ -1362,7 +1360,7 @@ bool scrollup(linenr_T line_count, int byfold)
           // the end of the line, then advance to the next line.
           int add = curwin->w_skipcol > 0 ? width2 : width1;
           curwin->w_skipcol += add;
-          if ((unsigned)curwin->w_skipcol >= size) {
+          if (curwin->w_skipcol >= size) {
             if (lnum == curbuf->b_ml.ml_line_count) {
               // at the last screen line, can't scroll further
               curwin->w_skipcol -= add;
@@ -1819,7 +1817,9 @@ void scroll_cursor_top(int min_scroll, int always)
       }
     }
     check_topfill(curwin, false);
-    if (curwin->w_topline == curwin->w_cursor.lnum) {
+    if (curwin->w_topline != old_topline) {
+      reset_skipcol(curwin);
+    } else if (curwin->w_topline == curwin->w_cursor.lnum) {
       validate_virtcol();
       if (curwin->w_skipcol >= curwin->w_virtcol) {
         // TODO(vim): if the line doesn't fit may optimize w_skipcol instead
@@ -1865,7 +1865,6 @@ void set_empty_rows(win_T *wp, int used)
 /// This is messy stuff!!!
 void scroll_cursor_bot(int min_scroll, int set_topbot)
 {
-  int used;
   lineoff_T loff;
   linenr_T old_topline = curwin->w_topline;
   int old_skipcol = curwin->w_skipcol;
@@ -1879,7 +1878,7 @@ void scroll_cursor_bot(int min_scroll, int set_topbot)
   if (set_topbot) {
     bool set_skipcol = false;
 
-    used = 0;
+    int used = 0;
     curwin->w_botline = cln + 1;
     loff.fill = 0;
     for (curwin->w_topline = curwin->w_botline;
@@ -1927,7 +1926,7 @@ void scroll_cursor_bot(int min_scroll, int set_topbot)
   }
 
   // The lines of the cursor line itself are always used.
-  used = plines_win_nofill(curwin, cln, true);
+  int used = plines_win_nofill(curwin, cln, true);
 
   int scrolled = 0;
   // If the cursor is on or below botline, we will at least scroll by the
@@ -2321,7 +2320,6 @@ void cursor_correct(void)
 /// @return  FAIL for failure, OK otherwise.
 int onepage(Direction dir, int count)
 {
-  int n;
   int retval = OK;
   lineoff_T loff;
   linenr_T old_topline = curwin->w_topline;
@@ -2420,7 +2418,7 @@ int onepage(Direction dir, int count)
 
       // Find the line just above the new topline to get the right line
       // at the bottom of the window.
-      n = 0;
+      int n = 0;
       while (n <= curwin->w_height_inner && loff.lnum >= 1) {
         topline_back(curwin, &loff);
         if (loff.height == MAXCOL) {

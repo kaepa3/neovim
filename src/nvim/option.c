@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // User-settable options. Checklist for adding a new option:
 // - Put it in options.lua
 // - For a global option: Add a variable for it in option_defs.h.
@@ -55,7 +52,6 @@
 #include "nvim/garray.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
@@ -621,16 +617,16 @@ void set_init_3(void)
   // set, but only if they have not been set before.
   int idx_srr = findoption("srr");
   int do_srr = (idx_srr < 0)
-    ? false
-    : !(options[idx_srr].flags & P_WAS_SET);
+               ? false
+               : !(options[idx_srr].flags & P_WAS_SET);
   int idx_sp = findoption("sp");
   int do_sp = (idx_sp < 0)
-    ? false
-    : !(options[idx_sp].flags & P_WAS_SET);
+              ? false
+              : !(options[idx_sp].flags & P_WAS_SET);
 
   size_t len = 0;
   char *p = (char *)invocation_path_tail(p_sh, &len);
-  p = xstrnsave(p, len);
+  p = xmemdupz(p, len);
 
   {
     //
@@ -1648,8 +1644,8 @@ static char *option_expand(int opt_idx, char *val)
   // For 'spellsuggest' expand after "file:".
   expand_env_esc(val, NameBuff, MAXPATHL,
                  (char **)options[opt_idx].var == &p_tags, false,
-                 (char **)options[opt_idx].var == &p_sps ? "file:" :
-                 NULL);
+                 (char **)options[opt_idx].var == &p_sps ? "file:"
+                                                         : NULL);
   if (strcmp(NameBuff, val) == 0) {   // they are the same
     return NULL;
   }
@@ -2248,6 +2244,7 @@ static const char *did_set_number_relativenumber(optset_T *args)
     // When 'relativenumber'/'number' is changed and 'statuscolumn' is set, reset width.
     win->w_nrwidth_line_count = 0;
   }
+  check_signcolumn(win);
   return NULL;
 }
 
@@ -2284,8 +2281,8 @@ static const char *did_set_paste(optset_T *args FUNC_ATTR_UNUSED)
           xfree(buf->b_p_vsts_nopaste);
         }
         buf->b_p_vsts_nopaste = buf->b_p_vsts && buf->b_p_vsts != empty_string_option
-                                    ? xstrdup(buf->b_p_vsts)
-                                    : NULL;
+                                ? xstrdup(buf->b_p_vsts)
+                                : NULL;
       }
 
       // save global options
@@ -2686,7 +2683,7 @@ static const char *did_set_winblend(optset_T *args)
   if (value != old_value) {
     win->w_p_winbl = MAX(MIN(win->w_p_winbl, 100), 0);
     win->w_hl_needs_update = true;
-    check_blending(curwin);
+    check_blending(win);
   }
 
   return NULL;
@@ -3184,23 +3181,6 @@ bool set_tty_option(const char *name, char *value)
   }
 
   return false;
-}
-
-void set_tty_background(const char *value)
-{
-  if (option_was_set("bg") || strequal(p_bg, value)) {
-    // background is already set... ignore
-    return;
-  }
-  if (starting) {
-    // Wait until after startup, so OptionSet is triggered.
-    do_cmdline_cmd((value[0] == 'l')
-                   ? "autocmd VimEnter * ++once ++nested :lua if not vim.api.nvim_get_option_info2('bg', {}).was_set then vim.o.bg = 'light' end"
-                   : "autocmd VimEnter * ++once ++nested :lua if not vim.api.nvim_get_option_info2('bg', {}).was_set then vim.o.bg = 'dark' end");
-  } else {
-    set_option_value_give_err("bg", CSTR_AS_OPTVAL((char *)value), 0);
-    reset_option_was_set("bg");
-  }
 }
 
 /// Find index for an option
@@ -4881,6 +4861,7 @@ void didset_window_options(win_T *wp, bool valid_cursor)
   parse_winhl_opt(wp);  // sets w_hl_needs_update also for w_p_winbl
   check_blending(wp);
   set_winbar_win(wp, false, valid_cursor);
+  check_signcolumn(wp);
   wp->w_grid_alloc.blending = wp->w_p_winbl > 0;
 }
 
@@ -5468,7 +5449,7 @@ static bool match_str(char *const str, regmatch_T *const regmatch, char **const 
                       const char *const fuzzystr, fuzmatch_str_T *const fuzmatch)
 {
   if (!fuzzy) {
-    if (vim_regexec(regmatch, str, (colnr_T)0)) {
+    if (vim_regexec(regmatch, str, 0)) {
       if (!test_only) {
         matches[idx] = xstrdup(str);
       }
@@ -5536,7 +5517,7 @@ int ExpandSettings(expand_T *xp, regmatch_T *regmatch, char *fuzzystr, int *numM
           count++;
         }
       } else if (!fuzzy && options[opt_idx].shortname != NULL
-                 && vim_regexec(regmatch, options[opt_idx].shortname, (colnr_T)0)) {
+                 && vim_regexec(regmatch, options[opt_idx].shortname, 0)) {
         // Compare against the abbreviated option name (for regular
         // expression match). Fuzzy matching (previous if) already
         // matches against both the expanded and abbreviated names.
@@ -5709,7 +5690,7 @@ int ExpandSettingSubtract(expand_T *xp, regmatch_T *regmatch, int *numMatches, c
         continue;
       }
 
-      if (!vim_regexec(regmatch, item, (colnr_T)0)) {
+      if (!vim_regexec(regmatch, item, 0)) {
         continue;
       }
 
@@ -5749,7 +5730,7 @@ int ExpandSettingSubtract(expand_T *xp, regmatch_T *regmatch, int *numMatches, c
       // If more than one flags, split the flags up and expose each
       // character as individual choice.
       for (char *flag = option_val; *flag != NUL; flag++) {
-        (*matches)[count++] = xstrnsave(flag, 1);
+        (*matches)[count++] = xmemdupz(flag, 1);
       }
     }
 
@@ -6190,58 +6171,12 @@ bool fish_like_shell(void)
 /// buffer signs and on user configuration.
 int win_signcol_count(win_T *wp)
 {
-  return win_signcol_configured(wp, NULL);
-}
-
-/// Return true when window "wp" has no sign column.
-bool win_no_signcol(win_T *wp)
-{
-  const char *scl = wp->w_p_scl;
-  return (*scl == 'n' && (*(scl + 1) == 'o' || (*(scl + 1) == 'u'
-                                                && (wp->w_p_nu || wp->w_p_rnu))));
-}
-
-/// Return the number of requested sign columns, based on user / configuration.
-int win_signcol_configured(win_T *wp, int *is_fixed)
-{
-  const char *scl = wp->w_p_scl;
-
-  if (is_fixed) {
-    *is_fixed = 1;
-  }
-
-  if (win_no_signcol(wp)) {
+  if (wp->w_minscwidth <= SCL_NO) {
     return 0;
   }
 
-  // yes or yes
-  if (!strncmp(scl, "yes:", 4)) {
-    // Fixed amount of columns
-    return scl[4] - '0';
-  }
-  if (*scl == 'y') {
-    return 1;
-  }
-
-  if (is_fixed) {
-    // auto or auto:<NUM>
-    *is_fixed = 0;
-  }
-
-  int minimum = 0, maximum = 1;
-
-  if (!strncmp(scl, "auto:", 5)) {
-    // Variable depending on a configuration
-    maximum = scl[5] - '0';
-    // auto:<NUM>-<NUM>
-    if (strlen(scl) == 8 && *(scl + 6) == '-') {
-      minimum = maximum;
-      maximum = scl[7] - '0';
-    }
-  }
-
-  int needed_signcols = buf_signcols(wp->w_buffer, maximum);
-  int ret = MAX(minimum, MIN(maximum, needed_signcols));
+  int needed_signcols = buf_signcols(wp->w_buffer, wp->w_maxscwidth);
+  int ret = MAX(wp->w_minscwidth, MIN(wp->w_maxscwidth, needed_signcols));
   assert(ret <= SIGN_SHOW_MAX);
   return ret;
 }

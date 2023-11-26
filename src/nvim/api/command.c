@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <inttypes.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -382,8 +379,8 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
     goto end;
   });
   const char *fullname = IS_USER_CMDIDX(ea.cmdidx)
-    ? get_user_command_name(ea.useridx, ea.cmdidx)
-    : get_command_name(NULL, ea.cmdidx);
+                         ? get_user_command_name(ea.useridx, ea.cmdidx)
+                         : get_command_name(NULL, ea.cmdidx);
   VALIDATE(strncmp(fullname, cmdname, strlen(cmdname)) == 0, "Invalid command: \"%s\"", cmdname, {
     goto end;
   });
@@ -419,7 +416,7 @@ String nvim_cmd(uint64_t channel_id, Dict(cmd) *cmd, Dict(cmd_opts) *opts, Error
         VALIDATE_EXP(!string_iswhite(elem.data.string), "command arg", "non-whitespace", NULL, {
           goto end;
         });
-        data_str = xstrndup(elem.data.string.data, elem.data.string.size);
+        data_str = string_to_cstr(elem.data.string);
         break;
       default:
         VALIDATE_EXP(false, "command arg", "valid type", api_typename(elem.type), {
@@ -839,8 +836,8 @@ static void build_cmdline_str(char **cmdlinep, exarg_T *eap, CmdParseInfo *cmdin
     offset += eap->arglens[i];
   }
   // If there isn't an argument, make eap->arg point to end of cmdline.
-  eap->arg = argc > 0 ? eap->args[0] :
-             cmdline.items + cmdline.size - 1;  // Subtract 1 to account for NUL
+  eap->arg = argc > 0 ? eap->args[0]
+                      : cmdline.items + cmdline.size - 1;  // Subtract 1 to account for NUL
 
   // Finally, make cmdlinep point to the cmdline string.
   *cmdlinep = cmdline.items;

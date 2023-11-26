@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <inttypes.h>
 #include <lauxlib.h>
@@ -374,6 +371,12 @@ static int nlua_schedule(lua_State *const lstate)
     return lua_error(lstate);
   }
 
+  // If main_loop is closing don't schedule tasks to run in the future,
+  // otherwise any refs allocated here will not be cleaned up.
+  if (main_loop.closing) {
+    return 0;
+  }
+
   LuaRef cb = nlua_ref_global(lstate, 1);
 
   multiqueue_put(main_loop.events, nlua_schedule_event,
@@ -447,7 +450,7 @@ static int nlua_wait(lua_State *lstate)
   }
 
   MultiQueue *loop_events = fast_only || in_fast_callback > 0
-    ? main_loop.fast_events : main_loop.events;
+                            ? main_loop.fast_events : main_loop.events;
 
   TimeWatcher *tw = xmalloc(sizeof(TimeWatcher));
 
@@ -463,12 +466,16 @@ static int nlua_wait(lua_State *lstate)
   int pcall_status = 0;
   bool callback_result = false;
 
+  // Flush screen updates before blocking.
+  ui_flush();
+
   LOOP_PROCESS_EVENTS_UNTIL(&main_loop,
                             loop_events,
                             (int)timeout,
                             got_int || (is_function ? nlua_wait_condition(lstate,
                                                                           &pcall_status,
-                                                                          &callback_result) : false));
+                                                                          &callback_result)
+                                                    : false));
 
   // Stop dummy timer
   time_watcher_stop(tw);
@@ -619,7 +626,7 @@ static bool nlua_init_packages(lua_State *lstate, bool is_standalone)
   lua_getfield(lstate, -1, "preload");  // [package, preload]
   for (size_t i = 0; i < ARRAY_SIZE(builtin_modules); i++) {
     ModuleDef def = builtin_modules[i];
-    lua_pushinteger(lstate, (long)i);  // [package, preload, i]
+    lua_pushinteger(lstate, (lua_Integer)i);  // [package, preload, i]
     lua_pushcclosure(lstate, nlua_module_preloader, 1);  // [package, preload, cclosure]
     lua_setfield(lstate, -2, def.name);  // [package, preload]
 
@@ -2290,4 +2297,18 @@ char *nlua_funcref_str(LuaRef ref)
 plain:
   kv_printf(str, "<Lua %d>", ref);
   return str.items;
+}
+
+/// Execute the vim._defaults module to set up default mappings and autocommands
+void nlua_init_defaults(void)
+{
+  lua_State *const L = global_lstate;
+  assert(L);
+
+  lua_getglobal(L, "require");
+  lua_pushstring(L, "vim._defaults");
+  if (nlua_pcall(L, 1, 0)) {
+    os_errmsg(lua_tostring(L, -1));
+    os_errmsg("\n");
+  }
 }

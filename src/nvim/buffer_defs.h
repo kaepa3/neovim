@@ -1,5 +1,4 @@
-#ifndef NVIM_BUFFER_DEFS_H
-#define NVIM_BUFFER_DEFS_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -264,9 +263,6 @@ struct wininfo_S {
 // values for b_syn_foldlevel: how to compute foldlevel on a line
 #define SYNFLD_START    0       // use level of item at start of line
 #define SYNFLD_MINIMUM  1       // use lowest local minimum level on line
-
-// avoid #ifdefs for when b_spell is not available
-#define B_SPELL(buf)  ((buf)->b_spell)
 
 typedef struct qf_info_S qf_info_T;
 
@@ -696,8 +692,7 @@ struct file_buffer {
   bool b_help;                  // true for help file buffer (when set b_p_bt
                                 // is "help")
   bool b_spell;                 // True for a spell file buffer, most fields
-                                // are not used!  Use the B_SPELL macro to
-                                // access b_spell without #ifdef.
+                                // are not used!
 
   char *b_prompt_text;          // set by prompt_setprompt()
   Callback b_prompt_callback;   // set by prompt_setcallback()
@@ -709,7 +704,6 @@ struct file_buffer {
                                 // normally points to this, but some windows
                                 // may use a different synblock_T.
 
-  sign_entry_T *b_signlist;     // list of placed signs
   struct {
     int size;                   // last calculated number of sign columns
     bool valid;                 // calculated sign columns is valid
@@ -1212,6 +1206,8 @@ struct window_S {
   int w_nrwidth;                    // width of 'number' and 'relativenumber'
                                     // column being used
   int w_scwidth;                    // width of 'signcolumn'
+  int w_minscwidth;                 // minimum width or SCL_NO/SCL_NUM
+  int w_maxscwidth;                 // maximum width or SCL_NO/SCL_NUM
 
   // === end of cached values ===
 
@@ -1340,5 +1336,3 @@ struct window_S {
 #define CHANGEDTICK(buf) \
   (=== Include buffer.h & use buf_(get|set|inc) _changedtick ===)
 // uncrustify:on
-
-#endif  // NVIM_BUFFER_DEFS_H

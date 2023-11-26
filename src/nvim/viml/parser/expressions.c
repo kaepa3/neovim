@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// Vimscript expression parser
 
 // Planned incompatibilities (to be included into vim_diff.txt when this parser
@@ -1271,8 +1268,8 @@ static bool viml_pexpr_handle_bop(const ParserState *const pstate, ExprASTStack 
   const ExprOpAssociativity bop_node_ass = (
                                             (bop_node->type == kExprNodeCall
                                              || bop_node->type == kExprNodeSubscript)
-      ? kEOpAssLeft
-      : node_ass(*bop_node));
+                                            ? kEOpAssLeft
+                                            : node_ass(*bop_node));
 #endif
   do {
     ExprASTNode **new_top_node_p = kv_last(*ast_stack);
@@ -2205,8 +2202,8 @@ viml_pexpr_parse_process_token:
         cur_node->data.opt.ident_len = 0;
         cur_node->data.opt.scope = (
                                     cur_token.len == 3
-              ? (ExprOptScope)pline.data[cur_token.start.col + 1]
-              : kExprOptScopeUnspecified);
+                                    ? (ExprOptScope)pline.data[cur_token.start.col + 1]
+                                    : kExprOptScopeUnspecified);
       } else {
         cur_node->data.opt.ident = cur_token.data.opt.name;
         cur_node->data.opt.ident_len = cur_token.data.opt.len;

@@ -1,11 +1,7 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 #include "klib/kvec.h"
 #include "nvim/api/private/converter.h"
@@ -261,7 +257,9 @@ Object vim_to_object(typval_T *obj)
 /// @param obj  Object to convert from.
 /// @param tv   Conversion result is placed here. On failure member v_type is
 ///             set to VAR_UNKNOWN (no allocation was made for this variable).
-/// returns     true if conversion is successful, otherwise false.
+/// @param err  Error object.
+///
+/// @returns    true if conversion is successful, otherwise false.
 bool object_to_vim(Object obj, typval_T *tv, Error *err)
 {
   tv->v_type = VAR_UNKNOWN;

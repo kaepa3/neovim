@@ -2395,7 +2395,14 @@ describe('lua stdlib', function()
       text tαxt txtα tex
       text tαxt tαxt
       ]]))
-      eq({5,15}, exec_lua[[ return vim.region(0,{1,5},{1,14},'v',true)[1] ]])
+      eq({5,13}, exec_lua[[ return vim.region(0,{0,5},{0,13},'v',false)[0] ]])
+      eq({5,15}, exec_lua[[ return vim.region(0,{0,5},{0,13},'v',true)[0] ]])
+      eq({5,15}, exec_lua[[ return vim.region(0,{0,5},{0,14},'v',true)[0] ]])
+      eq({5,15}, exec_lua[[ return vim.region(0,{0,5},{0,15},'v',false)[0] ]])
+      eq({5,17}, exec_lua[[ return vim.region(0,{0,5},{0,15},'v',true)[0] ]])
+      eq({5,17}, exec_lua[[ return vim.region(0,{0,5},{0,16},'v',true)[0] ]])
+      eq({5,17}, exec_lua[[ return vim.region(0,{0,5},{0,17},'v',false)[0] ]])
+      eq({5,18}, exec_lua[[ return vim.region(0,{0,5},{0,17},'v',true)[0] ]])
     end)
     it('blockwise', function()
       insert([[αα]])
@@ -2438,6 +2445,12 @@ describe('lua stdlib', function()
     end)
 
     it('allows removing on_key listeners', function()
+      -- Create some unused namespaces
+      meths.create_namespace('unused1')
+      meths.create_namespace('unused2')
+      meths.create_namespace('unused3')
+      meths.create_namespace('unused4')
+
       insert([[hello world]])
 
       exec_lua [[
@@ -2553,7 +2566,6 @@ describe('lua stdlib', function()
       ]])
     end)
 
-
     it('should not block other events', function()
       eq({time = true, wait_result = true}, exec_lua[[
         start_time = get_time()
@@ -2595,6 +2607,7 @@ describe('lua stdlib', function()
         }
       ]])
     end)
+
     it('should work with vim.defer_fn', function()
       eq({time = true, wait_result = true}, exec_lua[[
         start_time = get_time()

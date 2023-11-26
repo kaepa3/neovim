@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// @file arabic.c
 ///
 /// Functions for Arabic language.
@@ -22,14 +19,11 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdint.h>
 
 #include "nvim/arabic.h"
 #include "nvim/ascii.h"
 #include "nvim/macros.h"
-#include "nvim/mbyte.h"
 #include "nvim/option_vars.h"
-#include "nvim/vim.h"
 
 // Unicode values for Arabic characters.
 enum {

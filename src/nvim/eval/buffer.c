@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // eval/buffer.c: Buffer related builtin functions
 
 #include <stdbool.h>
@@ -301,7 +298,9 @@ void f_bufload(typval_T *argvars, typval_T *unused, EvalFuncData fptr)
   buf_T *buf = get_buf_arg(&argvars[0]);
 
   if (buf != NULL) {
-    swap_exists_action = SEA_NONE;
+    if (swap_exists_action != SEA_READONLY) {
+      swap_exists_action = SEA_NONE;
+    }
     buf_ensure_loaded(buf);
   }
 }
@@ -507,7 +506,7 @@ static dict_T *get_buffer_info(buf_T *buf)
   }
   tv_dict_add_list(dict, S_LEN("windows"), windows);
 
-  if (buf->b_signlist != NULL) {
+  if (buf->b_signs) {
     // List of signs placed in this buffer
     tv_dict_add_list(dict, S_LEN("signs"), get_buffer_signs(buf));
   }

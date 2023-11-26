@@ -1,5 +1,4 @@
-#ifndef NVIM_TYPES_H
-#define NVIM_TYPES_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -44,14 +43,4 @@ typedef enum {
 
 #define TRISTATE_FROM_INT(val) ((val) == 0 ? kFalse : ((val) >= 1 ? kTrue : kNone))
 
-typedef struct Decoration Decoration;
-
-#ifndef ORDER_BIG_ENDIAN
-# if defined(__BYTE_ORDER__) && (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
-#  define ORDER_BIG_ENDIAN
-# endif
-#endif
-
 typedef int64_t OptInt;
-
-#endif  // NVIM_TYPES_H

@@ -1291,7 +1291,7 @@ describe('LSP', function()
         on_handler = function(err, result, ctx)
           if ctx.method == 'start' then
             exec_lua [[
-              vim.lsp.inlay_hint(BUFFER, true)
+              vim.lsp.inlay_hint.enable(BUFFER)
             ]]
           end
           if ctx.method == 'textDocument/inlayHint' then
@@ -4026,6 +4026,7 @@ describe('LSP', function()
 
   describe('vim.lsp._watchfiles', function()
     it('sends notifications when files change', function()
+      skip(is_os('bsd'), "bsd only reports rename on folders if file inside change")
       local root_dir = helpers.tmpname()
       os.remove(root_dir)
       mkdir(root_dir)

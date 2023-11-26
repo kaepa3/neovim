@@ -1,8 +1,8 @@
-#ifndef NVIM_EVAL_H
-#define NVIM_EVAL_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
@@ -282,4 +282,3 @@ EXTERN evalarg_T EVALARG_EVALUATE INIT( = { EVAL_EVALUATE, NULL, NULL, NULL });
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "eval.h.generated.h"
 #endif
-#endif  // NVIM_EVAL_H

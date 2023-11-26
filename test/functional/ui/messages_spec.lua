@@ -834,6 +834,19 @@ stack traceback:
     end}
   end)
 
+  it('supports multiline messages for :map', function()
+    command('mapclear')
+    command('nmap Y y$')
+    command('nmap Q @@')
+    command('nnoremap j k')
+    feed(':map<cr>')
+
+    screen:expect{messages={{
+      content = {{ "\nn  Q             @@\nn  Y             y$\nn  j           " }, { "*", 5 }, { " k" }},
+      kind = ''
+    }}}
+  end)
+
   it('wildmode=list', function()
     screen:try_resize(25, 7)
     screen:set_option('ext_popupmenu', false)
@@ -1312,17 +1325,54 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
     ]])
   end)
 
-  it('echo messages are shown correctly when getchar() immediately follows', function()
-    feed([[:echo 'foo' | echo 'bar' | call getchar()<CR>]])
-    screen:expect([[
-                                                                  |
-      {1:~                                                           }|
-      {1:~                                                           }|
-      {1:~                                                           }|
-      {3:                                                            }|
-      foo                                                         |
-      bar^                                                         |
-    ]])
+  describe('echo messages are shown when immediately followed by', function()
+    --- @param to_block  string           command to cause a blocking wait
+    --- @param to_unblock  number|string  number: timeout for blocking screen
+    ---                                   string: keys to stop the blocking wait
+    local function test_flush_before_block(to_block, to_unblock)
+      local timeout = type(to_unblock) == 'number' and to_unblock or nil
+      exec(([[
+        func PrintAndWait()
+          echon "aaa\nbbb"
+          %s
+          echon "\nccc"
+        endfunc
+      ]]):format(to_block))
+      feed(':call PrintAndWait()<CR>')
+      screen:expect{grid=[[
+                                                                    |
+        {1:~                                                           }|
+        {1:~                                                           }|
+        {1:~                                                           }|
+        {3:                                                            }|
+        aaa                                                         |
+        bbb^                                                         |
+      ]], timeout=timeout}
+      if type(to_unblock) == 'string' then
+        feed(to_unblock)
+      end
+      screen:expect{grid=[[
+                                                                    |
+        {1:~                                                           }|
+        {3:                                                            }|
+        aaa                                                         |
+        bbb                                                         |
+        ccc                                                         |
+        {4:Press ENTER or type command to continue}^                     |
+      ]]}
+    end
+
+    it('getchar()', function()
+      test_flush_before_block([[call getchar()]], 'k')
+    end)
+
+    it('wait()', function()
+      test_flush_before_block([[call wait(300, '0')]], 100)
+    end)
+
+    it('lua vim.wait()', function()
+      test_flush_before_block([[lua vim.wait(300, function() end)]], 100)
+    end)
   end)
 
   it('consecutive calls to win_move_statusline() work after multiline message #21014',function()
@@ -1351,6 +1401,19 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
                                                                   |
     ]])
     eq(1, meths.get_option_value('cmdheight', {}))
+  end)
+
+  it('using nvim_echo in VimResized does not cause hit-enter prompt #26139', function()
+    command([[au VimResized * lua vim.api.nvim_echo({ { '123456' } }, true, {})]])
+    screen:try_resize(60, 5)
+    screen:expect([[
+      ^                                                            |
+      {1:~                                                           }|
+      {1:~                                                           }|
+      {1:~                                                           }|
+                                                                  |
+    ]])
+    eq({ mode = 'n', blocking = false }, meths.get_mode())
   end)
 end)
 

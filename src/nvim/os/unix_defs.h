@@ -1,7 +1,7 @@
-#ifndef NVIM_OS_UNIX_DEFS_H
-#define NVIM_OS_UNIX_DEFS_H
+#pragma once
 
 #include <sys/param.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #if defined(HAVE_TERMIOS_H)
 # include <termios.h>
@@ -21,5 +21,3 @@
 // Character that separates entries in $PATH.
 #define ENV_SEPCHAR ':'
 #define ENV_SEPSTR  ":"
-
-#endif  // NVIM_OS_UNIX_DEFS_H

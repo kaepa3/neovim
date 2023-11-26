@@ -492,7 +492,7 @@ end
 ---@param pos1 integer[]|string Start of region as a (line, column) tuple or |getpos()|-compatible string
 ---@param pos2 integer[]|string End of region as a (line, column) tuple or |getpos()|-compatible string
 ---@param regtype string \|setreg()|-style selection type
----@param inclusive boolean Controls whether `pos2` column is inclusive (see also 'selection').
+---@param inclusive boolean Controls whether the ending column is inclusive (see also 'selection').
 ---@return table region Dict of the form `{linenr = {startcol,endcol}}`. `endcol` is exclusive, and
 ---whole lines are returned as `{startcol,endcol} = {0,-1}`.
 function vim.region(bufnr, pos1, pos2, regtype, inclusive)
@@ -502,11 +502,11 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
 
   if type(pos1) == 'string' then
     local pos = vim.fn.getpos(pos1)
-    pos1 = { pos[2] - 1, pos[3] - 1 + pos[4] }
+    pos1 = { pos[2] - 1, pos[3] - 1 }
   end
   if type(pos2) == 'string' then
     local pos = vim.fn.getpos(pos2)
-    pos2 = { pos[2] - 1, pos[3] - 1 + pos[4] }
+    pos2 = { pos[2] - 1, pos[3] - 1 }
   end
 
   if pos1[1] > pos2[1] or (pos1[1] == pos2[1] and pos1[2] > pos2[2]) then
@@ -525,9 +525,8 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
 
   -- in case of block selection, columns need to be adjusted for non-ASCII characters
   -- TODO: handle double-width characters
-  local bufline
   if regtype:byte() == 22 then
-    bufline = vim.api.nvim_buf_get_lines(bufnr, pos1[1], pos1[1] + 1, true)[1]
+    local bufline = vim.api.nvim_buf_get_lines(bufnr, pos1[1], pos1[1] + 1, true)[1]
     pos1[2] = vim.str_utfindex(bufline, pos1[2])
   end
 
@@ -538,7 +537,7 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
       c1 = pos1[2]
       c2 = c1 + regtype:sub(2)
       -- and adjust for non-ASCII characters
-      bufline = vim.api.nvim_buf_get_lines(bufnr, l, l + 1, true)[1]
+      local bufline = vim.api.nvim_buf_get_lines(bufnr, l, l + 1, true)[1]
       local utflen = vim.str_utfindex(bufline, #bufline)
       if c1 <= utflen then
         c1 = vim.str_byteindex(bufline, c1)
@@ -555,7 +554,11 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
       c2 = -1
     else
       c1 = (l == pos1[1]) and pos1[2] or 0
-      c2 = (l == pos2[1]) and (pos2[2] + (inclusive and 1 or 0)) or -1
+      if inclusive and l == pos2[1] then
+        local bufline = vim.api.nvim_buf_get_lines(bufnr, pos2[1], pos2[1] + 1, true)[1]
+        pos2[2] = vim.fn.byteidx(bufline, vim.fn.charidx(bufline, pos2[2]) + 1)
+      end
+      c2 = (l == pos2[1]) and pos2[2] or -1
     end
     table.insert(region, l, { c1, c2 })
   end
@@ -650,7 +653,7 @@ local on_key_cbs = {}
 ---if on_key() is called without arguments.
 function vim.on_key(fn, ns_id)
   if fn == nil and ns_id == nil then
-    return #on_key_cbs
+    return vim.tbl_count(on_key_cbs)
   end
 
   vim.validate({
@@ -1029,156 +1032,6 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
     vim.notify(debug.traceback('', 2):sub(2), vim.log.levels.WARN)
   end
   return displayed and msg or nil
-end
-
---- Creates builtin mappings (incl. menus).
---- Called once on startup.
-function vim._init_default_mappings()
-  -- mappings
-
-  local function region_chunks(region)
-    local chunks = {}
-    local maxcol = vim.v.maxcol
-    for line, cols in vim.spairs(region) do
-      local endcol = cols[2] == maxcol and -1 or cols[2]
-      local chunk = vim.api.nvim_buf_get_text(0, line, cols[1], line, endcol, {})[1]
-      table.insert(chunks, chunk)
-    end
-    return chunks
-  end
-
-  local function _visual_search(cmd)
-    assert(cmd == '/' or cmd == '?')
-    local region = vim.region(
-      0,
-      '.',
-      'v',
-      vim.api.nvim_get_mode().mode:sub(1, 1),
-      vim.o.selection == 'inclusive'
-    )
-    local chunks = region_chunks(region)
-    local esc_chunks = vim
-      .iter(chunks)
-      :map(function(v)
-        return vim.fn.escape(v, cmd == '/' and [[/\]] or [[?\]])
-      end)
-      :totable()
-    local esc_pat = table.concat(esc_chunks, [[\n]])
-    local search_cmd = ([[%s\V%s%s]]):format(cmd, esc_pat, '\n')
-    return '\27' .. search_cmd
-  end
-
-  local function map(mode, lhs, rhs)
-    vim.keymap.set(mode, lhs, rhs, { desc = 'Nvim builtin' })
-  end
-
-  map('n', 'Y', 'y$')
-  -- Use normal! <C-L> to prevent inserting raw <C-L> when using i_<C-O>. #17473
-  map('n', '<C-L>', '<Cmd>nohlsearch<Bar>diffupdate<Bar>normal! <C-L><CR>')
-  map('i', '<C-U>', '<C-G>u<C-U>')
-  map('i', '<C-W>', '<C-G>u<C-W>')
-  vim.keymap.set('x', '*', function()
-    return _visual_search('/')
-  end, { desc = ':help v_star-default', expr = true, silent = true })
-  vim.keymap.set('x', '#', function()
-    return _visual_search('?')
-  end, { desc = ':help v_#-default', expr = true, silent = true })
-  -- Use : instead of <Cmd> so that ranges are supported. #19365
-  map('n', '&', ':&&<CR>')
-
-  -- gx
-
-  -- TODO: use vim.region() when it lands... #13896 #16843
-  local function get_visual_selection()
-    local save_a = vim.fn.getreginfo('a')
-    vim.cmd([[norm! "ay]])
-    local selection = vim.fn.getreg('a', 1)
-    vim.fn.setreg('a', save_a)
-    return selection
-  end
-
-  local function do_open(uri)
-    local _, err = vim.ui.open(uri)
-    if err then
-      vim.notify(err, vim.log.levels.ERROR)
-    end
-  end
-
-  local gx_desc =
-    'Opens filepath or URI under cursor with the system handler (file explorer, web browser, …)'
-  vim.keymap.set({ 'n' }, 'gx', function()
-    do_open(vim.fn.expand('<cfile>'))
-  end, { desc = gx_desc })
-  vim.keymap.set({ 'x' }, 'gx', function()
-    do_open(get_visual_selection())
-  end, { desc = gx_desc })
-
-  -- menus
-
-  -- TODO VimScript, no l10n
-  vim.cmd([[
-    aunmenu *
-    vnoremenu PopUp.Cut                     "+x
-    vnoremenu PopUp.Copy                    "+y
-    anoremenu PopUp.Paste                   "+gP
-    vnoremenu PopUp.Paste                   "+P
-    vnoremenu PopUp.Delete                  "_x
-    nnoremenu PopUp.Select\ All             ggVG
-    vnoremenu PopUp.Select\ All             gg0oG$
-    inoremenu PopUp.Select\ All             <C-Home><C-O>VG
-    anoremenu PopUp.-1-                     <Nop>
-    anoremenu PopUp.How-to\ disable\ mouse  <Cmd>help disable-mouse<CR>
-  ]])
-end
-
-function vim._init_default_autocmds()
-  local nvim_terminal_augroup = vim.api.nvim_create_augroup('nvim_terminal', {})
-  vim.api.nvim_create_autocmd({ 'BufReadCmd' }, {
-    pattern = 'term://*',
-    group = nvim_terminal_augroup,
-    nested = true,
-    command = "if !exists('b:term_title')|call termopen(matchstr(expand(\"<amatch>\"), '\\c\\mterm://\\%(.\\{-}//\\%(\\d\\+:\\)\\?\\)\\?\\zs.*'), {'cwd': expand(get(matchlist(expand(\"<amatch>\"), '\\c\\mterm://\\(.\\{-}\\)//'), 1, ''))})",
-  })
-  vim.api.nvim_create_autocmd({ 'TermClose' }, {
-    group = nvim_terminal_augroup,
-    desc = 'Automatically close terminal buffers when started with no arguments and exiting without an error',
-    callback = function(args)
-      if vim.v.event.status == 0 then
-        local info = vim.api.nvim_get_chan_info(vim.bo[args.buf].channel)
-        local argv = info.argv or {}
-        if #argv == 1 and argv[1] == vim.o.shell then
-          vim.cmd({ cmd = 'bdelete', args = { args.buf }, bang = true })
-        end
-      end
-    end,
-  })
-
-  vim.api.nvim_create_autocmd({ 'CmdwinEnter' }, {
-    pattern = '[:>]',
-    group = vim.api.nvim_create_augroup('nvim_cmdwin', {}),
-    command = 'syntax sync minlines=1 maxlines=1',
-  })
-
-  vim.api.nvim_create_autocmd({ 'SwapExists' }, {
-    pattern = '*',
-    group = vim.api.nvim_create_augroup('nvim_swapfile', {}),
-    callback = function()
-      local info = vim.fn.swapinfo(vim.v.swapname)
-      local user = vim.uv.os_get_passwd().username
-      local iswin = 1 == vim.fn.has('win32')
-      if info.error or info.pid <= 0 or (not iswin and info.user ~= user) then
-        vim.v.swapchoice = '' -- Show the prompt.
-        return
-      end
-      vim.v.swapchoice = 'e' -- Choose "(E)dit".
-      vim.notify(('W325: Ignoring swapfile from Nvim process %d'):format(info.pid))
-    end,
-  })
-end
-
-function vim._init_defaults()
-  vim._init_default_mappings()
-  vim._init_default_autocmds()
 end
 
 require('vim._options')

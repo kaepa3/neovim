@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <inttypes.h>
 #include <limits.h>
@@ -923,7 +920,7 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
   FUNC_API_SINCE(6)
 {
   try_start();
-  buf_T *buf = buflist_new(NULL, NULL, (linenr_T)0,
+  buf_T *buf = buflist_new(NULL, NULL, 0,
                            BLN_NOOPT | BLN_NEW | (listed ? BLN_LISTED : 0));
   try_end(err);
   if (buf == NULL) {
@@ -1304,9 +1301,9 @@ void nvim_subscribe(uint64_t channel_id, String event)
 void nvim_unsubscribe(uint64_t channel_id, String event)
   FUNC_API_SINCE(1) FUNC_API_REMOTE_ONLY
 {
-  size_t length = (event.size < METHOD_MAXLEN ?
-                   event.size :
-                   METHOD_MAXLEN);
+  size_t length = (event.size < METHOD_MAXLEN
+                   ? event.size
+                   : METHOD_MAXLEN);
   char e[METHOD_MAXLEN + 1];
   memcpy(e, event.data, length);
   e[length] = NUL;
@@ -1402,7 +1399,7 @@ Dictionary nvim_get_context(Dict(context) *opts, Error *err)
 /// Sets the current editor state from the given |context| map.
 ///
 /// @param  dict  |Context| map.
-Object nvim_load_context(Dictionary dict)
+Object nvim_load_context(Dictionary dict, Error *err)
   FUNC_API_SINCE(6)
 {
   Context ctx = CONTEXT_INIT;
@@ -1410,8 +1407,8 @@ Object nvim_load_context(Dictionary dict)
   int save_did_emsg = did_emsg;
   did_emsg = false;
 
-  ctx_from_dict(dict, &ctx);
-  if (!did_emsg) {
+  ctx_from_dict(dict, &ctx, err);
+  if (!ERROR_SET(err)) {
     ctx_restore(&ctx, kCtxAll);
   }
 
@@ -2199,13 +2196,12 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
       }
     }
     if (statuscol_lnum) {
-      HlPriId line = { 0 };
-      HlPriId cul = { 0 };
-      HlPriId num = { 0 };
+      int line_id = 0;
+      int cul_id = 0;
+      int num_id = 0;
       linenr_T lnum = statuscol_lnum;
-      int num_signs = buf_get_signattrs(wp->w_buffer, lnum, sattrs, &num, &line, &cul);
-      decor_redraw_signs(wp->w_buffer, lnum - 1, &num_signs, sattrs, &num, &line, &cul);
       wp->w_scwidth = win_signcol_count(wp);
+      decor_redraw_signs(wp, wp->w_buffer, lnum - 1, sattrs, &line_id, &cul_id, &num_id);
 
       statuscol.sattrs = sattrs;
       statuscol.foldinfo = fold_info(wp, lnum);
@@ -2218,9 +2214,9 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
         statuscol.use_cul = lnum == wp->w_cursorline && (wp->w_p_culopt_flags & CULOPT_NBR);
       }
 
-      statuscol.sign_cul_id = statuscol.use_cul ? cul.hl_id : 0;
-      if (num.hl_id) {
-        stc_hl_id = num.hl_id;
+      statuscol.sign_cul_id = statuscol.use_cul ? cul_id : 0;
+      if (num_id) {
+        stc_hl_id = num_id;
       } else if (statuscol.use_cul) {
         stc_hl_id = HLF_CLN + 1;
       } else if (wp->w_p_rnu) {
@@ -2239,8 +2235,9 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
     maxwidth = (int)opts->maxwidth;
   } else {
     maxwidth = statuscol_lnum ? win_col_off(wp)
-               : (opts->use_tabline
-                  || (!opts->use_winbar && global_stl_height() > 0)) ? Columns : wp->w_width;
+                              : (opts->use_tabline
+                                 || (!opts->use_winbar
+                                     && global_stl_height() > 0)) ? Columns : wp->w_width;
   }
 
   char buf[MAXPATHL];

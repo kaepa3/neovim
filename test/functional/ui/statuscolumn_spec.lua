@@ -46,22 +46,17 @@ describe('statuscolumn', function()
   end)
 
   it("widens with irregular 'statuscolumn' width", function()
-    command([[set stc=%{v:relnum?v:relnum:(v:lnum==5?'bbbbb':v:lnum)}]])
-    command('norm 5G | redraw!')
+    screen:try_resize(screen._width, 4)
+    command([=[
+      set stc=%{v:relnum?v:relnum:(v:lnum==5?'bbbbb':v:lnum)}
+      let ns = nvim_create_namespace('')
+      call nvim_buf_set_extmark(0, ns, 3, 0, {'virt_text':[['virt_text']]})
+      norm 5G | redraw!
+    ]=])
     screen:expect([[
-      1    aaaaa                                           |
+      1    aaaaa virt_text                                 |
       bbbbba^eaaa                                           |
       1    aaaaa                                           |
-      2    aaaaa                                           |
-      3    aaaaa                                           |
-      4    aaaaa                                           |
-      5    aaaaa                                           |
-      6    aaaaa                                           |
-      7    aaaaa                                           |
-      8    aaaaa                                           |
-      9    aaaaa                                           |
-      10   aaaaa                                           |
-      11   aaaaa                                           |
                                                            |
     ]])
   end)
@@ -377,6 +372,7 @@ describe('statuscolumn', function()
                                                            |
     ]])
     command('set breakindent')
+    command('sign unplace 2')
     feed('J2gjg0')
     screen:expect([[
       {2: }{4: 0│}{1:>>}{2:                }{4: }{5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
@@ -429,7 +425,7 @@ describe('statuscolumn', function()
       {1:buffer  0 5}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
       {1:wrapped 1 5}aaaaaaaa                                  |
       {1:virtual-2 5}virt_line                                 |
-      {1:virtual-2 5}virt_line above                           |
+      {1:virtual-1 5}virt_line above                           |
       {1:buffer  0 6}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
       {1:wrapped 1 6}aaaaaaaa                                  |
       {1:buffer  0 7}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
@@ -443,18 +439,18 @@ describe('statuscolumn', function()
     exec_lua([[
       vim.api.nvim_buf_set_extmark(0, ns, 15, 0, { virt_lines = {{{"END", ""}}} })
     ]])
-    feed('Gzz')
+    feed('GkJzz')
     screen:expect([[
+      {1:buffer  0 12}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 12}aaaaaaaaa                                |
       {1:buffer  0 13}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
       {1:wrapped 1 13}aaaaaaaaa                                |
       {1:buffer  0 14}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
       {1:wrapped 1 14}aaaaaaaaa                                |
-      {1:buffer  0 15}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-      {1:wrapped 1 15}aaaaaaaaa                                |
-      {4:buffer  0 16}{5:^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
-      {4:wrapped 1 16}{5:aaaaaaaaa                                }|
-      {1:virtual-1 16}END                                      |
-      {0:~                                                    }|
+      {4:buffer  0 15}{5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {4:wrapped 1 15}{5:aaaaaaaaa^ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {4:wrapped 2 15}{5:aaaaaaaaaaaaaaaaaaa                      }|
+      {1:virtual-1 15}END                                      |
       {0:~                                                    }|
       {0:~                                                    }|
       {0:~                                                    }|
@@ -467,18 +463,18 @@ describe('statuscolumn', function()
       vim.api.nvim_buf_set_extmark(0, ns, 14, 0, { virt_lines = {{{"virt_line2", ""}}} })
     ]])
     screen:expect([[
+      {1:buffer  0 12}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      aaaaaaaaa                                            |
       {1:buffer  0 13}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
       aaaaaaaaa                                            |
       {1:buffer  0 14}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
       aaaaaaaaa                                            |
-      {1:buffer  0 15}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
-      aaaaaaaaa                                            |
-      {1:virtual-2 15}virt_line1                               |
+      {4:buffer  0 15}{5:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {5:aaaaaaaaa^ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
+      {5:aaaaaaa                                              }|
+      {1:virtual-3 15}virt_line1                               |
       {1:virtual-2 15}virt_line2                               |
-      {4:buffer  0 16}{5:^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}|
-      {5:aaaaaaaaa                                            }|
-      {1:virtual-1 16}END                                      |
-      {0:~                                                    }|
+      {1:virtual-1 15}END                                      |
       {0:~                                                    }|
                                                            |
     ]])
@@ -592,6 +588,47 @@ describe('statuscolumn', function()
         eq('0 1 r 10', eval("g:testvar"))
         meths.input_mouse('left', 'press', '', 0, 7, 7)
         eq('0 1 l 11', eval("g:testvar"))
+      end)
+
+      it('popupmenu callback does not drag mouse on close', function()
+        screen:try_resize(screen._width, 2)
+        screen:set_default_attr_ids({
+          [0] = {foreground = Screen.colors.Brown},
+          [1] = {background = Screen.colors.Plum1},
+        })
+        meths.set_option_value('statuscolumn', '%0@MyClickFunc@%l%T', {})
+        exec([[
+          function! MyClickFunc(minwid, clicks, button, mods)
+            let g:testvar = printf("%d %d %s %d", a:minwid, a:clicks, a:button, getmousepos().line)
+            menu PopupStc.Echo <cmd>echo g:testvar<CR>
+            popup PopupStc
+          endfunction
+        ]])
+        -- clicking an item does not drag mouse
+        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        screen:expect([[
+          {0:8 }^aaaaa                                              |
+           {1: Echo }                                              |
+        ]])
+        meths.input_mouse('left', 'press', '', 0, 1, 5)
+        meths.input_mouse('left', 'release', '', 0, 1, 5)
+        screen:expect([[
+          {0:8 }^aaaaa                                              |
+          0 1 l 8                                              |
+        ]])
+        command('echo')
+        -- clicking outside to close the menu does not drag mouse
+        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        screen:expect([[
+          {0:8 }^aaaaa                                              |
+           {1: Echo }                                              |
+        ]])
+        meths.input_mouse('left', 'press', '', 0, 0, 10)
+        meths.input_mouse('left', 'release', '', 0, 0, 10)
+        screen:expect([[
+          {0:8 }^aaaaa                                              |
+                                                               |
+        ]])
       end)
     end)
   end

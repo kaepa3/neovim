@@ -1,5 +1,4 @@
-#ifndef NVIM_GRID_DEFS_H
-#define NVIM_GRID_DEFS_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,8 +7,8 @@
 #include "nvim/pos.h"
 #include "nvim/types.h"
 
-#define MAX_MCO  6  // fixed value for 'maxcombine'
-// Includes final NUL. at least 4*(MAX_MCO+1)+1
+// Includes final NUL. MAX_MCO is no longer used, but at least 4*(MAX_MCO+1)+1=29
+// ensures we can fit all composed chars which did fit before.
 #define MAX_SCHAR_SIZE 32
 
 // if data[0] is 0xFF, then data[1..4] is a 24-bit index (in machine endianness)
@@ -36,7 +35,7 @@ enum {
 /// we can avoid sending bigger updates than necessary to the Ul layer.
 ///
 /// Screen cells are stored as NUL-terminated UTF-8 strings, and a cell can
-/// contain up to MAX_MCO composing characters after the base character.
+/// contain composing characters as many as fits in MAX_SCHAR_SIZE-1 bytes
 /// The composing characters are to be drawn on top of the original character.
 /// The content after the NUL is not defined (so comparison must be done a
 /// single cell at a time). Double-width characters are stored in the left cell,
@@ -130,5 +129,3 @@ typedef struct {
   int clear_width;
   bool wrap;
 } GridLineEvent;
-
-#endif  // NVIM_GRID_DEFS_H

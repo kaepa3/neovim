@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // uncrustify:off
 #include <math.h>
 // uncrustify:on
@@ -16,10 +13,9 @@
 int xfpclassify(double d)
 {
   uint64_t m;
-  int e;
 
   memcpy(&m, &d, sizeof(m));
-  e = 0x7ff & (m >> 52);
+  int e = 0x7ff & (m >> 52);
   m = 0xfffffffffffffULL & m;
 
   switch (e) {

@@ -1,12 +1,8 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
-#include "nvim/api/private/helpers.h"
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
@@ -18,7 +14,6 @@
 #include "nvim/diff.h"
 #include "nvim/digraph.h"
 #include "nvim/drawscreen.h"
-#include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
@@ -35,7 +30,6 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
 #include "nvim/option_defs.h"
@@ -44,13 +38,11 @@
 #include "nvim/os/os.h"
 #include "nvim/pos.h"
 #include "nvim/regexp.h"
-#include "nvim/runtime.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
 #include "nvim/types.h"
-#include "nvim/ui.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
 
@@ -302,7 +294,6 @@ static void set_string_option_global(vimoption_T *opt, char **varp)
 void set_string_option_direct(const char *name, int opt_idx, const char *val, int opt_flags,
                               int set_sid)
 {
-  char *s;
   int both = (opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0;
   int idx = opt_idx;
 
@@ -323,7 +314,7 @@ void set_string_option_direct(const char *name, int opt_idx, const char *val, in
 
   assert(opt->var != &p_shada);
 
-  s = xstrdup(val);
+  char *s = xstrdup(val);
   {
     char **varp = (char **)get_varp_scope(opt, both ? OPT_LOCAL : opt_flags);
     if ((opt_flags & OPT_FREE) && (opt->flags & P_ALLOCED)) {
@@ -397,34 +388,53 @@ static bool valid_filetype(const char *val)
   return valid_name(val, ".-_");
 }
 
-/// Handle setting 'signcolumn' for value 'val'
+/// Handle setting 'signcolumn' for value 'val'. Store minimum and maximum width.
 ///
 /// @return OK when the value is valid, FAIL otherwise
-static int check_signcolumn(char *val)
+int check_signcolumn(win_T *wp)
 {
+  char *val = wp->w_p_scl;
   if (*val == NUL) {
     return FAIL;
   }
-  // check for basic match
-  if (check_opt_strings(val, p_scl_values, false) == OK) {
-    return OK;
-  }
 
-  // check for 'auto:<NUMBER>-<NUMBER>'
-  if (strlen(val) == 8
-      && !strncmp(val, "auto:", 5)
-      && ascii_isdigit(val[5])
-      && val[6] == '-'
-      && ascii_isdigit(val[7])) {
-    int min = val[5] - '0';
-    int max = val[7] - '0';
-    if (min < 1 || max < 2 || min > 8 || max > 9 || min >= max) {
-      return FAIL;
+  if (check_opt_strings(val, p_scl_values, false) == OK) {
+    if (!strncmp(val, "no", 2)) {  // no
+      wp->w_minscwidth = wp->w_maxscwidth = SCL_NO;
+    } else if (!strncmp(val, "nu", 2) && (wp->w_p_nu || wp->w_p_rnu)) {  // number
+      wp->w_minscwidth = wp->w_maxscwidth = SCL_NUM;
+    } else if (!strncmp(val, "yes:", 4)) {  // yes:<NUM>
+      wp->w_minscwidth = wp->w_maxscwidth = val[4] - '0';
+    } else if (*val == 'y') {  // yes
+      wp->w_minscwidth = wp->w_maxscwidth = 1;
+    } else if (!strncmp(val, "auto:", 5)) {  // auto:<NUM>
+      wp->w_minscwidth = 0;
+      wp->w_maxscwidth = val[5] - '0';
+    } else {  // auto
+      wp->w_minscwidth = 0;
+      wp->w_maxscwidth = 1;
     }
     return OK;
   }
 
-  return FAIL;
+  if (strncmp(val, "auto:", 5) != 0
+      || strlen(val) != 8
+      || !ascii_isdigit(val[5])
+      || val[6] != '-'
+      || !ascii_isdigit(val[7])) {
+    return FAIL;
+  }
+
+  // auto:<NUM>-<NUM>
+  int min = val[5] - '0';
+  int max = val[7] - '0';
+  if (min < 1 || max < 2 || min > 8 || min >= max) {
+    return FAIL;
+  }
+
+  wp->w_minscwidth = min;
+  wp->w_maxscwidth = max;
+  return OK;
 }
 
 /// Check validity of options with the 'statusline' format.
@@ -561,7 +571,7 @@ static int expand_set_opt_string(optexpand_T *args, char **values, size_t numVal
         continue;
       }
     }
-    if (vim_regexec(regmatch, *val, (colnr_T)0)) {
+    if (vim_regexec(regmatch, *val, 0)) {
       (*matches)[count++] = xstrdup(*val);
     }
   }
@@ -635,7 +645,7 @@ static int expand_set_opt_listflag(optexpand_T *args, char *flags, int *numMatch
         // existing flag. Just skip it to avoid duplicate.
         continue;
       }
-      (*matches)[count++] = xstrnsave(flag, 1);
+      (*matches)[count++] = xmemdupz(flag, 1);
     }
   }
 
@@ -1569,6 +1579,9 @@ const char *did_set_iconstring(optset_T *args)
 /// The 'inccommand' option is changed.
 const char *did_set_inccommand(optset_T *args FUNC_ATTR_UNUSED)
 {
+  if (cmdpreview) {
+    return e_invarg;
+  }
   return did_set_opt_strings(p_icm, p_icm_values, false);
 }
 
@@ -2078,16 +2091,13 @@ int expand_set_showcmdloc(optexpand_T *args, int *numMatches, char ***matches)
 const char *did_set_signcolumn(optset_T *args)
 {
   win_T *win = (win_T *)args->os_win;
-  char **varp = (char **)args->os_varp;
   const char *oldval = args->os_oldval.string.data;
-  if (check_signcolumn(*varp) != OK) {
+  if (check_signcolumn(win) != OK) {
     return e_invarg;
   }
   // When changing the 'signcolumn' to or from 'number', recompute the
   // width of the number column if 'number' or 'relativenumber' is set.
-  if (((*oldval == 'n' && *(oldval + 1) == 'u')
-       || (*win->w_p_scl == 'n' && *(win->w_p_scl + 1) == 'u'))
-      && (win->w_p_nu || win->w_p_rnu)) {
+  if ((*oldval == 'n' && *(oldval + 1) == 'u') || win->w_minscwidth == SCL_NUM) {
     win->w_nrwidth_line_count = 0;
   }
   return NULL;
@@ -2572,7 +2582,7 @@ static int opt_strings_flags(const char *val, char **values, unsigned *flagp, bo
       if (strncmp(values[i], val, len) == 0
           && ((list && val[len] == ',') || val[len] == NUL)) {
         val += len + (val[len] == ',');
-        assert(i < sizeof(1U) * 8);
+        assert(i < sizeof(new_flags) * 8);
         new_flags |= (1U << i);
         break;                  // check next item in val list
       }
@@ -2861,9 +2871,6 @@ static const char *set_chars_option(win_T *wp, const char *value, const bool is_
     } else {
       wp->w_p_fcs_chars = fcs_chars;
     }
-  } else if (is_listchars) {
-    xfree(lcs_chars.multispace);
-    xfree(lcs_chars.leadmultispace);
   }
 
   return NULL;          // no error

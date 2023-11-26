@@ -18,8 +18,7 @@ local sleep = global_helpers.sleep
 local tbl_contains = global_helpers.tbl_contains
 local fail = global_helpers.fail
 
-local module = {
-}
+local module = {}
 
 local start_dir = luv.cwd()
 local runtime_set = 'set runtimepath^=./build/lib/nvim/'
@@ -834,6 +833,8 @@ function module.exec_capture(code)
   return module.meths.exec2(code, { output = true }).output
 end
 
+--- @param code string
+--- @return any
 function module.exec_lua(code, ...)
   return module.meths.exec_lua(code, {...})
 end
@@ -868,6 +869,9 @@ function module.new_pipename()
   -- HACK: Start a server temporarily, get the name, then stop it.
   local pipename = module.eval('serverstart()')
   module.funcs.serverstop(pipename)
+  -- Remove the pipe so that trying to connect to it without a server listening
+  -- will be an error instead of a hang.
+  os.remove(pipename)
   return pipename
 end
 
@@ -948,8 +952,10 @@ function module.mkdir_p(path)
     or 'mkdir -p '..path))
 end
 
+--- @class test.functional.helpers: test.helpers
 module = global_helpers.tbl_extend('error', module, global_helpers)
 
+--- @return test.functional.helpers
 return function(after_each)
   if after_each then
     after_each(function()

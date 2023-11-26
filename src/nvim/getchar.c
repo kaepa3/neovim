@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // getchar.c: Code related to getting a character from the user or a script
 // file, manipulations with redo buffer and stuff buffer.
 
@@ -148,9 +145,9 @@ static const char e_cmd_mapping_must_end_with_cr_before_second_cmd[]
 /// Free and clear a buffer.
 static void free_buff(buffheader_T *buf)
 {
-  buffblock_T *p, *np;
+  buffblock_T *np;
 
-  for (p = buf->bh_first.b_next; p != NULL; p = np) {
+  for (buffblock_T *p = buf->bh_first.b_next; p != NULL; p = np) {
     np = p->b_next;
     xfree(p);
   }
@@ -295,7 +292,7 @@ static void add_num_buff(buffheader_T *buf, int n)
 {
   char number[32];
   snprintf(number, sizeof(number), "%d", n);
-  add_buff(buf, number, -1L);
+  add_buff(buf, number, -1);
 }
 
 /// Add character 'c' to buffer "buf".
@@ -327,7 +324,7 @@ static void add_char_buff(buffheader_T *buf, int c)
       temp[0] = (char)c;
       temp[1] = NUL;
     }
-    add_buff(buf, temp, -1L);
+    add_buff(buf, temp, -1);
   }
 }
 
@@ -419,7 +416,7 @@ void flush_buffers(flush_buffers_T flush_typeahead)
       // We have to get all characters, because we may delete the first
       // part of an escape sequence.  In an xterm we get one char at a
       // time and we have to get them all.
-      while (inchar(typebuf.tb_buf, typebuf.tb_buflen - 1, 10L) != 0) {}
+      while (inchar(typebuf.tb_buf, typebuf.tb_buflen - 1, 10) != 0) {}
     }
     typebuf.tb_off = MAXMAPLEN;
     typebuf.tb_len = 0;
@@ -488,7 +485,7 @@ void saveRedobuff(save_redo_T *save_redo)
     return;
   }
 
-  add_buff(&redobuff, s, -1L);
+  add_buff(&redobuff, s, -1);
   xfree(s);
 }
 
@@ -507,7 +504,7 @@ void restoreRedobuff(save_redo_T *save_redo)
 void AppendToRedobuff(const char *s)
 {
   if (!block_redo) {
-    add_buff(&redobuff, s, -1L);
+    add_buff(&redobuff, s, -1);
   }
 }
 
@@ -553,7 +550,7 @@ void AppendToRedobuffLit(const char *str, int len)
 
     // CTRL-V '0' must be inserted as CTRL-V 048.
     if (*s == NUL && c == '0') {
-      add_buff(&redobuff, "048", 3L);
+      add_buff(&redobuff, "048", 3);
     } else {
       add_char_buff(&redobuff, c);
     }
@@ -571,7 +568,7 @@ void AppendToRedobuffSpec(const char *s)
   while (*s != NUL) {
     if ((uint8_t)(*s) == K_SPECIAL && s[1] != NUL && s[2] != NUL) {
       // Insert special key literally.
-      add_buff(&redobuff, s, 3L);
+      add_buff(&redobuff, s, 3);
       s += 3;
     } else {
       add_char_buff(&redobuff, mb_cptr2char_adv(&s));
@@ -600,14 +597,14 @@ void AppendNumberToRedobuff(int n)
 /// K_SPECIAL must already have been escaped.
 void stuffReadbuff(const char *s)
 {
-  add_buff(&readbuf1, s, -1L);
+  add_buff(&readbuf1, s, -1);
 }
 
 /// Append string "s" to the redo stuff buffer.
 /// @remark K_SPECIAL must already have been escaped.
 void stuffRedoReadbuff(const char *s)
 {
-  add_buff(&readbuf2, s, -1L);
+  add_buff(&readbuf2, s, -1);
 }
 
 void stuffReadbuffLen(const char *s, ptrdiff_t len)
@@ -764,7 +761,7 @@ int start_redo(int count, bool old_redo)
 
   // copy the buffer name, if present
   if (c == '"') {
-    add_buff(&readbuf2, "\"", 1L);
+    add_buff(&readbuf2, "\"", 1);
     c = read_redo(false, old_redo);
 
     // if a numbered buffer is used, increment the number
@@ -822,7 +819,7 @@ int start_redo_ins(void)
   while ((c = read_redo(false, false)) != NUL) {
     if (vim_strchr("AaIiRrOo", c) != NULL) {
       if (c == 'O' || c == 'o') {
-        add_buff(&readbuf2, NL_STR, -1L);
+        add_buff(&readbuf2, NL_STR, -1);
       }
       break;
     }
@@ -880,8 +877,6 @@ bool noremap_keys(void)
 /// @return  FAIL for failure, OK otherwise
 int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
 {
-  uint8_t *s1, *s2;
-  int addlen;
   int val;
   int nrm;
 
@@ -891,7 +886,7 @@ int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
   }
   state_no_longer_safe("ins_typebuf()");
 
-  addlen = (int)strlen(str);
+  int addlen = (int)strlen(str);
 
   if (offset == 0 && addlen <= typebuf.tb_off) {
     // Easy case: there is room in front of typebuf.tb_buf[typebuf.tb_off]
@@ -917,8 +912,8 @@ int ins_typebuf(char *str, int noremap, int offset, bool nottyped, bool silent)
       return FAIL;
     }
     int newlen = typebuf.tb_len + extra;
-    s1 = xmalloc((size_t)newlen);
-    s2 = xmalloc((size_t)newlen);
+    uint8_t *s1 = xmalloc((size_t)newlen);
+    uint8_t *s2 = xmalloc((size_t)newlen);
     typebuf.tb_buflen = newlen;
 
     // copy the old chars, before the insertion point
@@ -1723,7 +1718,7 @@ static void getchar_common(typval_T *argvars, typval_T *rettv)
       // getchar(): blocking wait.
       // TODO(bfredl): deduplicate shared logic with state_enter ?
       if (!char_avail()) {
-        // flush output before waiting
+        // Flush screen updates before blocking.
         ui_flush();
         (void)os_inchar(NULL, 0, -1, typebuf.tb_change_cnt, main_loop.events);
         if (!multiqueue_empty(main_loop.events)) {
@@ -1955,7 +1950,6 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
   int mp_match_len = 0;
   int max_mlen = 0;
   int tb_c1;
-  int mlen;
   int keylen = *keylenp;
   int local_State = get_real_state();
   bool is_plug_map = false;
@@ -1989,6 +1983,7 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
       && State != MODE_ASKMORE
       && State != MODE_CONFIRM
       && !at_ins_compl_key()) {
+    int mlen;
     int nolmaplen;
     if (tb_c1 == K_SPECIAL) {
       nolmaplen = 2;
@@ -2353,10 +2348,6 @@ static int vgetorpeek(bool advance)
                           // 'ttimeoutlen' for complete key code
   int mapdepth = 0;  // check for recursive mapping
   bool mode_deleted = false;  // set when mode has been deleted
-  int new_wcol, new_wrow;
-  int n;
-  int old_wcol, old_wrow;
-  int wait_tb_len;
 
   // This function doesn't work very well when called recursively.  This may
   // happen though, because of:
@@ -2424,7 +2415,7 @@ static int vgetorpeek(bool advance)
         int keylen = 0;
         if (got_int) {
           // flush all input
-          c = inchar(typebuf.tb_buf, typebuf.tb_buflen - 1, 0L);
+          c = inchar(typebuf.tb_buf, typebuf.tb_buflen - 1, 0);
 
           // If inchar() returns true (script file was active) or we
           // are inside a mapping, get out of Insert mode.
@@ -2493,8 +2484,8 @@ static int vgetorpeek(bool advance)
         // have to redisplay the mode. That the cursor is in the wrong
         // place does not matter.
         c = 0;
-        new_wcol = curwin->w_wcol;
-        new_wrow = curwin->w_wrow;
+        int new_wcol = curwin->w_wcol;
+        int new_wrow = curwin->w_wrow;
         if (advance
             && typebuf.tb_len == 1
             && typebuf.tb_buf[typebuf.tb_off] == ESC
@@ -2503,14 +2494,14 @@ static int vgetorpeek(bool advance)
             && typebuf.tb_maplen == 0
             && (State & MODE_INSERT)
             && (p_timeout || (keylen == KEYLEN_PART_KEY && p_ttimeout))
-            && (c = inchar(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len, 3, 25L)) == 0) {
+            && (c = inchar(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len, 3, 25)) == 0) {
           if (mode_displayed) {
             unshowmode(true);
             mode_deleted = true;
           }
           validate_cursor();
-          old_wcol = curwin->w_wcol;
-          old_wrow = curwin->w_wrow;
+          int old_wcol = curwin->w_wcol;
+          int old_wrow = curwin->w_wrow;
 
           // move cursor left, if possible
           if (curwin->w_cursor.col != 0) {
@@ -2573,7 +2564,7 @@ static int vgetorpeek(bool advance)
 
         // Allow mapping for just typed characters. When we get here c
         // is the number of extra bytes and typebuf.tb_len is 1.
-        for (n = 1; n <= c; n++) {
+        for (int n = 1; n <= c; n++) {
           typebuf.tb_noremap[typebuf.tb_off + n] = RM_YES;
         }
         typebuf.tb_len += c;
@@ -2653,8 +2644,8 @@ static int vgetorpeek(bool advance)
               showing_partial = true;
             }
             // need to use the col and row from above here
-            old_wcol = curwin->w_wcol;
-            old_wrow = curwin->w_wrow;
+            int old_wcol = curwin->w_wcol;
+            int old_wrow = curwin->w_wrow;
             curwin->w_wcol = new_wcol;
             curwin->w_wrow = new_wrow;
             push_showcmd();
@@ -2688,20 +2679,20 @@ static int vgetorpeek(bool advance)
           timedout = false;
         }
 
-        long wait_time = 0;
+        int wait_time = 0;
 
         if (advance) {
           if (typebuf.tb_len == 0 || !(p_timeout || (p_ttimeout && keylen == KEYLEN_PART_KEY))) {
             // blocking wait
-            wait_time = -1L;
+            wait_time = -1;
           } else if (keylen == KEYLEN_PART_KEY && p_ttm >= 0) {
-            wait_time = (long)p_ttm;
+            wait_time = (int)p_ttm;
           } else {
-            wait_time = (long)p_tm;
+            wait_time = (int)p_tm;
           }
         }
 
-        wait_tb_len = typebuf.tb_len;
+        int wait_tb_len = typebuf.tb_len;
         c = inchar(typebuf.tb_buf + typebuf.tb_off + typebuf.tb_len,
                    typebuf.tb_buflen - typebuf.tb_off - typebuf.tb_len - 1,
                    wait_time);
@@ -2802,7 +2793,7 @@ int inchar(uint8_t *buf, int maxlen, long wait_time)
   int retesc = false;  // Return ESC with gotint.
   const int tb_change_cnt = typebuf.tb_change_cnt;
 
-  if (wait_time == -1L || wait_time > 100L) {
+  if (wait_time == -1 || wait_time > 100) {
     // flush output before waiting
     ui_flush();
   }
@@ -2852,7 +2843,7 @@ int inchar(uint8_t *buf, int maxlen, long wait_time)
       uint8_t dum[DUM_LEN + 1];
 
       while (true) {
-        len = os_inchar(dum, DUM_LEN, 0L, 0, NULL);
+        len = os_inchar(dum, DUM_LEN, 0, 0, NULL);
         if (len == 0 || (len == 1 && dum[0] == Ctrl_C)) {
           break;
         }
@@ -2862,7 +2853,7 @@ int inchar(uint8_t *buf, int maxlen, long wait_time)
 
     // Always flush the output characters when getting input characters
     // from the user and not just peeking.
-    if (wait_time == -1L || wait_time > 10L) {
+    if (wait_time == -1 || wait_time > 10) {
       ui_flush();
     }
 
@@ -2927,7 +2918,8 @@ int fix_input_buffer(uint8_t *buf, int len)
 char *getcmdkeycmd(int promptc, void *cookie, int indent, bool do_concat)
 {
   garray_T line_ga;
-  int c1 = -1, c2;
+  int c1 = -1;
+  int c2;
   int cmod = 0;
   bool aborted = false;
 

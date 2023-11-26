@@ -1,5 +1,4 @@
-#ifndef NVIM_EVAL_TYPVAL_H
-#define NVIM_EVAL_TYPVAL_H
+#pragma once
 
 #include <assert.h>
 #include <stdbool.h>
@@ -235,7 +234,7 @@ static inline long tv_dict_len(const dict_T *d)
 static inline long tv_dict_len(const dict_T *const d)
 {
   if (d == NULL) {
-    return 0L;
+    return 0;
   }
   return (long)d->dv_hashtab.ht_used;
 }
@@ -340,7 +339,7 @@ extern bool tv_in_free_unref_items;
 /// @param[in]  l  List to iterate over.
 /// @param  li  Name of the variable with current listitem_T entry.
 /// @param  code  Cycle body.
-#define _TV_LIST_ITER_MOD(modifier, l, li, code) \
+#define TV_LIST_ITER_MOD(modifier, l, li, code) \
   do { \
     modifier list_T *const l_ = (l); \
     if (l_ != NULL) { \
@@ -360,7 +359,7 @@ extern bool tv_in_free_unref_items;
 /// @param  li  Name of the variable with current listitem_T entry.
 /// @param  code  Cycle body.
 #define TV_LIST_ITER(l, li, code) \
-  _TV_LIST_ITER_MOD( , l, li, code)  // NOLINT(whitespace/parens)
+  TV_LIST_ITER_MOD( , l, li, code)  // NOLINT(whitespace/parens)
 
 /// Iterate over a list
 ///
@@ -371,7 +370,7 @@ extern bool tv_in_free_unref_items;
 /// @param  li  Name of the variable with current listitem_T entry.
 /// @param  code  Cycle body.
 #define TV_LIST_ITER_CONST(l, li, code) \
-  _TV_LIST_ITER_MOD(const, l, li, code)
+  TV_LIST_ITER_MOD(const, l, li, code)
 
 // Below macros are macros to avoid duplicating code for functionally identical
 // const and non-const function variants.
@@ -492,5 +491,3 @@ EXTERN const size_t kTVTranslate INIT( = TV_TRANSLATE);
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "eval/typval.h.generated.h"
 #endif
-
-#endif  // NVIM_EVAL_TYPVAL_H

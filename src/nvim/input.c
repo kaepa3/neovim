@@ -1,9 +1,7 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // input.c: high level functions for prompting the user or input
 // like yes/no or number prompts.
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -112,7 +110,7 @@ int get_keystroke(MultiQueue *events)
 
     // First time: blocking wait.  Second time: wait up to 100ms for a
     // terminal code to complete.
-    n = os_inchar(buf + len, maxlen, len == 0 ? -1L : 100L, 0, events);
+    n = os_inchar(buf + len, maxlen, len == 0 ? -1 : 100, 0, events);
     if (n > 0) {
       // Replace zero and K_SPECIAL by a special key code.
       n = fix_input_buffer(buf + len, n);
@@ -183,6 +181,9 @@ int get_number(int colon, int *mouse_used)
     ui_cursor_goto(msg_row, msg_col);
     int c = safe_vgetc();
     if (ascii_isdigit(c)) {
+      if (n > INT_MAX / 10) {
+        return 0;
+      }
       n = n * 10 + c - '0';
       msg_putchar(c);
       typed++;

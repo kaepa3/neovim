@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/os_win_console.h"
@@ -83,7 +80,7 @@ void os_icon_init(void)
 
   const char *vimruntime = os_getenv("VIMRUNTIME");
   if (vimruntime != NULL) {
-    snprintf(NameBuff, MAXPATHL, "%s" _PATHSEPSTR "neovim.ico", vimruntime);
+    snprintf(NameBuff, MAXPATHL, "%s/neovim.ico", vimruntime);
     if (!os_path_exists(NameBuff)) {
       WLOG("neovim.ico not found: %s", NameBuff);
     } else {

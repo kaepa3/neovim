@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Tree data structure for storing marks at (row, col) positions and updating
 // them to arbitrary text changes. Derivative work of kbtree in klib, whose
 // copyright notice is reproduced below. Also inspired by the design of the
@@ -290,7 +287,7 @@ static inline void marktree_putp_aux(MarkTree *b, MTNode *x, MTKey k)
 
 void marktree_put(MarkTree *b, MTKey key, int end_row, int end_col, bool end_right)
 {
-  assert(!(key.flags & ~MT_FLAG_EXTERNAL_MASK));
+  assert(!(key.flags & ~(MT_FLAG_EXTERNAL_MASK | MT_FLAG_RIGHT_GRAVITY)));
   if (end_row >= 0) {
     key.flags |= MT_FLAG_PAIRED;
   }
@@ -433,11 +430,10 @@ void marktree_put_key(MarkTree *b, MTKey k)
   if (!b->root) {
     b->root = marktree_alloc_node(b, true);
   }
-  MTNode *r, *s;
   b->n_keys++;
-  r = b->root;
+  MTNode *r = b->root;
   if (r->n == 2 * T - 1) {
-    s = marktree_alloc_node(b, true);
+    MTNode *s = marktree_alloc_node(b, true);
     b->root = s; s->level = r->level + 1; s->n = 0;
     s->ptr[0] = r;
     r->parent = s;
@@ -777,13 +773,14 @@ static void intersect_mov(Intersection *restrict x, Intersection *restrict y,
   kv_size(*y) = yn;
 }
 
-bool intersect_mov_test(uint64_t *x, size_t nx, uint64_t *y, size_t ny, uint64_t *win, size_t nwin,
-                        uint64_t *wout, size_t *nwout, uint64_t *dout, size_t *ndout)
+bool intersect_mov_test(const uint64_t *x, size_t nx, const uint64_t *y, size_t ny,
+                        const uint64_t *win, size_t nwin, uint64_t *wout, size_t *nwout,
+                        uint64_t *dout, size_t *ndout)
 {
   // x is immutable in the context of intersect_mov. y might shrink, but we
   // don't care about it (we get it the deleted ones in d)
-  Intersection xi = { .items = x, .size = nx };
-  Intersection yi = { .items = y, .size = ny };
+  Intersection xi = { .items = (uint64_t *)x, .size = nx };
+  Intersection yi = { .items = (uint64_t *)y, .size = ny };
 
   Intersection w;
   kvi_init(w);
@@ -1140,20 +1137,6 @@ static void marktree_free_node(MarkTree *b, MTNode *x)
   b->n_nodes--;
 }
 
-/// NB: caller must check not pair!
-void marktree_revise(MarkTree *b, MarkTreeIter *itr, uint8_t decor_level, MTKey key)
-{
-  // TODO(bfredl): clean up this mess and re-instantiate &= and |= forms
-  // once we upgrade to a non-broken version of gcc in functionaltest-lua CI
-  rawkey(itr).flags = (uint16_t)(rawkey(itr).flags & (uint16_t) ~MT_FLAG_DECOR_MASK);
-  rawkey(itr).flags = (uint16_t)(rawkey(itr).flags
-                                 | (uint16_t)(decor_level << MT_FLAG_DECOR_OFFSET)
-                                 | (uint16_t)(key.flags & MT_FLAG_DECOR_MASK));
-  rawkey(itr).decor_full = key.decor_full;
-  rawkey(itr).hl_id = key.hl_id;
-  rawkey(itr).priority = key.priority;
-}
-
 /// @param itr iterator is invalid after call
 void marktree_move(MarkTree *b, MarkTreeIter *itr, int row, int col)
 {
@@ -1501,11 +1484,6 @@ bool marktree_itr_get_overlap(MarkTree *b, int row, int col, MarkTreeIter *itr)
   return true;
 }
 
-static inline MTPair pair_from(MTKey start, MTKey end)
-{
-  return (MTPair){ .start = start, .end_pos = end.pos, .end_right_gravity = mt_right(end) };
-}
-
 /// Step through all overlapping pairs at a position.
 ///
 /// This function must only be used with an iterator from |marktree_itr_step_overlap|
@@ -1524,8 +1502,8 @@ bool marktree_itr_step_overlap(MarkTree *b, MarkTreeIter *itr, MTPair *pair)
   while (itr->i == -1) {
     if (itr->intersect_idx < kv_size(itr->x->intersect)) {
       uint64_t id = kv_A(itr->x->intersect, itr->intersect_idx++);
-      *pair = pair_from(marktree_lookup(b, id, NULL),
-                        marktree_lookup(b, id|MARKTREE_END_FLAG, NULL));
+      *pair = mtpair_from(marktree_lookup(b, id, NULL),
+                          marktree_lookup(b, id|MARKTREE_END_FLAG, NULL));
       return true;
     }
 
@@ -1562,7 +1540,7 @@ bool marktree_itr_step_overlap(MarkTree *b, MarkTreeIter *itr, MTPair *pair)
       }
 
       unrelative(itr->pos, &k.pos);
-      *pair = pair_from(k, end);
+      *pair = mtpair_from(k, end);
       return true;  // it's a start!
     }
   }
@@ -1581,7 +1559,7 @@ bool marktree_itr_step_overlap(MarkTree *b, MarkTreeIter *itr, MTPair *pair)
       if (pos_less(itr->intersect_pos, start.pos)) {
         continue;
       }
-      *pair = pair_from(start, k);
+      *pair = mtpair_from(start, k);
       return true;  // end of a range which began before us!
     }
   }
@@ -2006,8 +1984,8 @@ static void marktree_itr_fix_pos(MarkTree *b, MarkTreeIter *itr)
 void marktree_put_test(MarkTree *b, uint32_t ns, uint32_t id, int row, int col, bool right_gravity,
                        int end_row, int end_col, bool end_right)
 {
-  MTKey key = { { row, col }, ns, id, 0,
-                mt_flags(right_gravity, 0), 0, NULL };
+  uint16_t flags = mt_flags(right_gravity, false, false, false);
+  MTKey key = { { row, col }, ns, id, flags, { .hl = DECOR_HIGHLIGHT_INLINE_INIT } };
   marktree_put(b, key, end_row, end_col, end_right);
 }
 

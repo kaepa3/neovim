@@ -317,8 +317,8 @@ function vim.api.nvim_buf_get_commands(buffer, opts) end
 --- @return integer[]
 function vim.api.nvim_buf_get_extmark_by_id(buffer, ns_id, id, opts) end
 
---- Gets `extmarks` in "traversal order" from a `charwise` region defined by
---- buffer positions (inclusive, 0-indexed `api-indexing`).
+--- Gets `extmarks` (including `signs`) in "traversal order" from a `charwise`
+--- region defined by buffer positions (inclusive, 0-indexed `api-indexing`).
 --- Region can be given as (row,col) tuples, or valid extmark ids (whose
 --- positions define the bounds). 0 and -1 are understood as (0,0) and (-1,-1)
 --- respectively, thus the following are equivalent:
@@ -554,6 +554,12 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---                 the extmark end position (if it exists) will be shifted in
 ---                 when new text is inserted (true for right, false for
 ---                 left). Defaults to false.
+---               • undo_restore : Restore the exact position of the mark if
+---                 text around the mark was deleted and then restored by
+---                 undo. Defaults to true.
+---               • invalidate : boolean that indicates whether to hide the
+---                 extmark if the entirety of its range is deleted. If
+---                 "undo_restore" is false, the extmark is deleted instead.
 ---               • priority: a priority value for the highlight group or sign
 ---                 attribute. For example treesitter highlighting uses a
 ---                 value of 100.
@@ -1812,7 +1818,7 @@ function vim.api.nvim_set_current_win(window) end
 --- `nvim_buf_set_extmark()` can be called to add marks on a per-window or
 --- per-lines basis. Use the `ephemeral` key to only use the mark for the
 --- current screen redraw (the callback will be called again for the next
---- redraw ).
+--- redraw).
 --- Note: this function should not be called often. Rather, the callbacks
 --- themselves can be used to throttle unneeded callbacks. the `on_start`
 --- callback can return `false` to disable the provider until the next redraw.
@@ -2058,6 +2064,18 @@ function vim.api.nvim_ui_set_focus(gained) end
 --- @param name string
 --- @param value any
 function vim.api.nvim_ui_set_option(name, value) end
+
+--- Tells Nvim when a terminal event has occurred
+--- The following terminal events are supported:
+---
+--- • "termresponse": The terminal sent an OSC or DCS response sequence to
+---   Nvim. The payload is the received response. Sets `v:termresponse` and
+---   fires `TermResponse`.
+---
+---
+--- @param event string Event name
+--- @param value any
+function vim.api.nvim_ui_term_event(event, value) end
 
 --- @param width integer
 --- @param height integer

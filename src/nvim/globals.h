@@ -1,5 +1,4 @@
-#ifndef NVIM_GLOBALS_H
-#define NVIM_GLOBALS_H
+#pragma once
 
 #include <inttypes.h>
 #include <stdbool.h>
@@ -24,12 +23,6 @@
 #define MSG_BUF_LEN 480                 // length of buffer for small messages
 #define MSG_BUF_CLEN  (MSG_BUF_LEN / 6)  // cell length (worst case: utf-8
                                          // takes 6 bytes for one cell)
-
-#ifdef MSWIN
-# define _PATHSEPSTR "\\"
-#else
-# define _PATHSEPSTR "/"
-#endif
 
 // FILETYPE_FILE        used for file type detection
 // FTPLUGIN_FILE        used for loading filetype plugin files
@@ -65,15 +58,15 @@
 #define DFLT_ERRORFILE  "errors.err"
 
 #ifndef SYS_VIMRC_FILE
-# define SYS_VIMRC_FILE "$VIM" _PATHSEPSTR "sysinit.vim"
+# define SYS_VIMRC_FILE "$VIM/sysinit.vim"
 #endif
 
 #ifndef DFLT_HELPFILE
-# define DFLT_HELPFILE  "$VIMRUNTIME" _PATHSEPSTR "doc" _PATHSEPSTR "help.txt"
+# define DFLT_HELPFILE  "$VIMRUNTIME/doc/help.txt"
 #endif
 
 #ifndef SYNTAX_FNAME
-# define SYNTAX_FNAME   "$VIMRUNTIME" _PATHSEPSTR "syntax" _PATHSEPSTR "%s.vim"
+# define SYNTAX_FNAME   "$VIMRUNTIME/syntax/%s.vim"
 #endif
 
 #ifndef EXRC_FILE
@@ -426,10 +419,9 @@ EXTERN win_T *prevwin INIT( = NULL);  // previous window
   FOR_ALL_TABS(tp) \
   FOR_ALL_WINDOWS_IN_TAB(wp, tp)
 
-// -V:FOR_ALL_WINDOWS_IN_TAB:501
 #define FOR_ALL_WINDOWS_IN_TAB(wp, tp) \
-  for (win_T *wp = ((tp) == curtab) \
-       ? firstwin : (tp)->tp_firstwin; wp != NULL; wp = wp->w_next)
+  for (win_T *wp = ((tp) == curtab) ? firstwin : (tp)->tp_firstwin; \
+       wp != NULL; wp = wp->w_next)
 
 EXTERN win_T *curwin;        // currently active window
 
@@ -475,10 +467,6 @@ EXTERN buf_T *curbuf INIT( = NULL);    // currently active buffer
 
 #define FOR_ALL_BUF_WININFO(buf, wip) \
   for ((wip) = (buf)->b_wininfo; (wip) != NULL; (wip) = (wip)->wi_next)   // NOLINT
-
-// Iterate through all the signs placed in a buffer
-#define FOR_ALL_SIGNS_IN_BUF(buf, sign) \
-  for ((sign) = (buf)->b_signlist; (sign) != NULL; (sign) = (sign)->se_next)   // NOLINT
 
 // List of files being edited (global argument list).  curwin->w_alist points
 // to this when the window is using the global argument list.
@@ -696,6 +684,7 @@ EXTERN bool in_assert_fails INIT( = false);  // assert_fails() active
 #define SEA_DIALOG      1       // use dialog when possible
 #define SEA_QUIT        2       // quit editing the file
 #define SEA_RECOVER     3       // recover the file
+#define SEA_READONLY    4       // no dialog, mark buffer as read-only
 
 EXTERN int swap_exists_action INIT( = SEA_NONE);  ///< For dialog when swap file already exists.
 EXTERN bool swap_exists_did_quit INIT( = false);  ///< Selected "quit" at the dialog.
@@ -1028,10 +1017,12 @@ EXTERN const char e_highlight_group_name_too_long[] INIT(= N_("E1249: Highlight 
 
 EXTERN const char e_invalid_line_number_nr[] INIT(= N_("E966: Invalid line number: %ld"));
 
-EXTERN char e_stray_closing_curly_str[]
+EXTERN const char e_stray_closing_curly_str[]
 INIT(= N_("E1278: Stray '}' without a matching '{': %s"));
-EXTERN char e_missing_close_curly_str[]
+EXTERN const char e_missing_close_curly_str[]
 INIT(= N_("E1279: Missing '}': %s"));
+
+EXTERN const char e_val_too_large[] INIT(= N_("E1510: Value too large: %s"));
 
 EXTERN const char e_undobang_cannot_redo_or_move_branch[]
 INIT(= N_("E5767: Cannot use :undo! to redo or move to a different undo branch"));
@@ -1104,5 +1095,3 @@ EXTERN bool skip_win_fix_cursor INIT( = false);
 EXTERN bool skip_win_fix_scroll INIT( = false);
 /// Skip update_topline() call while executing win_fix_scroll().
 EXTERN bool skip_update_topline INIT( = false);
-
-#endif  // NVIM_GLOBALS_H

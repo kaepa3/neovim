@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // eval/vars.c: functions for dealing with variables
 
 #include <assert.h>
@@ -10,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 #include "nvim/ascii.h"
 #include "nvim/autocmd.h"
@@ -20,7 +18,6 @@
 #include "nvim/eval/encode.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
-#include "nvim/eval/typval_defs.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
 #include "nvim/eval/window.h"
@@ -37,6 +34,7 @@
 #include "nvim/message.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/os.h"
 #include "nvim/search.h"
@@ -274,7 +272,7 @@ list_T *heredoc_get(exarg_T *eap, char *cmd, bool script_get)
         p++;
         text_indent_len++;
       }
-      text_indent = xstrnsave(theline, (size_t)text_indent_len);
+      text_indent = xmemdupz(theline, (size_t)text_indent_len);
     }
     // with "trim": skip the indent matching the first line
     if (text_indent != NULL) {
@@ -1088,13 +1086,13 @@ static int do_unlet_var(lval_T *lp, char *name_end, exarg_T *eap, int deep FUNC_
 
 /// Unlet one item or a range of items from a list.
 /// Return OK or FAIL.
-static void tv_list_unlet_range(list_T *const l, listitem_T *const li_first, const long n1_arg,
-                                const bool has_n2, const long n2)
+static void tv_list_unlet_range(list_T *const l, listitem_T *const li_first, const int n1_arg,
+                                const bool has_n2, const int n2)
 {
   assert(l != NULL);
   // Delete a range of List items.
   listitem_T *li_last = li_first;
-  long n1 = n1_arg;
+  int n1 = n1_arg;
   while (true) {
     listitem_T *const li = TV_LIST_ITEM_NEXT(l, li_last);
     n1++;

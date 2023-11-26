@@ -1,6 +1,6 @@
-#ifndef NVIM_EVENT_LOOP_H
-#define NVIM_EVENT_LOOP_H
+#pragma once
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <uv.h>
 
@@ -41,6 +41,7 @@ typedef struct loop {
   uv_async_t async;
   uv_mutex_t mutex;
   int recursive;
+  bool closing;  ///< Set to true if loop_close() has been called
 } Loop;
 
 #define CREATE_EVENT(multiqueue, handler, argc, ...) \
@@ -52,8 +53,6 @@ typedef struct loop {
       (handler)(argv); \
     } \
   } while (0)
-
-// -V:LOOP_PROCESS_EVENTS_UNTIL:547
 
 // Poll for events until a condition or timeout
 #define LOOP_PROCESS_EVENTS_UNTIL(loop, multiqueue, timeout, condition) \
@@ -87,5 +86,3 @@ typedef struct loop {
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "event/loop.h.generated.h"
 #endif
-
-#endif  // NVIM_EVENT_LOOP_H

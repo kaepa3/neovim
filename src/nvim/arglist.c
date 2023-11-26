@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // arglist.c: functions for dealing with the argument list
 
 #include <assert.h>
@@ -257,9 +254,8 @@ void alist_slash_adjust(void)
 static char *do_one_arg(char *str)
 {
   char *p;
-  bool inbacktick;
 
-  inbacktick = false;
+  bool inbacktick = false;
   for (p = str; *str; str++) {
     // When the backslash is used for escaping the special meaning of a
     // character we need to keep it until wildcard expansion.
@@ -393,7 +389,7 @@ static void arglist_del_files(garray_T *alist_ga)
 
     bool didone = false;
     for (int match = 0; match < ARGCOUNT; match++) {
-      if (vim_regexec(&regmatch, alist_name(&ARGLIST[match]), (colnr_T)0)) {
+      if (vim_regexec(&regmatch, alist_name(&ARGLIST[match]), 0)) {
         didone = true;
         xfree(ARGLIST[match].ae_fname);
         memmove(ARGLIST + match, ARGLIST + match + 1,
@@ -837,10 +833,8 @@ char *get_arglist_name(expand_T *xp FUNC_ATTR_UNUSED, int idx)
 /// Get the file name for an argument list entry.
 char *alist_name(aentry_T *aep)
 {
-  buf_T *bp;
-
   // Use the name from the associated buffer if it exists.
-  bp = buflist_findnr(aep->ae_fnum);
+  buf_T *bp = buflist_findnr(aep->ae_fnum);
   if (bp == NULL || bp->b_fname == NULL) {
     return aep->ae_fname;
   }
@@ -864,8 +858,8 @@ static void arg_all_close_unused_windows(arg_all_state_T *aall)
     for (win_T *wp = lastwin->w_floating ? lastwin : firstwin; wp != NULL; wp = wpnext) {
       int i;
       wpnext = wp->w_floating
-        ? wp->w_prev->w_floating ? wp->w_prev : firstwin
-        : (wp->w_next == NULL || wp->w_next->w_floating) ? NULL : wp->w_next;
+               ? wp->w_prev->w_floating ? wp->w_prev : firstwin
+               : (wp->w_next == NULL || wp->w_next->w_floating) ? NULL : wp->w_next;
       buf_T *buf = wp->w_buffer;
       if (buf->b_ffname == NULL
           || (!aall->keep_tabs

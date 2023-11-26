@@ -1,10 +1,8 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <inttypes.h>
 #include <msgpack/pack.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,6 +14,7 @@
 #include "nvim/api/ui.h"
 #include "nvim/autocmd.h"
 #include "nvim/channel.h"
+#include "nvim/eval.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/wstream.h"
 #include "nvim/globals.h"
@@ -76,7 +75,7 @@ static void mpack_uint(char **buf, uint32_t val)
 
 static void mpack_bool(char **buf, bool val)
 {
-  mpack_w(buf, 0xc2 | val);
+  mpack_w(buf, 0xc2 | (val ? 1 : 0));
 }
 
 static void mpack_array(char **buf, uint32_t len)
@@ -122,7 +121,6 @@ void remote_ui_disconnect(uint64_t channel_id)
 
   // Destroy `ui`.
   XFREE_CLEAR(ui->term_name);
-  XFREE_CLEAR(ui->term_background);
   xfree(ui);
 }
 
@@ -350,15 +348,6 @@ static void ui_set_option(UI *ui, bool init, String name, Object value, Error *e
     return;
   }
 
-  if (strequal(name.data, "term_background")) {
-    VALIDATE_T("term_background", kObjectTypeString, value.type, {
-      return;
-    });
-    set_tty_background(value.data.string.data);
-    ui->term_background = string_to_cstr(value.data.string);
-    return;
-  }
-
   if (strequal(name.data, "stdin_fd")) {
     VALIDATE_T("stdin_fd", kObjectTypeInteger, value.type, {
       return;
@@ -522,6 +511,33 @@ void nvim_ui_pum_set_bounds(uint64_t channel_id, Float width, Float height, Floa
   ui->pum_width = (double)width;
   ui->pum_height = (double)height;
   ui->pum_pos = true;
+}
+
+/// Tells Nvim when a terminal event has occurred
+///
+/// The following terminal events are supported:
+///
+///   - "termresponse": The terminal sent an OSC or DCS response sequence to
+///                     Nvim. The payload is the received response. Sets
+///                     |v:termresponse| and fires |TermResponse|.
+///
+/// @param channel_id
+/// @param event Event name
+/// @param payload Event payload
+/// @param[out] err Error details, if any.
+void nvim_ui_term_event(uint64_t channel_id, String event, Object value, Error *err)
+  FUNC_API_SINCE(12) FUNC_API_REMOTE_ONLY
+{
+  if (strequal("termresponse", event.data)) {
+    if (value.type != kObjectTypeString) {
+      api_set_error(err, kErrorTypeValidation, "termresponse must be a string");
+      return;
+    }
+
+    const String termresponse = value.data.string;
+    set_vim_var_string(VV_TERMRESPONSE, termresponse.data, (ptrdiff_t)termresponse.size);
+    apply_autocmds_group(EVENT_TERMRESPONSE, NULL, NULL, false, AUGROUP_ALL, NULL, NULL, &value);
+  }
 }
 
 static void flush_event(UIData *data)

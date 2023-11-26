@@ -2217,10 +2217,8 @@ vim.bo.ft = vim.bo.filetype
 ---
 --- Example:
 --- ```
----     :set fillchars=stl:^,stlnc:=,vert:│,fold:·,diff:-
+---     :set fillchars=stl:\ ,stlnc:\ ,vert:│,fold:·,diff:-
 --- ```
---- This is similar to the default, except that these characters will also
---- be used when there is highlighting.
 ---
 --- For the "stl", "stlnc", "foldopen", "foldclose" and "foldsep" items
 --- single-byte and multibyte characters are supported.  But double-width
@@ -2530,8 +2528,9 @@ vim.bo.formatlistpat = vim.o.formatlistpat
 vim.bo.flp = vim.bo.formatlistpat
 
 --- This is a sequence of letters which describes how automatic
---- formatting is to be done.  See `fo-table`.  Commas can be inserted for
---- readability.
+--- formatting is to be done.
+--- See `fo-table` for possible values and `gq` for how to format text.
+--- Commas can be inserted for readability.
 --- To avoid problems with flags that are added in the future, use the
 --- "+=" and "-=" feature of ":set" `add-option-flags`.
 ---
@@ -2577,7 +2576,7 @@ vim.go.fp = vim.go.formatprg
 --- security reasons.
 ---
 --- @type boolean
-vim.o.fsync = false
+vim.o.fsync = true
 vim.o.fs = vim.o.fsync
 vim.go.fsync = vim.o.fsync
 vim.go.fs = vim.go.fsync
@@ -4038,7 +4037,6 @@ vim.go.mat = vim.go.matchtime
 --- Increasing this limit above 200 also changes the maximum for Ex
 --- command recursion, see `E169`.
 --- See also `:function`.
---- Also used for maximum depth of callback functions.
 ---
 --- @type integer
 vim.o.maxfuncdepth = 100
@@ -5925,12 +5923,6 @@ vim.go.siso = vim.go.sidescrolloff
 ---    "number"	display signs in the 'number' column. If the number
 --- 		column is not present, then behaves like "auto".
 ---
---- Note regarding "orphaned signs": with signcolumn numbers higher than
---- 1, deleting lines will also remove the associated signs automatically,
---- in contrast to the default Vim behavior of keeping and grouping them.
---- This is done in order for the signcolumn appearance not appear weird
---- during line deletion.
----
 --- @type string
 vim.o.signcolumn = "auto"
 vim.o.scl = vim.o.signcolumn
@@ -6979,6 +6971,15 @@ vim.o.termpastefilter = "BS,HT,ESC,DEL"
 vim.o.tpf = vim.o.termpastefilter
 vim.go.termpastefilter = vim.o.termpastefilter
 vim.go.tpf = vim.go.termpastefilter
+
+--- If the host terminal supports it, buffer all screen updates
+--- made during a redraw cycle so that each screen is displayed in
+--- the terminal all at once. This can prevent tearing or flickering
+--- when the terminal updates faster than Nvim can redraw.
+---
+--- @type boolean
+vim.o.termsync = true
+vim.go.termsync = vim.o.termsync
 
 --- Maximum width of text that is being inserted.  A longer line will be
 --- broken after white space to get this width.  A zero value disables

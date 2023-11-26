@@ -1,5 +1,4 @@
-#ifndef NVIM_OPTION_VARS_H
-#define NVIM_OPTION_VARS_H
+#pragma once
 
 #include "nvim/macros.h"
 #include "nvim/types.h"
@@ -557,6 +556,7 @@ EXTERN char *p_mp;              ///< 'makeprg'
 EXTERN char *p_mps;             ///< 'matchpairs'
 EXTERN OptInt p_mat;            ///< 'matchtime'
 EXTERN OptInt p_mco;            ///< 'maxcombine'
+#define MAX_MCO  6  // fixed value for 'maxcombine'
 EXTERN OptInt p_mfd;            ///< 'maxfuncdepth'
 EXTERN OptInt p_mmd;            ///< 'maxmapdepth'
 EXTERN OptInt p_mmp;            ///< 'maxmempattern'
@@ -738,6 +738,7 @@ EXTERN OptInt p_uc;             ///< 'updatecount'
 EXTERN OptInt p_ut;             ///< 'updatetime'
 EXTERN char *p_shada;           ///< 'shada'
 EXTERN char *p_shadafile;       ///< 'shadafile'
+EXTERN int p_termsync;          ///< 'termsync'
 EXTERN char *p_vsts;            ///< 'varsofttabstop'
 EXTERN char *p_vts;             ///< 'vartabstop'
 EXTERN char *p_vdir;            ///< 'viewdir'
@@ -947,4 +948,5 @@ enum {
 
 #define TABSTOP_MAX 9999
 
-#endif  // NVIM_OPTION_VARS_H
+#define SCL_NO  -1  // 'signcolumn' set to "no"
+#define SCL_NUM -2  // 'signcolumn' set to "number"

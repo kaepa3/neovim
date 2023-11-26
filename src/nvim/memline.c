@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // for debugging
 // #define CHECK(c, s) do { if (c) emsg(s); } while (0)
 #define CHECK(c, s) do {} while (0)
@@ -162,9 +159,9 @@ enum {
 // This won't detect a 64 bit machine that only swaps a byte in the top 32
 // bits, but that is crazy anyway.
 enum {
-  B0_MAGIC_LONG = 0x30313233L,
-  B0_MAGIC_INT = 0x20212223L,
-  B0_MAGIC_SHORT = 0x10111213L,
+  B0_MAGIC_LONG = 0x30313233,
+  B0_MAGIC_INT = 0x20212223,
+  B0_MAGIC_SHORT = 0x10111213,
   B0_MAGIC_CHAR = 0x55,
 };
 
@@ -238,6 +235,16 @@ typedef enum {
   UB_SAME_DIR,  // update the B0_SAME_DIR flag
 } upd_block0_T;
 
+typedef enum {
+  SEA_CHOICE_NONE = 0,
+  SEA_CHOICE_READONLY = 1,
+  SEA_CHOICE_EDIT = 2,
+  SEA_CHOICE_RECOVER = 3,
+  SEA_CHOICE_DELETE = 4,
+  SEA_CHOICE_QUIT = 5,
+  SEA_CHOICE_ABORT = 6,
+} sea_choice_T;
+
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "memline.c.generated.h"
 #endif
@@ -270,8 +277,6 @@ static const char e_warning_pointer_block_corrupted[]
 /// @return  FAIL for failure, OK otherwise.
 int ml_open(buf_T *buf)
 {
-  bhdr_T *hp = NULL;
-
   // init fields in memline struct
   buf->b_ml.ml_stack_size = 0;   // no stack yet
   buf->b_ml.ml_stack = NULL;    // no stack yet
@@ -304,7 +309,7 @@ int ml_open(buf_T *buf)
   buf->b_ml.ml_line_count = 1;
 
   // fill block0 struct and write page 0
-  hp = mf_new(mfp, false, 1);
+  bhdr_T *hp = mf_new(mfp, false, 1);
   if (hp->bh_bnum != 0) {
     iemsg(_("E298: Didn't get block nr 0?"));
     goto error;
@@ -337,7 +342,7 @@ int ml_open(buf_T *buf)
   // Only works when there's a swapfile, otherwise it's done when the file
   // is created.
   mf_put(mfp, hp, true, false);
-  if (!buf->b_help && !B_SPELL(buf)) {
+  if (!buf->b_help && !buf->b_spell) {
     (void)mf_sync(mfp, 0);
   }
 
@@ -615,7 +620,7 @@ static bool ml_check_b0_strings(ZeroBlock *b0p)
   return (memchr(b0p->b0_version, NUL, 10)
           && memchr(b0p->b0_uname, NUL, B0_UNAME_SIZE)
           && memchr(b0p->b0_hname, NUL, B0_HNAME_SIZE)
-          && memchr(b0p->b0_fname, NUL, B0_FNAME_SIZE_CRYPT));  // -V1086
+          && memchr(b0p->b0_fname, NUL, B0_FNAME_SIZE_CRYPT));
 }
 
 /// Update the timestamp or the B0_SAME_DIR flag of the .swp file.
@@ -677,8 +682,8 @@ static void set_b0_fname(ZeroBlock *b0p, buf_T *buf)
       buf->b_mtime_read = buf->b_mtime;
       buf->b_mtime_read_ns = buf->b_mtime_ns;
     } else {
-      long_to_char(0L, b0p->b0_mtime);
-      long_to_char(0L, b0p->b0_ino);
+      long_to_char(0, b0p->b0_mtime);
+      long_to_char(0, b0p->b0_ino);
       buf->b_mtime = 0;
       buf->b_mtime_ns = 0;
       buf->b_mtime_read = 0;
@@ -751,14 +756,9 @@ void ml_recover(bool checkext)
   memfile_T *mfp = NULL;
   char *fname_used = NULL;
   bhdr_T *hp = NULL;
-  ZeroBlock *b0p;
-  int b0_ff;
   char *b0_fenc = NULL;
-  PointerBlock *pp;
-  DataBlock *dp;
   infoptr_T *ip;
   bool directly;
-  char *p;
   bool serious_error = true;
   int orig_file_status = NOTDONE;
 
@@ -826,7 +826,7 @@ void ml_recover(bool checkext)
   buf->b_ml.ml_flags = 0;
 
   // open the memfile from the old swapfile
-  p = xstrdup(fname_used);  // save "fname_used" for the message:
+  char *p = xstrdup(fname_used);  // save "fname_used" for the message:
   // mf_open() will consume "fname_used"!
   mfp = mf_open(fname_used, O_RDONLY);
   fname_used = p;
@@ -852,7 +852,7 @@ void ml_recover(bool checkext)
     msg_end();
     goto theend;
   }
-  b0p = hp->bh_data;
+  ZeroBlock *b0p = hp->bh_data;
   if (strncmp(b0p->b0_version, "VIM 3.0", 7) == 0) {
     msg_start();
     msg_outtrans(mfp->mf_fname, MSG_HIST);
@@ -895,7 +895,7 @@ void ml_recover(bool checkext)
       goto theend;
     }
     off_T size;
-    if ((size = vim_lseek(mfp->mf_fd, (off_T)0L, SEEK_END)) <= 0) {
+    if ((size = vim_lseek(mfp->mf_fd, 0, SEEK_END)) <= 0) {
       mfp->mf_blocknr_max = 0;              // no file or empty file
     } else {
       mfp->mf_blocknr_max = size / mfp->mf_page_size;
@@ -932,7 +932,7 @@ void ml_recover(bool checkext)
   // check date of swapfile and original file
   FileInfo org_file_info;
   FileInfo swp_file_info;
-  long mtime = char_to_long(b0p->b0_mtime);
+  int mtime = (int)char_to_long(b0p->b0_mtime);
   if (curbuf->b_ffname != NULL
       && os_fileinfo(curbuf->b_ffname, &org_file_info)
       && ((os_fileinfo(mfp->mf_fname, &swp_file_info)
@@ -944,7 +944,7 @@ void ml_recover(bool checkext)
   ui_flush();
 
   // Get the 'fileformat' and 'fileencoding' from block zero.
-  b0_ff = (b0p->b0_flags & B0_FF_MASK);
+  int b0_ff = (b0p->b0_flags & B0_FF_MASK);
   if (b0p->b0_flags & B0_HAS_FENC) {
     int fnsize = B0_FNAME_SIZE_NOCRYPT;
 
@@ -983,10 +983,10 @@ void ml_recover(bool checkext)
   linenr_T lnum = 0;        // append after line 0 in curbuf
   linenr_T line_count = 0;
   int idx = 0;              // start with first index in block 1
-  long error = 0;
-  buf->b_ml.ml_stack_top = 0;  // -V1048
+  int error = 0;
+  buf->b_ml.ml_stack_top = 0;
   buf->b_ml.ml_stack = NULL;
-  buf->b_ml.ml_stack_size = 0;  // -V1048
+  buf->b_ml.ml_stack_size = 0;
 
   bool cannot_open = (curbuf->b_ffname == NULL);
 
@@ -1002,10 +1002,9 @@ void ml_recover(bool checkext)
         goto theend;
       }
       error++;
-      ml_append(lnum++, _("???MANY LINES MISSING"),
-                (colnr_T)0, true);
+      ml_append(lnum++, _("???MANY LINES MISSING"), 0, true);
     } else {          // there is a block
-      pp = hp->bh_data;
+      PointerBlock *pp = hp->bh_data;
       if (pp->pb_id == PTR_ID) {                // it is a pointer block
         bool ptr_block_error = false;
         if (pp->pb_count_max != PB_COUNT_MAX(mfp)) {
@@ -1027,14 +1026,12 @@ void ml_recover(bool checkext)
           }
           if (line_count != 0) {
             error++;
-            ml_append(lnum++, _("???LINE COUNT WRONG"),
-                      (colnr_T)0, true);
+            ml_append(lnum++, _("???LINE COUNT WRONG"), 0, true);
           }
         }
 
         if (pp->pb_count == 0) {
-          ml_append(lnum++, _("???EMPTY BLOCK"),
-                    (colnr_T)0, true);
+          ml_append(lnum++, _("???EMPTY BLOCK"), 0, true);
           error++;
         } else if (idx < (int)pp->pb_count) {         // go a block deeper
           if (pp->pb_pointer[idx].pe_bnum < 0) {
@@ -1053,8 +1050,7 @@ void ml_recover(bool checkext)
             }
             if (cannot_open) {
               error++;
-              ml_append(lnum++, _("???LINES MISSING"),
-                        (colnr_T)0, true);
+              ml_append(lnum++, _("???LINES MISSING"), 0, true);
             }
             idx++;                  // get same block again for next index
             continue;
@@ -1073,7 +1069,7 @@ void ml_recover(bool checkext)
           continue;
         }
       } else {            // not a pointer block
-        dp = hp->bh_data;
+        DataBlock *dp = hp->bh_data;
         if (dp->db_id != DATA_ID) {             // block id wrong
           if (bnum == 1) {
             semsg(_("E310: Block 1 ID wrong (%s not a .swp file?)"),
@@ -1081,8 +1077,7 @@ void ml_recover(bool checkext)
             goto theend;
           }
           error++;
-          ml_append(lnum++, _("???BLOCK MISSING"),
-                    (colnr_T)0, true);
+          ml_append(lnum++, _("???BLOCK MISSING"), 0, true);
         } else {
           // It is a data block.
           // Append all the lines in this block.
@@ -1093,7 +1088,7 @@ void ml_recover(bool checkext)
           if (page_count * mfp->mf_page_size != dp->db_txt_end) {
             ml_append(lnum++,
                       _("??? from here until ???END lines" " may be messed up"),
-                      (colnr_T)0, true);
+                      0, true);
             error++;
             has_error = true;
             dp->db_txt_end = page_count * mfp->mf_page_size;
@@ -1109,7 +1104,7 @@ void ml_recover(bool checkext)
             ml_append(lnum++,
                       _("??? from here until ???END lines"
                         " may have been inserted/deleted"),
-                      (colnr_T)0, true);
+                      0, true);
             error++;
             has_error = true;
           }
@@ -1119,7 +1114,7 @@ void ml_recover(bool checkext)
             if ((char *)&(dp->db_index[i]) >= (char *)dp + dp->db_txt_start) {
               // line count must be wrong
               error++;
-              ml_append(lnum++, _("??? lines may be missing"), (colnr_T)0, true);
+              ml_append(lnum++, _("??? lines may be missing"), 0, true);
               break;
             }
 
@@ -1137,10 +1132,10 @@ void ml_recover(bool checkext)
               did_questions = false;
               p = (char *)dp + txt_start;
             }
-            ml_append(lnum++, p, (colnr_T)0, true);
+            ml_append(lnum++, p, 0, true);
           }
           if (has_error) {
-            ml_append(lnum++, _("???END"), (colnr_T)0, true);
+            ml_append(lnum++, _("???END"), 0, true);
           }
         }
       }
@@ -1275,11 +1270,10 @@ int recover_names(char *fname, bool do_list, list_T *ret_list, int nr, char **fn
 #ifdef HAVE_READLINK
     // Expand symlink in the file name, because the swapfile is created
     // with the actual file instead of with the symlink.
-    if (resolve_symlink(fname, fname_buf) == OK) {
-      fname_res = fname_buf;
-    } else
-#endif
+    fname_res = (resolve_symlink(fname, fname_buf) == OK) ? fname_buf : fname;
+#else
     fname_res = fname;
+#endif
   }
 
   if (do_list) {
@@ -1503,7 +1497,6 @@ void swapfile_dict(const char *fname, dict_T *d)
 static time_t swapfile_info(char *fname)
 {
   assert(fname != NULL);
-  int fd;
   ZeroBlock b0;
   time_t x = (time_t)0;
 #ifdef UNIX
@@ -1531,7 +1524,7 @@ static time_t swapfile_info(char *fname)
   }
 
   // print the original file name
-  fd = os_open(fname, O_RDONLY, 0);
+  int fd = os_open(fname, O_RDONLY, 0);
   if (fd >= 0) {
     if (read_eintr(fd, &b0, sizeof(b0)) == sizeof(b0)) {
       if (strncmp(b0.b0_version, "VIM 3.0", 7) == 0) {
@@ -1565,7 +1558,7 @@ static time_t swapfile_info(char *fname)
           msg_outtrans(b0.b0_hname, 0);
         }
 
-        if (char_to_long(b0.b0_pid) != 0L) {
+        if (char_to_long(b0.b0_pid) != 0) {
           msg_puts(_("\n        process ID: "));
           msg_outnum((int)char_to_long(b0.b0_pid));
           if ((process_running = swapfile_process_running(&b0, fname))) {
@@ -1636,7 +1629,7 @@ static bool swapfile_unchanged(char *fname)
   }
 
   // process must be known and not running.
-  if (char_to_long(b0.b0_pid) == 0L || swapfile_process_running(&b0, fname)) {
+  if (char_to_long(b0.b0_pid) == 0 || swapfile_process_running(&b0, fname)) {
     ret = false;
   }
 
@@ -2116,11 +2109,8 @@ static int ml_append_int(buf_T *buf, linenr_T lnum, char *line, colnr_T len, boo
     int lines_moved;
     int data_moved = 0;                     // init to shut up gcc
     int total_moved = 0;                    // init to shut up gcc
-    DataBlock *dp_right, *dp_left;
     int stack_idx;
     bool in_left;
-    int lineadd;
-    blocknr_T bnum_left, bnum_right;
     linenr_T lnum_left, lnum_right;
     PointerBlock *pp_new;
 
@@ -2166,10 +2156,10 @@ static int ml_append_int(buf_T *buf, linenr_T lnum, char *line, colnr_T len, boo
       line_count_left = line_count;
       line_count_right = 0;
     }
-    dp_right = hp_right->bh_data;
-    dp_left = hp_left->bh_data;
-    bnum_left = hp_left->bh_bnum;
-    bnum_right = hp_right->bh_bnum;
+    DataBlock *dp_right = hp_right->bh_data;
+    DataBlock *dp_left = hp_left->bh_data;
+    blocknr_T bnum_left = hp_left->bh_bnum;
+    blocknr_T bnum_right = hp_right->bh_bnum;
     page_count_left = (int)hp_left->bh_page_count;
     page_count_right = (int)hp_right->bh_page_count;
 
@@ -2248,7 +2238,7 @@ static int ml_append_int(buf_T *buf, linenr_T lnum, char *line, colnr_T len, boo
     // flush the old data block
     // set ml_locked_lineadd to 0, because the updating of the
     // pointer blocks is done below
-    lineadd = buf->b_ml.ml_locked_lineadd;
+    int lineadd = buf->b_ml.ml_locked_lineadd;
     buf->b_ml.ml_locked_lineadd = 0;
     (void)ml_find_line(buf, 0, ML_FLUSH);  // flush data block
 
@@ -2854,7 +2844,6 @@ static bhdr_T *ml_new_ptr(memfile_T *mfp)
 /// @return  NULL for failure, pointer to block header otherwise
 static bhdr_T *ml_find_line(buf_T *buf, linenr_T lnum, int action)
 {
-  PointerBlock *pp;
   bhdr_T *hp;
   int top;
 
@@ -2941,7 +2930,7 @@ static bhdr_T *ml_find_line(buf_T *buf, linenr_T lnum, int action)
       return hp;
     }
 
-    pp = (PointerBlock *)(dp);                // must be pointer block
+    PointerBlock *pp = (PointerBlock *)(dp);                // must be pointer block
     if (pp->pb_id != PTR_ID) {
       iemsg(_(e_pointer_block_id_wrong));
       goto error_block;
@@ -3256,15 +3245,8 @@ static void attention_message(buf_T *buf, char *fname)
 
 /// Trigger the SwapExists autocommands.
 ///
-/// @return  a value for equivalent to do_dialog() (see below):
-///          0: still need to ask for a choice
-///          1: open read-only
-///          2: edit anyway
-///          3: recover
-///          4: delete it
-///          5: quit
-///          6: abort
-static int do_swapexists(buf_T *buf, char *fname)
+/// @return  a value for equivalent to do_dialog().
+static sea_choice_T do_swapexists(buf_T *buf, char *fname)
 {
   set_vim_var_string(VV_SWAPNAME, fname, -1);
   set_vim_var_string(VV_SWAPCHOICE, NULL, -1);
@@ -3279,20 +3261,20 @@ static int do_swapexists(buf_T *buf, char *fname)
 
   switch (*get_vim_var_str(VV_SWAPCHOICE)) {
   case 'o':
-    return 1;
+    return SEA_CHOICE_READONLY;
   case 'e':
-    return 2;
+    return SEA_CHOICE_EDIT;
   case 'r':
-    return 3;
+    return SEA_CHOICE_RECOVER;
   case 'd':
-    return 4;
+    return SEA_CHOICE_DELETE;
   case 'q':
-    return 5;
+    return SEA_CHOICE_QUIT;
   case 'a':
-    return 6;
+    return SEA_CHOICE_ABORT;
   }
 
-  return 0;
+  return SEA_CHOICE_NONE;
 }
 
 /// Find out what name to use for the swapfile for buffer 'buf'.
@@ -3405,13 +3387,13 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
         //  - the buffer was not recovered
         if (differ == false && !(curbuf->b_flags & BF_RECOVERED)
             && vim_strchr(p_shm, SHM_ATTENTION) == NULL) {
-          int choice = 0;
+          sea_choice_T choice = SEA_CHOICE_NONE;
 
           // It's safe to delete the swapfile if all these are true:
           // - the edited file exists
           // - the swapfile has no changes and looks OK
           if (os_path_exists(buf->b_fname) && swapfile_unchanged(fname)) {
-            choice = 4;
+            choice = SEA_CHOICE_DELETE;
             if (p_verbose > 0) {
               verb_msg(_("Found a swap file that is not useful, deleting it"));
             }
@@ -3419,14 +3401,19 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
 
           // If there is a SwapExists autocommand and we can handle the
           // response, trigger it.  It may return 0 to ask the user anyway.
-          if (choice == 0
+          if (choice == SEA_CHOICE_NONE
               && swap_exists_action != SEA_NONE
               && has_autocmd(EVENT_SWAPEXISTS, buf_fname, buf)) {
             choice = do_swapexists(buf, fname);
           }
 
+          if (choice == SEA_CHOICE_NONE && swap_exists_action == SEA_READONLY) {
+            // always open readonly.
+            choice = SEA_CHOICE_READONLY;
+          }
+
           process_running = 0;  // Set by attention_message..swapfile_info.
-          if (choice == 0) {
+          if (choice == SEA_CHOICE_NONE) {
             // Show info about the existing swapfile.
             attention_message(buf, fname);
 
@@ -3439,7 +3426,7 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
             flush_buffers(FLUSH_TYPEAHEAD);
           }
 
-          if (swap_exists_action != SEA_NONE && choice == 0) {
+          if (swap_exists_action != SEA_NONE && choice == SEA_CHOICE_NONE) {
             const char *const sw_msg_1 = _("Swap file \"");
             const char *const sw_msg_2 = _("\" already exists!");
 
@@ -3453,56 +3440,57 @@ static char *findswapname(buf_T *buf, char **dirp, char *old_fname, bool *found_
             memcpy(name, sw_msg_1, sw_msg_1_len + 1);
             home_replace(NULL, fname, &name[sw_msg_1_len], fname_len, true);
             xstrlcat(name, sw_msg_2, name_len);
-            choice = do_dialog(VIM_WARNING, _("VIM - ATTENTION"),
-                               name,
-                               process_running
-                               ? _("&Open Read-Only\n&Edit anyway\n&Recover"
-                                   "\n&Quit\n&Abort") :
-                               _("&Open Read-Only\n&Edit anyway\n&Recover"
-                                 "\n&Delete it\n&Quit\n&Abort"),
-                               1, NULL, false);
+            int dialog_result
+              = do_dialog(VIM_WARNING,
+                          _("VIM - ATTENTION"),
+                          name,
+                          process_running
+                          ? _("&Open Read-Only\n&Edit anyway\n&Recover\n&Quit\n&Abort")
+                          : _("&Open Read-Only\n&Edit anyway\n&Recover\n&Delete it\n&Quit\n&Abort"),
+                          1, NULL, false);
 
-            if (process_running && choice >= 4) {
-              choice++;  // Skip missing "Delete it" button.
+            if (process_running && dialog_result >= 4) {
+              // compensate for missing "Delete it" button
+              dialog_result++;
             }
+            choice = (sea_choice_T)dialog_result;
             xfree(name);
 
             // pretend screen didn't scroll, need redraw anyway
             msg_reset_scroll();
           }
 
-          if (choice > 0) {
-            switch (choice) {
-            case 1:  // "Open Read-Only"
-              buf->b_p_ro = true;
-              break;
-            case 2:  // "Edit anyway"
-              break;
-            case 3:  // "Recover"
-              swap_exists_action = SEA_RECOVER;
-              break;
-            case 4:  // "Delete it"
-              os_remove(fname);
-              break;
-            case 5:  // "Quit"
-              swap_exists_action = SEA_QUIT;
-              break;
-            case 6:  // "Abort"
-              swap_exists_action = SEA_QUIT;
-              got_int = true;
-              break;
-            }
-
-            // If the swapfile was deleted this `fname` can be used.
-            if (!os_path_exists(fname)) {
-              break;
-            }
-          } else {
+          switch (choice) {
+          case SEA_CHOICE_READONLY:  // "Open Read-Only"
+            buf->b_p_ro = true;
+            break;
+          case SEA_CHOICE_EDIT:  // "Edit anyway"
+            break;
+          case SEA_CHOICE_RECOVER:  // "Recover"
+            swap_exists_action = SEA_RECOVER;
+            break;
+          case SEA_CHOICE_DELETE:  // "Delete it"
+            os_remove(fname);
+            break;
+          case SEA_CHOICE_QUIT:  // "Quit"
+            swap_exists_action = SEA_QUIT;
+            break;
+          case SEA_CHOICE_ABORT:  // "Abort"
+            swap_exists_action = SEA_QUIT;
+            got_int = true;
+            break;
+          case SEA_CHOICE_NONE:
             msg_puts("\n");
             if (msg_silent == 0) {
               // call wait_return() later
               need_wait_return = true;
             }
+            break;
+          }
+
+          // If the swapfile was deleted this `fname` can be used.
+          if (choice != SEA_CHOICE_NONE && !os_path_exists(fname)) {
+            break;
           }
         }
       }
@@ -3658,9 +3646,8 @@ static void long_to_char(long n, char *s_in)
 static long char_to_long(const char *s_in)
 {
   const uint8_t *s = (uint8_t *)s_in;
-  long retval;
 
-  retval = s[3];
+  long retval = s[3];
   retval <<= 8;
   retval |= s[2];
   retval <<= 8;
@@ -3677,14 +3664,12 @@ static long char_to_long(const char *s_in)
 /// - 'fileencoding'
 void ml_setflags(buf_T *buf)
 {
-  ZeroBlock *b0p;
-
   if (!buf->b_ml.ml_mfp) {
     return;
   }
   bhdr_T *hp = pmap_get(int64_t)(&buf->b_ml.ml_mfp->mf_hash, 0);
   if (hp) {
-    b0p = hp->bh_data;
+    ZeroBlock *b0p = hp->bh_data;
     b0p->b0_dirty = buf->b_changed ? B0_DIRTY : 0;
     b0p->b0_flags = (char)((b0p->b0_flags & ~B0_FF_MASK) | (uint8_t)(get_fileformat(buf) + 1));
     add_b0_fenc(b0p, buf);
@@ -3714,7 +3699,6 @@ static void ml_updatechunk(buf_T *buf, linenr_T line, int len, int updtype)
 
   linenr_T curline = ml_upd_lastcurline;
   int curix = ml_upd_lastcurix;
-  chunksize_T *curchnk;
   bhdr_T *hp;
 
   if (buf->b_ml.ml_usedchunks == -1 || len == 0) {
@@ -3753,7 +3737,7 @@ static void ml_updatechunk(buf_T *buf, linenr_T line, int len, int updtype)
     curline += buf->b_ml.ml_chunksize[curix].mlcs_numlines;
     curix++;
   }
-  curchnk = buf->b_ml.ml_chunksize + curix;
+  chunksize_T *curchnk = buf->b_ml.ml_chunksize + curix;
 
   if (updtype == ML_CHNK_DELLINE) {
     len = -len;
@@ -3894,9 +3878,6 @@ static void ml_updatechunk(buf_T *buf, linenr_T line, int len, int updtype)
 /// @return  -1 if information is not available
 int ml_find_line_or_offset(buf_T *buf, linenr_T lnum, int *offp, bool no_ff)
 {
-  linenr_T curline;
-  int curix;
-  int size;
   bhdr_T *hp;
   int text_end;
   int offset;
@@ -3941,9 +3922,9 @@ int ml_find_line_or_offset(buf_T *buf, linenr_T lnum, int *offp, bool no_ff)
   }
   // Find the last chunk before the one containing our line. Last chunk is
   // special because it will never qualify
-  curline = 1;
-  curix = 0;
-  size = 0;
+  linenr_T curline = 1;
+  int curix = 0;
+  int size = 0;
   while (curix < buf->b_ml.ml_usedchunks - 1
          && ((lnum != 0
               && lnum >= curline + buf->b_ml.ml_chunksize[curix].mlcs_numlines)

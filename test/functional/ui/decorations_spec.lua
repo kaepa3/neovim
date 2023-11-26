@@ -11,6 +11,7 @@ local meths = helpers.meths
 local funcs = helpers.funcs
 local curbufmeths = helpers.curbufmeths
 local command = helpers.command
+local eq = helpers.eq
 local assert_alive = helpers.assert_alive
 
 describe('decorations providers', function()
@@ -662,7 +663,7 @@ describe('decorations providers', function()
     ]])
   end)
 
-  it('does not allow removing extmarks during on_line callbacks', function()
+  it('does allow removing extmarks during on_line callbacks', function()
     exec_lua([[
       eok = true
     ]])
@@ -675,7 +676,7 @@ describe('decorations providers', function()
       end
     ]])
     exec_lua([[
-      assert(eok == false)
+      assert(eok == true)
     ]])
   end)
 
@@ -1995,6 +1996,60 @@ describe('extmark decorations', function()
       {1:~                                                 }|
                                                         |
     ]]}
+  end)
+
+  local function with_undo_restore(val)
+    screen:try_resize(50, 5)
+    insert(example_text)
+    feed'gg'
+    meths.buf_set_extmark(0, ns, 0, 6, { end_col=13, hl_group = 'NonText', undo_restore=val})
+    screen:expect{grid=[[
+      ^for _,{1:item in} ipairs(items) do                    |
+          local text, hl_id_cell, count = unpack(item)  |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+                                                        |
+    ]]}
+
+    meths.buf_set_text(0, 0, 4, 0, 8, {''})
+    screen:expect{grid=[[
+      ^for {1:em in} ipairs(items) do                        |
+          local text, hl_id_cell, count = unpack(item)  |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+                                                        |
+    ]]}
+  end
+
+  it("highlights do reapply to restored text after delete", function()
+    with_undo_restore(true) -- also default behavior
+
+    command('silent undo')
+    screen:expect{grid=[[
+      ^for _,{1:item in} ipairs(items) do                    |
+          local text, hl_id_cell, count = unpack(item)  |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+                                                        |
+    ]]}
+  end)
+
+  it("highlights don't reapply to restored text after delete with undo_restore=false", function()
+    with_undo_restore(false)
+
+    command('silent undo')
+    screen:expect{grid=[[
+      ^for _,it{1:em in} ipairs(items) do                    |
+          local text, hl_id_cell, count = unpack(item)  |
+          if hl_id_cell ~= nil then                     |
+              hl_id = hl_id_cell                        |
+                                                        |
+    ]]}
+
+    eq({ { 1, 0, 8, { end_col = 13, end_right_gravity = false, end_row = 0,
+                       hl_eol = false, hl_group = "NonText", undo_restore = false,
+                       ns_id = 1, priority = 4096, right_gravity = true } } },
+       meths.buf_get_extmarks(0, ns, {0,0}, {0, -1}, {details=true}))
   end)
 
   it('virtual text works with rightleft', function()
@@ -4573,6 +4628,27 @@ l5
 
   end)
 
+  it('can add a single sign and text highlight', function()
+    insert(example_test3)
+    feed 'gg'
+
+    meths.buf_set_extmark(0, ns, 1, 0, {sign_text='S', hl_group='Todo', end_col=1})
+    screen:expect{grid=[[
+      {1:  }^l1                                              |
+      S {3:l}2                                              |
+      {1:  }l3                                              |
+      {1:  }l4                                              |
+      {1:  }l5                                              |
+      {1:  }                                                |
+      {2:~                                                 }|
+      {2:~                                                 }|
+      {2:~                                                 }|
+                                                        |
+    ]]}
+
+    meths.buf_clear_namespace(0, ns, 0, -1)
+  end)
+
   it('can add multiple signs (single extmark)', function()
     insert(example_test3)
     feed 'gg'
@@ -4625,7 +4701,7 @@ l5
 
     screen:expect{grid=[[
       {1:    }^l1                                            |
-      S2S1l2                                            |
+      S1S2l2                                            |
       {1:    }l3                                            |
       {1:    }l4                                            |
       {1:    }l5                                            |
@@ -4665,7 +4741,7 @@ l5
     screen:expect{grid=[[
       {1:    }^l1                                            |
       S1{1:  }l2                                            |
-      S2S1l3                                            |
+      S1S2l3                                            |
       S2{1:  }l4                                            |
       {1:    }l5                                            |
       {1:    }                                              |
@@ -4710,7 +4786,7 @@ l5
     meths.buf_set_extmark(0, ns, 2, -1, {sign_text='S5'})
 
     screen:expect{grid=[[
-      S4S1^l1                                            |
+      S1S4^l1                                            |
       x S2l2                                            |
       S5{1:  }l3                                            |
       {1:    }l4                                            |
@@ -4737,9 +4813,9 @@ l5
     meths.buf_set_extmark(0, ns, 2, -1, {sign_text='S5'})
 
     screen:expect{grid=[[
-      S3S4S1^l1                                          |
+      S1S3S4^l1                                          |
       x S2S3l2                                          |
-      S5S3{1:  }l3                                          |
+      S3S5{1:  }l3                                          |
       S3{1:    }l4                                          |
       S3{1:    }l5                                          |
       {1:      }                                            |
@@ -4793,15 +4869,15 @@ l5
     end
 
     screen:expect{grid=[[
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
-      X Y Z W {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:^h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:h}                 |
+      W X Y Z {3:a} {3:b} {3:c} {3:d} {3:e} {3:f} {3:g} {3:^h}                 |
                                               |
     ]]}
   end)

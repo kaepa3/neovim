@@ -274,9 +274,9 @@ describe('Signs', function()
       -- Line 3 checks that with a limit over the maximum number
       -- of signs, the ones with the highest Ids are being picked,
       -- and presented by their sorted Id order.
-      command('sign place 4 line=3 name=pietSearch buffer=1')
-      command('sign place 5 line=3 name=pietWarn buffer=1')
-      command('sign place 3 line=3 name=pietError buffer=1')
+      command('sign place 6 line=3 name=pietSearch buffer=1')
+      command('sign place 7 line=3 name=pietWarn buffer=1')
+      command('sign place 5 line=3 name=pietError buffer=1')
       screen:expect([[
         {1:>>}{8:XX}{6:  1 }a                                            |
         {8:XX}{1:>>}{6:  2 }b                                            |
@@ -682,6 +682,23 @@ describe('Signs', function()
       {0:~                                                    }|
       {0:~                                                    }|
       {0:~                                                    }|
+                                                           |
+    ]])
+  end)
+
+  it('numhl highlight is applied when signcolumn=no', function()
+    screen:try_resize(screen._width, 4)
+    command([[
+      set nu scl=no
+      call setline(1, ['line1', 'line2', 'line3'])
+      call nvim_buf_set_extmark(0, nvim_create_namespace('test'), 0, 0, {'number_hl_group':'Error'})
+      call sign_define('foo', { 'text':'F', 'numhl':'Error' })
+      call sign_place(0, '', 'foo', bufnr(''), { 'lnum':2 })
+    ]])
+    screen:expect([[
+      {8:  1 }^line1                                            |
+      {8:  2 }line2                                            |
+      {6:  3 }line3                                            |
                                                            |
     ]])
   end)

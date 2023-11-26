@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #ifdef __APPLE__
 # define Boolean CFBoolean  // Avoid conflict with API's Boolean
 # define FileInfo CSFileInfo  // Avoid conflict with API's Fileinfo
@@ -211,7 +208,7 @@ void ex_language(exarg_T *eap)
 #ifdef HAVE_NL_MSG_CAT_CNTR
       // Need to do this for GNU gettext, otherwise cached translations
       // will be used again.
-      extern int _nl_msg_cat_cntr;
+      extern int _nl_msg_cat_cntr;  // NOLINT(bugprone-reserved-identifier)
 
       _nl_msg_cat_cntr++;
 #endif

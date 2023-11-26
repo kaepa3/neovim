@@ -1,8 +1,4 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "klib/kvec.h"
@@ -15,8 +11,8 @@
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
+#include "nvim/decoration_defs.h"
 #include "nvim/drawscreen.h"
-#include "nvim/extmark_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight_group.h"
@@ -28,6 +24,7 @@
 #include "nvim/syntax.h"
 #include "nvim/ui.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/win_config.c.generated.h"

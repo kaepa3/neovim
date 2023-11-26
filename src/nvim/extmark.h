@@ -1,5 +1,4 @@
-#ifndef NVIM_EXTMARK_H
-#define NVIM_EXTMARK_H
+#pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -16,19 +15,7 @@
 
 EXTERN int extmark_splice_pending INIT( = 0);
 
-typedef struct {
-  uint64_t ns_id;
-  uint64_t mark_id;
-  int row;
-  colnr_T col;
-  int end_row;
-  colnr_T end_col;
-  bool right_gravity;
-  bool end_right_gravity;
-  Decoration decor;  // TODO(bfredl): CHONKY
-} ExtmarkInfo;
-
-typedef kvec_t(ExtmarkInfo) ExtmarkInfoArray;
+typedef kvec_t(MTPair) ExtmarkInfoArray;
 
 // TODO(bfredl): good enough name for now.
 typedef ptrdiff_t bcount_t;
@@ -66,6 +53,7 @@ typedef struct {
   colnr_T old_col;
   int row;
   colnr_T col;
+  bool invalidated;
 } ExtmarkSavePos;
 
 typedef enum {
@@ -76,12 +64,15 @@ typedef enum {
   kExtmarkClear,
 } UndoObjectType;
 
+// TODO(bfredl): if possible unify these with marktree flags,
+// so it is possible to filter extmarks directly on top-level flags
 typedef enum {
   kExtmarkNone = 0x1,
   kExtmarkSign = 0x2,
-  kExtmarkVirtText = 0x4,
-  kExtmarkVirtLines = 0x8,
-  kExtmarkHighlight = 0x10,
+  kExtmarkSignHL = 0x4,
+  kExtmarkVirtText = 0x8,
+  kExtmarkVirtLines = 0x10,
+  kExtmarkHighlight = 0x20,
 } ExtmarkType;
 
 // TODO(bfredl): reduce the number of undo action types
@@ -97,5 +88,3 @@ struct undo_object {
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "extmark.h.generated.h"
 #endif
-
-#endif  // NVIM_EXTMARK_H

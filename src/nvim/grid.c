@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // Most of the routines in this file perform screen (grid) manipulations. The
 // given operation is performed physically on the screen. The corresponding
 // change is also made to the internal screen image. In this way, the editor
@@ -69,21 +66,6 @@ void grid_adjust(ScreenGrid **grid, int *row_off, int *col_off)
     *col_off += (*grid)->col_offset;
     *grid = (*grid)->target;
   }
-}
-
-/// Put a unicode char, and up to MAX_MCO composing chars, in a screen cell.
-schar_T schar_from_cc(int c, int u8cc[MAX_MCO])
-{
-  char buf[MAX_SCHAR_SIZE];
-  int len = utf_char2bytes(c, buf);
-  for (int i = 0; i < MAX_MCO; i++) {
-    if (u8cc[i] == 0) {
-      break;
-    }
-    len += utf_char2bytes(u8cc[i], buf + len);
-  }
-  buf[len] = 0;
-  return schar_from_buf(buf, (size_t)len);
 }
 
 schar_T schar_from_str(char *str)
@@ -246,22 +228,21 @@ void line_do_arabic_shape(schar_T *buf, int cols)
     schar_get(scbuf, buf[i]);
 
     char scbuf_new[MAX_SCHAR_SIZE];
-    int len = utf_char2bytes(c0new, scbuf_new);
+    size_t len = (size_t)utf_char2bytes(c0new, scbuf_new);
     if (c1new) {
-      len += utf_char2bytes(c1new, scbuf_new + len);
+      len += (size_t)utf_char2bytes(c1new, scbuf_new + len);
     }
 
     int off = utf_char2len(c0) + (c1 ? utf_char2len(c1) : 0);
     size_t rest = strlen(scbuf + off);
-    if (rest + (size_t)off + 1 > MAX_SCHAR_SIZE) {
-      // TODO(bfredl): this cannot happen just yet, as we only construct
-      // schar_T values with up to MAX_MCO+1 composing codepoints. When code
-      // is improved so that MAX_SCHAR_SIZE becomes the only/sharp limit,
-      // we need be able to peel off a composing char which doesn't fit anymore.
-      abort();
+    if (rest + len + 1 > MAX_SCHAR_SIZE) {
+      // Too bigly, discard one code-point.
+      // This should be enough as c0 cannot grow more than from 2 to 4 bytes
+      // (base arabic to extended arabic)
+      rest -= (size_t)utf_cp_head_off(scbuf + off, scbuf + off + rest - 1) + 1;
     }
     memcpy(scbuf_new + len, scbuf + off, rest);
-    buf[i] = schar_from_buf(scbuf_new, (size_t)len + rest);
+    buf[i] = schar_from_buf(scbuf_new, len + rest);
 
 next:
     c0prev = c0;
@@ -292,9 +273,9 @@ static bool grid_invalid_row(ScreenGrid *grid, int row)
   return grid->attrs[grid->line_offset[row]] < 0;
 }
 
-/// Get a single character directly from grid.chars into "bytes", which must
-/// have a size of "MB_MAXBYTES + 1".
-/// If "attrp" is not NULL, return the character's attribute in "*attrp".
+/// Get a single character directly from grid.chars
+///
+/// @param[out] attrp  set to the character's attribute (optional)
 schar_T grid_getchar(ScreenGrid *grid, int row, int col, int *attrp)
 {
   grid_adjust(&grid, &row, &col);
@@ -367,6 +348,9 @@ schar_T grid_line_getchar(int col, int *attr)
 void grid_line_put_schar(int col, schar_T schar, int attr)
 {
   assert(grid_line_grid);
+  if (col >= grid_line_maxcol) {
+    return;
+  }
 
   linebuf_char[col] = schar;
   linebuf_attr[col] = attr;
@@ -388,41 +372,34 @@ int grid_line_puts(int col, const char *text, int textlen, int attr)
 {
   const char *ptr = text;
   int len = textlen;
-  int u8cc[MAX_MCO];
 
   assert(grid_line_grid);
 
   int start_col = col;
 
-  int max_col = grid_line_maxcol;
-  while (col < max_col
-         && (len < 0 || (int)(ptr - text) < len)
-         && *ptr != NUL) {
+  const int max_col = grid_line_maxcol;
+  while (col < max_col && (len < 0 || (int)(ptr - text) < len) && *ptr != NUL) {
     // check if this is the first byte of a multibyte
     int mbyte_blen = len > 0
-      ? utfc_ptr2len_len(ptr, (int)((text + len) - ptr))
-      : utfc_ptr2len(ptr);
-    int u8c = len >= 0
-      ? utfc_ptr2char_len(ptr, u8cc, (int)((text + len) - ptr))
-      : utfc_ptr2char(ptr, u8cc);
-    int mbyte_cells = utf_char2cells(u8c);
+                     ? utfc_ptr2len_len(ptr, (int)((text + len) - ptr))
+                     : utfc_ptr2len(ptr);
+    int firstc;
+    schar_T schar = len >= 0
+                    ? utfc_ptr2schar_len(ptr, (int)((text + len) - ptr), &firstc)
+                    : utfc_ptr2schar(ptr, &firstc);
+    int mbyte_cells = utf_char2cells(firstc);
     if (mbyte_cells > 2) {
       mbyte_cells = 1;
-      u8c = 0xFFFD;
-      u8cc[0] = 0;
+
+      schar = schar_from_char(0xFFFD);
     }
 
     if (col + mbyte_cells > max_col) {
       // Only 1 cell left, but character requires 2 cells:
       // display a '>' in the last column to avoid wrapping. */
-      u8c = '>';
-      u8cc[0] = 0;
+      schar = schar_from_ascii('>');
       mbyte_cells = 1;
     }
-
-    schar_T buf;
-    // TODO(bfredl): why not just keep the original byte sequence.
-    buf = schar_from_cc(u8c, u8cc);
 
     // When at the start of the text and overwriting the right half of a
     // two-cell character in the same grid, truncate that into a '>'.
@@ -431,7 +408,7 @@ int grid_line_puts(int col, const char *text, int textlen, int attr)
       linebuf_char[col - 1] = schar_from_ascii('>');
     }
 
-    linebuf_char[col] = buf;
+    linebuf_char[col] = schar;
     linebuf_attr[col] = attr;
     linebuf_vcol[col] = -1;
     if (mbyte_cells == 2) {
@@ -454,16 +431,20 @@ int grid_line_puts(int col, const char *text, int textlen, int attr)
 
 void grid_line_fill(int start_col, int end_col, int c, int attr)
 {
+  end_col = MIN(end_col, grid_line_maxcol);
+  if (start_col >= end_col) {
+    return;
+  }
+
   schar_T sc = schar_from_char(c);
   for (int col = start_col; col < end_col; col++) {
     linebuf_char[col] = sc;
     linebuf_attr[col] = attr;
     linebuf_vcol[col] = -1;
   }
-  if (start_col < end_col) {
-    grid_line_first = MIN(grid_line_first, start_col);
-    grid_line_last = MAX(grid_line_last, end_col);
-  }
+
+  grid_line_first = MIN(grid_line_first, start_col);
+  grid_line_last = MAX(grid_line_last, end_col);
 }
 
 /// move the cursor to a position in a currently rendered line.
@@ -477,14 +458,21 @@ void grid_line_mirror(void)
   if (grid_line_first >= grid_line_last) {
     return;
   }
+  linebuf_mirror(&grid_line_first, &grid_line_last, grid_line_maxcol);
+}
 
-  size_t n = (size_t)(grid_line_last - grid_line_first);
-  int mirror = grid_line_maxcol - 1;  // Mirrors are more fun than television.
+void linebuf_mirror(int *firstp, int *lastp, int maxcol)
+{
+  int first = *firstp;
+  int last = *lastp;
+
+  size_t n = (size_t)(last - first);
+  int mirror = maxcol - 1;  // Mirrors are more fun than television.
   schar_T *scratch_char = (schar_T *)linebuf_scratch;
-  memcpy(scratch_char + grid_line_first, linebuf_char + grid_line_first, n * sizeof(schar_T));
-  for (int col = grid_line_first; col < grid_line_last; col++) {
+  memcpy(scratch_char + first, linebuf_char + first, n * sizeof(schar_T));
+  for (int col = first; col < last; col++) {
     int rev = mirror - col;
-    if (col + 1 < grid_line_last && scratch_char[col + 1] == 0) {
+    if (col + 1 < last && scratch_char[col + 1] == 0) {
       linebuf_char[rev - 1] = scratch_char[col];
       linebuf_char[rev] = 0;
       col++;
@@ -495,20 +483,19 @@ void grid_line_mirror(void)
 
   // for attr and vcol: assumes doublewidth chars are self-consistent
   sattr_T *scratch_attr = (sattr_T *)linebuf_scratch;
-  memcpy(scratch_attr + grid_line_first, linebuf_attr + grid_line_first, n * sizeof(sattr_T));
-  for (int col = grid_line_first; col < grid_line_last; col++) {
+  memcpy(scratch_attr + first, linebuf_attr + first, n * sizeof(sattr_T));
+  for (int col = first; col < last; col++) {
     linebuf_attr[mirror - col] = scratch_attr[col];
   }
 
   colnr_T *scratch_vcol = (colnr_T *)linebuf_scratch;
-  memcpy(scratch_vcol + grid_line_first, linebuf_vcol + grid_line_first, n * sizeof(colnr_T));
-  for (int col = grid_line_first; col < grid_line_last; col++) {
+  memcpy(scratch_vcol + first, linebuf_vcol + first, n * sizeof(colnr_T));
+  for (int col = first; col < last; col++) {
     linebuf_vcol[mirror - col] = scratch_vcol[col];
   }
 
-  int grid_line_last_copy = grid_line_last;
-  grid_line_last = grid_line_maxcol - grid_line_first;
-  grid_line_first = grid_line_maxcol - grid_line_last_copy;
+  *lastp = maxcol - first;
+  *firstp = maxcol - last;
 }
 
 /// End a group of grid_line_puts calls and send the screen buffer to the UI layer.
@@ -516,7 +503,8 @@ void grid_line_flush(void)
 {
   ScreenGrid *grid = grid_line_grid;
   grid_line_grid = NULL;
-  if (!(grid_line_first < grid_line_last)) {
+  assert(grid_line_last <= grid_line_maxcol);
+  if (grid_line_first >= grid_line_last) {
     return;
   }
 
@@ -546,8 +534,6 @@ void grid_line_flush_if_valid_row(void)
 void grid_fill(ScreenGrid *grid, int start_row, int end_row, int start_col, int end_col, int c1,
                int c2, int attr)
 {
-  schar_T sc;
-
   int row_off = 0, col_off = 0;
   grid_adjust(&grid, &row_off, &col_off);
   start_row += row_off;
@@ -591,7 +577,7 @@ void grid_fill(ScreenGrid *grid, int start_row, int end_row, int start_col, int 
     }
 
     int col = start_col;
-    sc = schar_from_char(c1);
+    schar_T sc = schar_from_char(c1);
     for (col = start_col; col < end_col; col++) {
       size_t off = lineoff + (size_t)col;
       if (grid->chars[off] != sc || grid->attrs[off] != attr || rdb_flags & RDB_NODELTA) {
@@ -698,10 +684,10 @@ void grid_put_linebuf(ScreenGrid *grid, int row, int coloff, int col, int endcol
       }
     }
     col = endcol + 1;
-    endcol = (clear_width > 0 ? clear_width : -clear_width);
+    endcol = clear_width;
   }
 
-  if (p_arshape && !p_tbidi) {
+  if (p_arshape && !p_tbidi && endcol > col) {
     line_do_arabic_shape(linebuf_char + col, endcol - col);
   }
 

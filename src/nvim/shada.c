@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 #include <assert.h>
 #include <inttypes.h>
 #include <msgpack/object.h>
@@ -57,8 +54,8 @@
 #include "nvim/vim.h"
 
 #ifdef HAVE_BE64TOH
-# define _BSD_SOURCE 1
-# define _DEFAULT_SOURCE 1
+# define _BSD_SOURCE 1  // NOLINT(bugprone-reserved-identifier)
+# define _DEFAULT_SOURCE 1  // NOLINT(bugprone-reserved-identifier)
 # include ENDIAN_INCLUDE_FILE
 #endif
 
@@ -1614,8 +1611,8 @@ static ShaDaWriteResult shada_pack_entry(msgpack_packer *const packer, ShadaEntr
                              // finally, additional data:
                              + (
                                 entry.data.search_pattern.additional_data
-              ? entry.data.search_pattern.additional_data->dv_hashtab.ht_used
-              : 0));
+                                ? entry.data.search_pattern.additional_data->dv_hashtab.ht_used
+                                : 0));
     msgpack_pack_map(spacker, entry_map_size);
     PACK_STATIC_STR(SEARCH_KEY_PAT);
     PACK_BIN(cstr_as_string(entry.data.search_pattern.pat));
@@ -1648,8 +1645,8 @@ static ShaDaWriteResult shada_pack_entry(msgpack_packer *const packer, ShadaEntr
                              // Additional entries, if any:
                              + (
                                 entry.data.filemark.additional_data == NULL
-              ? 0
-              : entry.data.filemark.additional_data->dv_hashtab.ht_used));
+                                ? 0
+                                : entry.data.filemark.additional_data->dv_hashtab.ht_used));
     msgpack_pack_map(spacker, entry_map_size);
     PACK_STATIC_STR(KEY_FILE);
     PACK_BIN(cstr_as_string(entry.data.filemark.fname));
@@ -1721,9 +1718,9 @@ static ShaDaWriteResult shada_pack_entry(msgpack_packer *const packer, ShadaEntr
                                + (
                                   entry.data.buffer_list.buffers[i].additional_data
                                   == NULL
-                ? 0
-                : (entry.data.buffer_list.buffers[i].additional_data
-                   ->dv_hashtab.ht_used)));
+                                  ? 0
+                                  : (entry.data.buffer_list.buffers[i].additional_data
+                                     ->dv_hashtab.ht_used)));
       msgpack_pack_map(spacker, entry_map_size);
       PACK_STATIC_STR(KEY_FILE);
       PACK_BIN(cstr_as_string(entry.data.buffer_list.buffers[i].fname));
@@ -2349,8 +2346,8 @@ static inline void add_search_pattern(PossiblyFreedShadaEntry *const ret_pse,
                                 : pat.off.line),
             .place_cursor_at_end = (
                                     is_substitute_pattern
-                ? defaults.data.search_pattern.place_cursor_at_end
-                : pat.off.end),
+                                    ? defaults.data.search_pattern.place_cursor_at_end
+                                    : pat.off.end),
             .offset = (is_substitute_pattern
                        ? defaults.data.search_pattern.offset
                        : pat.off.off),
@@ -2503,9 +2500,9 @@ static ShaDaWriteResult shada_write(ShaDaWriteDef *const sd_writer, ShaDaReadDef
 
   // Initialize history merger
   for (HistoryType i = 0; i < HIST_COUNT; i++) {
-    long num_saved = get_shada_parameter(hist_type2char(i));
+    int num_saved = get_shada_parameter(hist_type2char(i));
     if (num_saved == -1) {
-      num_saved = (long)p_hi;
+      num_saved = (int)p_hi;
     }
     if (num_saved > 0) {
       dump_history = true;
@@ -3338,7 +3335,6 @@ static ShaDaReadResult msgpack_read_uint64(ShaDaReadDef *const sd_reader, const 
 #define ID(s) s
 #define BINDUP(b) xmemdupz((b).ptr, (b).size)
 #define TOINT(s) ((int)(s))
-#define TOLONG(s) ((long)(s))
 #define TOCHAR(s) ((char)(s))
 #define TOU8(s) ((uint8_t)(s))
 #define TOSIZE(s) ((size_t)(s))
@@ -3897,7 +3893,7 @@ shada_read_next_item_start:
           // XXX: Temporarily reassign `i` because the macros depend on it.
           const size_t j = i;
           {
-            for (i = 0; i < unpacked_2.data.via.map.size; i++) {  // -V535
+            for (i = 0; i < unpacked_2.data.via.map.size; i++) {
               CHECK_KEY_IS_STR(unpacked_2, "buffer list entry")
               INTEGER_KEY(unpacked_2, "buffer list entry", KEY_LNUM,
                           entry->data.buffer_list.buffers[j].pos.lnum)
@@ -3964,7 +3960,6 @@ shada_read_next_item_error:
 #undef BINDUP
 #undef TOCHAR
 #undef TOINT
-#undef TOLONG
 #undef TYPED_KEY
 #undef INT_KEY
 #undef INTEGER_KEY
@@ -3982,12 +3977,11 @@ shada_read_next_item_error:
 static bool shada_removable(const char *name)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
-  char *p;
   char part[MAXPATHL + 1];
   bool retval = false;
 
   char *new_name = home_replace_save(NULL, name);
-  for (p = p_shada; *p;) {
+  for (char *p = p_shada; *p;) {
     (void)copy_option_part(&p, part, ARRAY_SIZE(part), ", ");
     if (part[0] == 'r') {
       home_replace(NULL, part + 1, NameBuff, MAXPATHL, true);

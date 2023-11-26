@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 /// An abstraction to handle blocks of memory which can be stored in a file.
 /// This is the implementation of a sort of virtual memory.
 ///
@@ -125,7 +122,7 @@ memfile_T *mf_open(char *fname, int flags)
   // must be rounded up.
   if (mfp->mf_fd < 0
       || (flags & (O_TRUNC|O_EXCL))
-      || (size = vim_lseek(mfp->mf_fd, 0L, SEEK_END)) <= 0) {
+      || (size = vim_lseek(mfp->mf_fd, 0, SEEK_END)) <= 0) {
     // no file or empty file
     mfp->mf_blocknr_max = 0;
   } else {
@@ -563,9 +560,7 @@ static int mf_read(memfile_T *mfp, bhdr_T *hp)
 ///                - Write error in swap file.
 static int mf_write(memfile_T *mfp, bhdr_T *hp)
 {
-  off_T offset;             // offset in the file
   bhdr_T *hp2;
-  unsigned page_size;       // number of bytes in a page
   unsigned page_count;      // number of pages written
 
   if (mfp->mf_fd < 0) {     // there is no file, can't write
@@ -578,7 +573,7 @@ static int mf_write(memfile_T *mfp, bhdr_T *hp)
     }
   }
 
-  page_size = mfp->mf_page_size;
+  unsigned page_size = mfp->mf_page_size;  // number of bytes in a page
 
   /// We don't want gaps in the file. Write the blocks in front of *hp
   /// to extend the file.
@@ -594,7 +589,7 @@ static int mf_write(memfile_T *mfp, bhdr_T *hp)
     }
 
     // TODO(elmart): Check (page_size * nr) within off_T bounds.
-    offset = (off_T)(page_size * nr);
+    off_T offset = (off_T)(page_size * nr);  // offset in the file
     if (vim_lseek(mfp->mf_fd, offset, SEEK_SET) != offset) {
       PERROR(_("E296: Seek error in swap file write"));
       return FAIL;

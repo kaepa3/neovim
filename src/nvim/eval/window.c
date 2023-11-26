@@ -1,6 +1,3 @@
-// This is an open source non-commercial project. Dear PVS-Studio, please check
-// it. PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
-
 // eval/window.c: Window related builtin functions
 
 #include <stdbool.h>
@@ -29,6 +26,7 @@
 #include "nvim/types.h"
 #include "nvim/vim.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "eval/window.c.generated.h"
@@ -638,7 +636,7 @@ void f_win_splitmove(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   if (wp == NULL || targetwin == NULL || wp == targetwin
       || !win_valid(wp) || !win_valid(targetwin)
-      || win_valid_floating(wp) || win_valid_floating(targetwin)) {
+      || win_float_valid(wp) || win_float_valid(targetwin)) {
     emsg(_(e_invalwindow));
     rettv->vval.v_number = -1;
     return;
