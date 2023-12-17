@@ -16,7 +16,7 @@
 #include "auto/config.h"
 #include "klib/kvec.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -48,11 +48,11 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/help.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
 #include "nvim/input.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -66,25 +66,26 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/os/time.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 /// Case matching style to use for :substitute
@@ -155,7 +156,7 @@ void do_ascii(exarg_T *eap)
                       ? NL  // NL is stored as CR.
                       : c);
     char buf1[20];
-    if (vim_isprintc_strict(c) && (c < ' ' || c > '~')) {
+    if (vim_isprintc(c) && (c < ' ' || c > '~')) {
       char buf3[7];
       transchar_nonprint(curbuf, buf3, c);
       vim_snprintf(buf1, sizeof(buf1), "  <%s>", buf3);
@@ -3143,7 +3144,7 @@ static char *sub_grow_buf(char **new_start, int *new_start_len, int needed_len)
     // substitution into (and some extra space to avoid
     // too many calls to xmalloc()/free()).
     *new_start_len = needed_len + 50;
-    *new_start = xmalloc((size_t)(*new_start_len));
+    *new_start = xcalloc(1, (size_t)(*new_start_len));
     **new_start = NUL;
     new_end = *new_start;
   } else {
@@ -3153,8 +3154,11 @@ static char *sub_grow_buf(char **new_start, int *new_start_len, int needed_len)
     size_t len = strlen(*new_start);
     needed_len += (int)len;
     if (needed_len > *new_start_len) {
+      size_t prev_new_start_len = (size_t)(*new_start_len);
       *new_start_len = needed_len + 50;
+      size_t added_len = (size_t)(*new_start_len) - prev_new_start_len;
       *new_start = xrealloc(*new_start, (size_t)(*new_start_len));
+      memset(*new_start + prev_new_start_len, 0, added_len);
     }
     new_end = *new_start + len;
   }
@@ -4261,7 +4265,7 @@ skip:
   // Show 'inccommand' preview if there are matched lines.
   if (cmdpreview_ns > 0 && !aborting()) {
     if (got_quit || profile_passed_limit(timeout)) {  // Too slow, disable.
-      set_string_option_direct("icm", -1, "", OPT_FREE, SID_NONE);
+      set_string_option_direct(kOptInccommand, "", OPT_FREE, SID_NONE);
     } else if (*p_icm != NUL && pat != NULL) {
       if (pre_hl_id == 0) {
         pre_hl_id = syn_check_group(S_LEN("Substitute"));
@@ -4540,8 +4544,8 @@ bool prepare_tagpreview(bool undo_sync)
   curwin->w_p_wfh = true;
   RESET_BINDING(curwin);                // don't take over 'scrollbind' and 'cursorbind'
   curwin->w_p_diff = false;             // no 'diff'
-  set_string_option_direct("fdc", -1,     // no 'foldcolumn'
-                           "0", OPT_FREE, SID_NONE);
+
+  set_string_option_direct(kOptFoldcolumn, "0", OPT_FREE, SID_NONE);  // no 'foldcolumn'
   return true;
 }
 
@@ -4560,7 +4564,7 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
   buf_T *cmdpreview_buf = NULL;
 
   // disable file info message
-  set_string_option_direct("shm", -1, "F", OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptShortmess, "F", OPT_FREE, SID_NONE);
 
   // Update the topline to ensure that main window is on the correct line
   update_topline(curwin);
@@ -4576,7 +4580,6 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
   }
 
   // Width of the "| lnum|..." column which displays the line numbers.
-  linenr_T highest_num_line = 0;
   int col_width = 0;
   // Use preview window only when inccommand=split and range is not just the current line
   bool preview = (*p_icm == 's') && (eap->line1 != old_cusr.lnum || eap->line2 != old_cusr.lnum);
@@ -4586,8 +4589,11 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
     assert(cmdpreview_buf != NULL);
 
     if (lines.subresults.size > 0) {
-      highest_num_line = kv_last(lines.subresults).end.lnum;
-      col_width = (int)log10(highest_num_line) + 1 + 3;
+      SubResult last_match = kv_last(lines.subresults);
+      // `last_match.end.lnum` may be 0 when using 'n' flag.
+      linenr_T highest_lnum = MAX(last_match.start.lnum, last_match.end.lnum);
+      assert(highest_lnum > 0);
+      col_width = (int)log10(highest_lnum) + 1 + 3;
     }
   }
 
@@ -4659,7 +4665,7 @@ static int show_sub(exarg_T *eap, pos_T old_cusr, PreviewLines *preview_lines, i
 
   xfree(str);
 
-  set_string_option_direct("shm", -1, save_shm_p, OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptShortmess, save_shm_p, OPT_FREE, SID_NONE);
   xfree(save_shm_p);
 
   return preview ? 2 : 1;

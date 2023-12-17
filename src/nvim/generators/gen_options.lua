@@ -15,40 +15,43 @@ local options = require('options')
 
 local cstr = options.cstr
 
-local type_flags={
-  bool='P_BOOL',
-  number='P_NUM',
-  string='P_STRING',
+local redraw_flags = {
+  ui_option = 'P_UI_OPTION',
+  tabline = 'P_RTABL',
+  statuslines = 'P_RSTAT',
+  current_window = 'P_RWIN',
+  current_window_only = 'P_RWINONLY',
+  current_buffer = 'P_RBUF',
+  all_windows = 'P_RALL',
+  curswant = 'P_CURSWANT',
 }
 
-local redraw_flags={
-  ui_option='P_UI_OPTION',
-  tabline='P_RTABL',
-  statuslines='P_RSTAT',
-  current_window='P_RWIN',
-  current_window_only='P_RWINONLY',
-  current_buffer='P_RBUF',
-  all_windows='P_RALL',
-  curswant='P_CURSWANT',
+local list_flags = {
+  comma = 'P_COMMA',
+  onecomma = 'P_ONECOMMA',
+  commacolon = 'P_COMMA|P_COLON',
+  onecommacolon = 'P_ONECOMMA|P_COLON',
+  flags = 'P_FLAGLIST',
+  flagscomma = 'P_COMMA|P_FLAGLIST',
 }
 
-local list_flags={
-  comma='P_COMMA',
-  onecomma='P_ONECOMMA',
-  commacolon='P_COMMA|P_COLON',
-  onecommacolon='P_ONECOMMA|P_COLON',
-  flags='P_FLAGLIST',
-  flagscomma='P_COMMA|P_FLAGLIST',
-}
+--- @param s string
+--- @return string
+local lowercase_to_titlecase = function(s)
+  return s:sub(1, 1):upper() .. s:sub(2)
+end
 
 --- @param o vim.option_meta
 --- @return string
 local function get_flags(o)
-  --- @type string[]
-  local ret = {type_flags[o.type]}
+  --- @type string
+  local flags = '0'
+
+  --- @param f string
   local add_flag = function(f)
-    ret[1] = ret[1] .. '|' .. f
+    flags = flags .. '|' .. f
   end
+
   if o.list then
     add_flag(list_flags[o.list])
   end
@@ -64,19 +67,19 @@ local function get_flags(o)
     end
   end
   for _, flag_desc in ipairs({
-    {'alloced'},
-    {'nodefault'},
-    {'no_mkrc'},
-    {'secure'},
-    {'gettext'},
-    {'noglob'},
-    {'normal_fname_chars', 'P_NFNAME'},
-    {'normal_dname_chars', 'P_NDNAME'},
-    {'pri_mkrc'},
-    {'deny_in_modelines', 'P_NO_ML'},
-    {'deny_duplicates', 'P_NODUP'},
-    {'modelineexpr', 'P_MLE'},
-    {'func'}
+    { 'alloced' },
+    { 'nodefault' },
+    { 'no_mkrc' },
+    { 'secure' },
+    { 'gettext' },
+    { 'noglob' },
+    { 'normal_fname_chars', 'P_NFNAME' },
+    { 'normal_dname_chars', 'P_NDNAME' },
+    { 'pri_mkrc' },
+    { 'deny_in_modelines', 'P_NO_ML' },
+    { 'deny_duplicates', 'P_NODUP' },
+    { 'modelineexpr', 'P_MLE' },
+    { 'func' },
   }) do
     local key_name = flag_desc[1]
     local def_name = flag_desc[2] or ('P_' .. key_name:upper())
@@ -84,7 +87,22 @@ local function get_flags(o)
       add_flag(def_name)
     end
   end
-  return ret[1]
+  return flags
+end
+
+--- @param o vim.option_meta
+--- @return string
+local function get_type_flags(o)
+  local opt_types = (type(o.type) == 'table') and o.type or { o.type }
+  local type_flags = '0'
+  assert(type(opt_types) == 'table')
+
+  for _, opt_type in ipairs(opt_types) do
+    assert(type(opt_type) == 'string')
+    type_flags = ('%s | (1 << kOptValType%s)'):format(type_flags, lowercase_to_titlecase(opt_type))
+  end
+
+  return type_flags
 end
 
 --- @param c string|string[]
@@ -108,20 +126,28 @@ local function get_cond(c, base_string)
 end
 
 local value_dumpers = {
-  ['function']=function(v) return v() end,
-  string=cstr,
-  boolean=function(v) return v and 'true' or 'false' end,
-  number=function(v) return ('%iL'):format(v) end,
-  ['nil']=function(_) return '0' end,
+  ['function'] = function(v)
+    return v()
+  end,
+  string = cstr,
+  boolean = function(v)
+    return v and 'true' or 'false'
+  end,
+  number = function(v)
+    return ('%iL'):format(v)
+  end,
+  ['nil'] = function(_)
+    return '0'
+  end,
 }
 
 local get_value = function(v)
   return '(void *) ' .. value_dumpers[type(v)](v)
 end
 
-local get_defaults = function(d,n)
+local get_defaults = function(d, n)
   if d == nil then
-    error("option '"..n.."' should have a default value")
+    error("option '" .. n .. "' should have a default value")
   end
   return get_value(d)
 end
@@ -138,31 +164,37 @@ local function dump_option(i, o)
     w('    .shortname=' .. cstr(o.abbreviation))
   end
   w('    .flags=' .. get_flags(o))
+  w('    .type_flags=' .. get_type_flags(o))
   if o.enable_if then
     w(get_cond(o.enable_if))
   end
   if o.varname then
     w('    .var=&' .. o.varname)
+  -- Immutable options can directly point to the default value.
+  elseif o.immutable then
+    w(('    .var=&options[%u].def_val'):format(i - 1))
   elseif #o.scope == 1 and o.scope[1] == 'window' then
     w('    .var=VAR_WIN')
   end
+  w('    .immutable=' .. (o.immutable and 'true' or 'false'))
   if #o.scope == 1 and o.scope[1] == 'global' then
     w('    .indir=PV_NONE')
   else
-    assert (#o.scope == 1 or #o.scope == 2)
-    assert (#o.scope == 1 or o.scope[1] == 'global')
+    assert(#o.scope == 1 or #o.scope == 2)
+    assert(#o.scope == 1 or o.scope[1] == 'global')
     local min_scope = o.scope[#o.scope]
-    local varname = o.pv_name or o.varname or (
-      'p_' .. (o.abbreviation or o.full_name))
+    local varname = o.pv_name or o.varname or ('p_' .. (o.abbreviation or o.full_name))
     local pv_name = (
-      'OPT_' .. min_scope:sub(1, 3):upper() .. '(' .. (
-        min_scope:sub(1, 1):upper() .. 'V_' .. varname:sub(3):upper()
-      ) .. ')'
+      'OPT_'
+      .. min_scope:sub(1, 3):upper()
+      .. '('
+      .. (min_scope:sub(1, 1):upper() .. 'V_' .. varname:sub(3):upper())
+      .. ')'
     )
     if #o.scope == 2 then
       pv_name = 'OPT_BOTH(' .. pv_name .. ')'
     end
-    table.insert(defines,  { 'PV_' .. varname:sub(3):upper() , pv_name})
+    table.insert(defines, { 'PV_' .. varname:sub(3):upper(), pv_name })
     w('    .indir=' .. pv_name)
   end
   if o.cb then
@@ -209,11 +241,9 @@ static vimoption_T options[] = {]])
 for i, o in ipairs(options.options) do
   dump_option(i, o)
 end
-w('  [' .. ('%u'):format(#options.options) .. ']={.fullname=NULL}')
 w('};')
 w('')
 
 for _, v in ipairs(defines) do
   w('#define ' .. v[1] .. ' ' .. v[2])
 end
-opt_fd:close()

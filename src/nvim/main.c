@@ -12,25 +12,37 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef ENABLE_ASAN_UBSAN
+# include <sanitizer/asan_interface.h>
+# include <sanitizer/ubsan_interface.h>
+#endif
 
+#include "auto/config.h"  // IWYU pragma: keep
+#include "nvim/api/extmark.h"
+#include "nvim/api/private/defs.h"
+#include "nvim/api/private/helpers.h"
+#include "nvim/api/ui.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
 #include "nvim/decoration.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
+#include "nvim/drawline.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
+#include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
+#include "nvim/event/process.h"
 #include "nvim/event/stream.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_getln.h"
+#include "nvim/extmark.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
 #include "nvim/garray.h"
@@ -45,7 +57,7 @@
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
 #include "nvim/lua/secure.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/memline.h"
@@ -53,15 +65,20 @@
 #include "nvim/message.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
+#include "nvim/msgpack_rpc/channel.h"
+#include "nvim/msgpack_rpc/helpers.h"
+#include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
+#include "nvim/os/signal.h"
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
@@ -73,26 +90,17 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 #ifdef MSWIN
 # include "nvim/os/os_win_console.h"
 #endif
-#include "nvim/api/extmark.h"
-#include "nvim/api/private/defs.h"
-#include "nvim/api/private/helpers.h"
-#include "nvim/api/ui.h"
-#include "nvim/event/loop.h"
-#include "nvim/event/process.h"
-#include "nvim/msgpack_rpc/channel.h"
-#include "nvim/msgpack_rpc/helpers.h"
-#include "nvim/msgpack_rpc/server.h"
-#include "nvim/os/signal.h"
 
 // values for "window_layout"
 enum {
@@ -1115,7 +1123,7 @@ static void command_line_scan(mparm_T *parmp)
         } else if (STRNICMP(argv[0] + argv_idx, "clean", 5) == 0) {
           parmp->use_vimrc = "NONE";
           parmp->clean = true;
-          set_option_value_give_err("shadafile", STATIC_CSTR_AS_OPTVAL("NONE"), 0);
+          set_option_value_give_err(kOptShadafile, STATIC_CSTR_AS_OPTVAL("NONE"), 0);
         } else if (STRNICMP(argv[0] + argv_idx, "luamod-dev", 9) == 0) {
           nlua_disable_preload = true;
         } else {
@@ -1129,7 +1137,7 @@ static void command_line_scan(mparm_T *parmp)
         }
         break;
       case 'A':    // "-A" start in Arabic mode.
-        set_option_value_give_err("arabic", BOOLEAN_OPTVAL(true), 0);
+        set_option_value_give_err(kOptArabic, BOOLEAN_OPTVAL(true), 0);
         break;
       case 'b':    // "-b" binary mode.
         // Needs to be effective before expanding file names, because
@@ -1159,8 +1167,8 @@ static void command_line_scan(mparm_T *parmp)
         usage();
         os_exit(0);
       case 'H':    // "-H" start in Hebrew mode: rl + keymap=hebrew set.
-        set_option_value_give_err("keymap", STATIC_CSTR_AS_OPTVAL("hebrew"), 0);
-        set_option_value_give_err("rl", BOOLEAN_OPTVAL(true), 0);
+        set_option_value_give_err(kOptKeymap, STATIC_CSTR_AS_OPTVAL("hebrew"), 0);
+        set_option_value_give_err(kOptRightleft, BOOLEAN_OPTVAL(true), 0);
         break;
       case 'M':    // "-M"  no changes or writing of files
         reset_modifiable();
@@ -1240,7 +1248,7 @@ static void command_line_scan(mparm_T *parmp)
         // default is 10: a little bit verbose
         p_verbose = get_number_arg(argv[0], &argv_idx, 10);
         if (argv[0][argv_idx] != NUL) {
-          set_option_value_give_err("verbosefile", CSTR_AS_OPTVAL(argv[0] + argv_idx), 0);
+          set_option_value_give_err(kOptVerbosefile, CSTR_AS_OPTVAL(argv[0] + argv_idx), 0);
           argv_idx = (int)strlen(argv[0]);
         }
         break;
@@ -1248,7 +1256,7 @@ static void command_line_scan(mparm_T *parmp)
         // "-w {scriptout}" write to script
         if (ascii_isdigit((argv[0])[argv_idx])) {
           n = get_number_arg(argv[0], &argv_idx, 10);
-          set_option_value_give_err("window", NUMBER_OPTVAL((OptInt)n), 0);
+          set_option_value_give_err(kOptWindow, NUMBER_OPTVAL((OptInt)n), 0);
           break;
         }
         want_argument = true;
@@ -1344,7 +1352,7 @@ static void command_line_scan(mparm_T *parmp)
           break;
 
         case 'i':    // "-i {shada}" use for shada
-          set_option_value_give_err("shadafile", CSTR_AS_OPTVAL(argv[0]), 0);
+          set_option_value_give_err(kOptShadafile, CSTR_AS_OPTVAL(argv[0]), 0);
           break;
 
         case 'l':    // "-l" Lua script: args after "-l".
@@ -1354,7 +1362,7 @@ static void command_line_scan(mparm_T *parmp)
           parmp->no_swap_file = true;
           parmp->use_vimrc = parmp->use_vimrc ? parmp->use_vimrc : "NONE";
           if (p_shadafile == NULL || *p_shadafile == NUL) {
-            set_option_value_give_err("shadafile", STATIC_CSTR_AS_OPTVAL("NONE"), 0);
+            set_option_value_give_err(kOptShadafile, STATIC_CSTR_AS_OPTVAL("NONE"), 0);
           }
           parmp->luaf = argv[0];
           argc--;
@@ -1390,7 +1398,7 @@ scripterror:
           if (ascii_isdigit(*(argv[0]))) {
             argv_idx = 0;
             n = get_number_arg(argv[0], &argv_idx, 10);
-            set_option_value_give_err("window", NUMBER_OPTVAL((OptInt)n), 0);
+            set_option_value_give_err(kOptWindow, NUMBER_OPTVAL((OptInt)n), 0);
             argv_idx = -1;
             break;
           }
@@ -1541,7 +1549,7 @@ static void handle_quickfix(mparm_T *paramp)
 {
   if (paramp->edit_type == EDIT_QF) {
     if (paramp->use_ef != NULL) {
-      set_string_option_direct("ef", -1, paramp->use_ef, OPT_FREE, SID_CARG);
+      set_string_option_direct(kOptErrorfile, paramp->use_ef, OPT_FREE, SID_CARG);
     }
     vim_snprintf(IObuff, IOSIZE, "cfile %s", p_ef);
     if (qf_init(NULL, p_ef, p_efm, true, IObuff, p_menc) < 0) {
@@ -1786,7 +1794,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
 
           p_shm_save = xstrdup(p_shm);
           snprintf(buf, sizeof(buf), "F%s", p_shm);
-          set_option_value_give_err("shm", CSTR_AS_OPTVAL(buf), 0);
+          set_option_value_give_err(kOptShortmess, CSTR_AS_OPTVAL(buf), 0);
         }
       } else {
         if (curwin->w_next == NULL) {           // just checking
@@ -1831,7 +1839,7 @@ static void edit_buffers(mparm_T *parmp, char *cwd)
   }
 
   if (p_shm_save != NULL) {
-    set_option_value_give_err("shm", CSTR_AS_OPTVAL(p_shm_save), 0);
+    set_option_value_give_err(kOptShortmess, CSTR_AS_OPTVAL(p_shm_save), 0);
     xfree(p_shm_save);
   }
 
@@ -2227,13 +2235,11 @@ static void check_swap_exists_action(void)
 }
 
 #ifdef ENABLE_ASAN_UBSAN
-const char *__ubsan_default_options(void);  // NOLINT(bugprone-reserved-identifier)
 const char *__ubsan_default_options(void)
 {
   return "print_stacktrace=1";
 }
 
-const char *__asan_default_options(void);  // NOLINT(bugprone-reserved-identifier)
 const char *__asan_default_options(void)
 {
   return "handle_abort=1,handle_sigill=1";

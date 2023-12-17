@@ -30,6 +30,10 @@ Defaults					            *nvim-defaults*
   ":filetype off" to |init.vim|.
 - Syntax highlighting is enabled by default. This can be disabled by adding
   ":syntax off" to |init.vim|.
+- Default color scheme has been updated. This can result in color schemes
+  looking differently due to them relying on how highlight groups are defined
+  by default. Add ":colorscheme vim" to |init.vim| or your color scheme file to
+  restore the old default links and colors.
 
 - 'autoindent' is enabled
 - 'autoread' is enabled (works in all UIs, including terminal)
@@ -73,6 +77,8 @@ Defaults					            *nvim-defaults*
 - 'switchbuf' defaults to "uselast"
 - 'tabpagemax' defaults to 50
 - 'tags' defaults to "./tags;,tags"
+- 'termguicolors' is enabled by default if Nvim can detect support from the
+  host terminal
 - 'ttimeoutlen' defaults to 50
 - 'ttyfast' is always set
 - 'undodir' defaults to ~/.local/state/nvim/undo// (|xdg|), auto-created
@@ -293,6 +299,8 @@ Options:
   global-local string options work.
 
   'autoread'    works in the terminal (if it supports "focus" events)
+  'background'  colorscheme is only reloaded if value is changed, not every
+                time it is set
   'cpoptions'   flags: |cpo-_|
   'diffopt'     "linematch" feature
   'exrc'        searches for ".nvim.lua", ".nvimrc", or ".exrc" files. The

@@ -5,7 +5,7 @@
 #include "nvim/api/buffer.h"
 #include "nvim/api/deprecated.h"
 #include "nvim/api/extmark.h"
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/options.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
@@ -13,7 +13,6 @@
 #include "nvim/api/vimscript.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
-#include "nvim/decoration_defs.h"
 #include "nvim/extmark.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
@@ -21,7 +20,7 @@
 #include "nvim/lua/executor.h"
 #include "nvim/memory.h"
 #include "nvim/option.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/deprecated.c.generated.h"
@@ -127,7 +126,7 @@ void nvim_buf_clear_highlight(Buffer buffer, Integer ns_id, Integer line_start, 
 /// @param[out] err   Error details, if any
 /// @return The ns_id that was used
 Integer nvim_buf_set_virtual_text(Buffer buffer, Integer src_id, Integer line, Array chunks,
-                                  Dictionary opts, Error *err)
+                                  Dict(empty) *opts, Error *err)
   FUNC_API_SINCE(5)
   FUNC_API_DEPRECATED_SINCE(8)
 {
@@ -138,11 +137,6 @@ Integer nvim_buf_set_virtual_text(Buffer buffer, Integer src_id, Integer line, A
 
   if (line < 0 || line >= MAXLNUM) {
     api_set_error(err, kErrorTypeValidation, "Line number outside range");
-    return 0;
-  }
-
-  if (opts.size > 0) {
-    api_set_error(err, kErrorTypeValidation, "opts dict isn't empty");
     return 0;
   }
 
@@ -649,7 +643,7 @@ static Object get_option_from(void *from, OptReqScope req_scope, String name, Er
     return (Object)OBJECT_INIT;
   });
 
-  OptVal value = get_option_value_strict(name.data, req_scope, from, err);
+  OptVal value = get_option_value_strict(find_option(name.data), req_scope, from, err);
   if (ERROR_SET(err)) {
     return (Object)OBJECT_INIT;
   }
@@ -675,8 +669,8 @@ static void set_option_to(uint64_t channel_id, void *to, OptReqScope req_scope, 
     return;
   });
 
-  int flags = get_option_attrs(name.data);
-  VALIDATE_S(flags != 0, "option name", name.data, {
+  OptIndex opt_idx = find_option(name.data);
+  VALIDATE_S(opt_idx != kOptInvalid, "option name", name.data, {
     return;
   });
 
@@ -691,13 +685,14 @@ static void set_option_to(uint64_t channel_id, void *to, OptReqScope req_scope, 
     return;
   });
 
+  int attrs = get_option_attrs(opt_idx);
   // For global-win-local options -> setlocal
   // For        win-local options -> setglobal and setlocal (opt_flags == 0)
-  const int opt_flags = (req_scope == kOptReqWin && !(flags & SOPT_GLOBAL))
+  const int opt_flags = (req_scope == kOptReqWin && !(attrs & SOPT_GLOBAL))
                         ? 0
                         : (req_scope == kOptReqGlobal) ? OPT_GLOBAL : OPT_LOCAL;
 
   WITH_SCRIPT_CONTEXT(channel_id, {
-    set_option_value_for(name.data, optval, opt_flags, req_scope, to, err);
+    set_option_value_for(name.data, opt_idx, optval, opt_flags, req_scope, to, err);
   });
 }

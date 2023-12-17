@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
@@ -25,7 +25,7 @@
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/insexpand.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -36,14 +36,14 @@
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -116,7 +116,7 @@ static char *(p_fdm_values[]) = { "manual", "expr", "marker", "indent",
                                   "syntax",  "diff", NULL };
 static char *(p_fcl_values[]) = { "all", NULL };
 static char *(p_cot_values[]) = { "menu", "menuone", "longest", "preview", "noinsert", "noselect",
-                                  NULL };
+                                  "popup", NULL };
 #ifdef BACKSLASH_IN_FILENAME
 static char *(p_csl_values[]) = { "slash", "backslash", NULL };
 #endif
@@ -283,7 +283,7 @@ static void set_string_option_global(vimoption_T *opt, char **varp)
 
 /// Set a string option to a new value (without checking the effect).
 /// The string is copied into allocated memory.
-/// if ("opt_idx" == -1) "name" is used, otherwise "opt_idx" is used.
+/// if ("opt_idx" == kOptInvalid) "name" is used, otherwise "opt_idx" is used.
 /// When "set_sid" is zero set the scriptID to current_sctx.sc_sid.  When
 /// "set_sid" is SID_NONE don't set the scriptID.  Otherwise set the scriptID to
 /// "set_sid".
@@ -291,22 +291,9 @@ static void set_string_option_global(vimoption_T *opt, char **varp)
 /// @param opt_flags  OPT_FREE, OPT_LOCAL and/or OPT_GLOBAL.
 ///
 /// TODO(famiu): Remove this and its win/buf variants.
-void set_string_option_direct(const char *name, int opt_idx, const char *val, int opt_flags,
-                              int set_sid)
+void set_string_option_direct(OptIndex opt_idx, const char *val, int opt_flags, int set_sid)
 {
-  int both = (opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0;
-  int idx = opt_idx;
-
-  if (idx == -1) {  // Use name.
-    idx = findoption(name);
-    if (idx < 0) {  // Not found (should not happen).
-      internal_error("set_string_option_direct()");
-      siemsg(_("For option %s"), name);
-      return;
-    }
-  }
-
-  vimoption_T *opt = get_option(idx);
+  vimoption_T *opt = get_option(opt_idx);
 
   if (opt->var == NULL) {  // can't set hidden option
     return;
@@ -314,53 +301,53 @@ void set_string_option_direct(const char *name, int opt_idx, const char *val, in
 
   assert(opt->var != &p_shada);
 
+  int both = (opt_flags & (OPT_LOCAL | OPT_GLOBAL)) == 0;
   char *s = xstrdup(val);
-  {
-    char **varp = (char **)get_varp_scope(opt, both ? OPT_LOCAL : opt_flags);
-    if ((opt_flags & OPT_FREE) && (opt->flags & P_ALLOCED)) {
-      free_string_option(*varp);
-    }
-    *varp = s;
+  char **varp = (char **)get_varp_scope(opt, both ? OPT_LOCAL : opt_flags);
 
-    // For buffer/window local option may also set the global value.
-    if (both) {
-      set_string_option_global(opt, varp);
-    }
+  if ((opt_flags & OPT_FREE) && (opt->flags & P_ALLOCED)) {
+    free_string_option(*varp);
+  }
+  *varp = s;
 
-    opt->flags |= P_ALLOCED;
+  // For buffer/window local option may also set the global value.
+  if (both) {
+    set_string_option_global(opt, varp);
+  }
 
-    // When setting both values of a global option with a local value,
-    // make the local value empty, so that the global value is used.
-    if ((opt->indir & PV_BOTH) && both) {
-      free_string_option(*varp);
-      *varp = empty_string_option;
-    }
-    if (set_sid != SID_NONE) {
-      sctx_T script_ctx;
+  opt->flags |= P_ALLOCED;
 
-      if (set_sid == 0) {
-        script_ctx = current_sctx;
-      } else {
-        script_ctx.sc_sid = set_sid;
-        script_ctx.sc_seq = 0;
-        script_ctx.sc_lnum = 0;
-      }
-      set_option_sctx_idx(idx, opt_flags, script_ctx);
+  // When setting both values of a global option with a local value,
+  // make the local value empty, so that the global value is used.
+  if ((opt->indir & PV_BOTH) && both) {
+    free_string_option(*varp);
+    *varp = empty_string_option;
+  }
+  if (set_sid != SID_NONE) {
+    sctx_T script_ctx;
+
+    if (set_sid == 0) {
+      script_ctx = current_sctx;
+    } else {
+      script_ctx.sc_sid = set_sid;
+      script_ctx.sc_seq = 0;
+      script_ctx.sc_lnum = 0;
     }
+    set_option_sctx(opt_idx, opt_flags, script_ctx);
   }
 }
 
 /// Like set_string_option_direct(), but for a window-local option in "wp".
 /// Blocks autocommands to avoid the old curwin becoming invalid.
-void set_string_option_direct_in_win(win_T *wp, const char *name, int opt_idx, const char *val,
-                                     int opt_flags, int set_sid)
+void set_string_option_direct_in_win(win_T *wp, OptIndex opt_idx, const char *val, int opt_flags,
+                                     int set_sid)
 {
   win_T *save_curwin = curwin;
 
   block_autocmds();
   curwin = wp;
   curbuf = curwin->w_buffer;
-  set_string_option_direct(name, opt_idx, val, opt_flags, set_sid);
+  set_string_option_direct(opt_idx, val, opt_flags, set_sid);
   curwin = save_curwin;
   curbuf = curwin->w_buffer;
   unblock_autocmds();
@@ -368,14 +355,14 @@ void set_string_option_direct_in_win(win_T *wp, const char *name, int opt_idx, c
 
 /// Like set_string_option_direct(), but for a buffer-local option in "buf".
 /// Blocks autocommands to avoid the old curwin becoming invalid.
-void set_string_option_direct_in_buf(buf_T *buf, const char *name, int opt_idx, const char *val,
-                                     int opt_flags, int set_sid)
+void set_string_option_direct_in_buf(buf_T *buf, OptIndex opt_idx, const char *val, int opt_flags,
+                                     int set_sid)
 {
   buf_T *save_curbuf = curbuf;
 
   block_autocmds();
   curbuf = buf;
-  set_string_option_direct(name, opt_idx, val, opt_flags, set_sid);
+  set_string_option_direct(opt_idx, val, opt_flags, set_sid);
   curbuf = save_curbuf;
   unblock_autocmds();
 }
@@ -442,7 +429,7 @@ int check_signcolumn(win_T *wp)
 const char *check_stl_option(char *s)
 {
   int groupdepth = 0;
-  static char errbuf[80];
+  static char errbuf[ERR_BUFLEN];
 
   while (*s) {
     // Check for valid keys after % sequences
@@ -676,10 +663,15 @@ int expand_set_ambiwidth(optexpand_T *args, int *numMatches, char ***matches)
 }
 
 /// The 'background' option is changed.
-const char *did_set_background(optset_T *args FUNC_ATTR_UNUSED)
+const char *did_set_background(optset_T *args)
 {
   if (check_opt_strings(p_bg, p_bg_values, false) != OK) {
     return e_invarg;
+  }
+
+  if (args->os_oldval.string.data[0] == *p_bg) {
+    // Value was not changed
+    return NULL;
   }
 
   int dark = (*p_bg == 'd');
@@ -2095,6 +2087,8 @@ const char *did_set_signcolumn(optset_T *args)
   if (check_signcolumn(win) != OK) {
     return e_invarg;
   }
+  int scwidth = win->w_minscwidth <= 0 ? 0 : MIN(win->w_maxscwidth, win->w_scwidth);
+  win->w_scwidth = MAX(win->w_minscwidth, scwidth);
   // When changing the 'signcolumn' to or from 'number', recompute the
   // width of the number column if 'number' or 'relativenumber' is set.
   if ((*oldval == 'n' && *(oldval + 1) == 'u') || win->w_minscwidth == SCL_NUM) {

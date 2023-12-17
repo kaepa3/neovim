@@ -1,37 +1,42 @@
 // autocmd.c: Autocommand related functions
 
 #include <assert.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
+#include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
+#include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
+#include "nvim/event/multiqueue.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/fileio.h"
-#include "nvim/garray.h"
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
+#include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/insexpand.h"
 #include "nvim/lua/executor.h"
-#include "nvim/map.h"
-#include "nvim/memline_defs.h"
+#include "nvim/main.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
+#include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
@@ -43,10 +48,10 @@
 #include "nvim/search.h"
 #include "nvim/state.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -699,7 +704,7 @@ char *au_event_disable(char *what)
   } else {
     STRCAT(new_ei, what);
   }
-  set_string_option_direct("ei", -1, new_ei, OPT_FREE, SID_NONE);
+  set_string_option_direct(kOptEventignore, new_ei, OPT_FREE, SID_NONE);
   xfree(new_ei);
   return save_ei;
 }
@@ -707,7 +712,7 @@ char *au_event_disable(char *what)
 void au_event_restore(char *old_ei)
 {
   if (old_ei != NULL) {
-    set_string_option_direct("ei", -1, old_ei, OPT_FREE, SID_NONE);
+    set_string_option_direct(kOptEventignore, old_ei, OPT_FREE, SID_NONE);
     xfree(old_ei);
   }
 }
@@ -2559,7 +2564,7 @@ void may_trigger_vim_suspend_resume(bool suspend)
     pending_vimresume = kTrue;
   } else if (!suspend && pending_vimresume == kTrue) {
     pending_vimresume = kNone;
-    multiqueue_put(main_loop.events, vimresume_event, 0);
+    multiqueue_put(main_loop.events, vimresume_event, NULL);
   }
 }
 
@@ -2568,6 +2573,11 @@ void do_autocmd_uienter(uint64_t chanid, bool attached)
 {
   static bool recursive = false;
 
+#ifdef EXITFREE
+  if (entered_free_all_mem) {
+    return;
+  }
+#endif
   if (starting == NO_SCREEN) {
     return;  // user config hasn't been sourced yet
   }

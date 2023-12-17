@@ -38,16 +38,7 @@ describe('Signs', function()
         {1:𐌢̀́̂̃̅̄𐌢̀́̂̃̅̄}a                                                  |
         {1:𠜎̀́̂̃̄̅}b                                                  |
         {2:  }^                                                   |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*10
                                                              |
       ]])
     end)
@@ -64,15 +55,7 @@ describe('Signs', function()
         {2:  }b                                                  |
         {1:>>}c                                                  |
         {2:  }^                                                   |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
     end)
@@ -85,16 +68,7 @@ describe('Signs', function()
         a                                                    |
         b                                                    |
         ^                                                     |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*10
                                                              |
       ]])
     end)
@@ -115,8 +89,7 @@ describe('Signs', function()
         {1:>>}b                                                  |
         {2:  }c                                                  |
         {2:  }                                                   |
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*2
         {4:[No Name] [+]                                        }|
         {2:  }{3:a                                                  }|
         {1:>>}b                                                  |
@@ -145,15 +118,7 @@ describe('Signs', function()
         {2:  }{6:  2 }{8:b                                              }|
         {2:  }{7:  3 }c                                              |
         {1:>>}{7:  4 }{8:^                                               }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- Check that 'statuscolumn' correctly applies numhl
@@ -172,16 +137,7 @@ describe('Signs', function()
         {1:>>}a                                                  |
         {1:>>}b                                                  |
         {8:>>}{3:^c                                                  }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*10
                                                              |
       ]])
       feed('k')
@@ -189,16 +145,7 @@ describe('Signs', function()
         {1:>>}a                                                  |
         {8:>>}{3:^b                                                  }|
         {1:>>}c                                                  |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*10
                                                              |
       ]])
       command('set nocursorline')
@@ -206,16 +153,7 @@ describe('Signs', function()
         {1:>>}a                                                  |
         {1:>>}^b                                                  |
         {1:>>}c                                                  |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*10
                                                              |
       ]])
       command('set cursorline cursorlineopt=line')
@@ -223,16 +161,7 @@ describe('Signs', function()
         {1:>>}a                                                  |
         {1:>>}{3:^b                                                  }|
         {1:>>}c                                                  |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*10
                                                              |
       ]])
       command('set cursorlineopt=number')
@@ -243,15 +172,7 @@ describe('Signs', function()
         {8:>>}^b                                                  |
         {1:>>}c                                                  |
         {5:  }                                                   |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- Check that 'statuscolumn' cursorline/signcolumn highlights are the same (#21726)
@@ -282,15 +203,7 @@ describe('Signs', function()
         {8:XX}{1:>>}{6:  2 }b                                            |
         {1:>>}WW{6:  3 }c                                            |
         {2:    }{6:  4 }^                                             |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- With the default setting, we get the sign with the top id.
@@ -300,35 +213,20 @@ describe('Signs', function()
         {1:>>}{6:  2 }b                                              |
         WW{6:  3 }c                                              |
         {2:  }{6:  4 }^                                               |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- "auto:3" accommodates all the signs we defined so far.
       command('set signcolumn=auto:3')
-      screen:expect([[
+      local s3 = [[
         {1:>>}{8:XX}{2:  }{6:  1 }a                                          |
         {8:XX}{1:>>}{2:  }{6:  2 }b                                          |
         {8:XX}{1:>>}WW{6:  3 }c                                          |
         {2:      }{6:  4 }^                                           |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
-      ]])
+      ]]
+      screen:expect(s3)
       -- Check "yes:9".
       command('set signcolumn=yes:9')
       screen:expect([[
@@ -336,52 +234,30 @@ describe('Signs', function()
         {8:XX}{1:>>}{2:              }{6:  2 }b                              |
         {8:XX}{1:>>}WW{2:            }{6:  3 }c                              |
         {2:                  }{6:  4 }^                               |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- Check "auto:N" larger than the maximum number of signs defined in
       -- a single line (same result as "auto:3").
       command('set signcolumn=auto:4')
-      screen:expect{grid=[[
-        {1:>>}{8:XX}{2:  }{6:  1 }a                                          |
-        {8:XX}{1:>>}{2:  }{6:  2 }b                                          |
-        {8:XX}{1:>>}WW{6:  3 }c                                          |
-        {2:      }{6:  4 }^                                           |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-                                                             |
-      ]]}
+      screen:expect(s3)
       -- line deletion deletes signs.
+      command('3move1')
       command('2d')
       screen:expect([[
-        {1:>>}{8:XX}{2:  }{6:  1 }a                                          |
-        {8:XX}{1:>>}WW{6:  2 }^c                                          |
-        {2:      }{6:  3 }                                           |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {1:>>}{8:XX}{6:  1 }a                                            |
+        {8:XX}{1:>>}{6:  2 }^b                                            |
+        {2:    }{6:  3 }                                             |
+        {0:~                                                    }|*10
+                                                             |
+      ]])
+      -- character deletion does not delete signs.
+      feed('x')
+      screen:expect([[
+        {1:>>}{8:XX}{6:  1 }a                                            |
+        {8:XX}{1:>>}{6:  2 }^                                             |
+        {2:    }{6:  3 }                                             |
+        {0:~                                                    }|*10
                                                              |
       ]])
     end)
@@ -396,15 +272,7 @@ describe('Signs', function()
         {2:  }{6:  2 }b                                              |
         {2:  }{6:  3 }c                                              |
         {2:  }{6:  4 }^                                               |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- should support up to 8 signs at minimum
@@ -414,15 +282,7 @@ describe('Signs', function()
         {2:                }{6:  2 }b                                |
         {2:                }{6:  3 }c                                |
         {2:                }{6:  4 }^                                 |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- should keep the same sign size when signs are not exceeding
@@ -435,15 +295,7 @@ describe('Signs', function()
         {2:    }{6:  2 }b                                            |
         {2:    }{6:  3 }c                                            |
         {2:    }{6:  4 }^                                             |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- should resize itself when signs are exceeding minimum but
@@ -456,17 +308,22 @@ describe('Signs', function()
         {2:        }{6:  2 }b                                        |
         {2:        }{6:  3 }c                                        |
         {2:        }{6:  4 }^                                         |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
+      -- should not increase size because sign with existing id is moved
+      command('sign place 4 line=1 name=pietSearch buffer=1')
+      screen:expect_unchanged()
+      command('sign unplace 4')
+      screen:expect([[
+        {1:>>>>>>}{6:  1 }a                                          |
+        {2:      }{6:  2 }b                                          |
+        {2:      }{6:  3 }c                                          |
+        {2:      }{6:  4 }^                                           |
+        {0:~                                                    }|*9
+                                                             |
+      ]])
+      command('sign place 4 line=1 name=pietSearch buffer=1')
       -- should keep the column at maximum size when signs are
       -- exceeding the maximum
       command('sign place 5 line=1 name=pietSearch buffer=1')
@@ -478,15 +335,7 @@ describe('Signs', function()
         {2:          }{6:  2 }b                                      |
         {2:          }{6:  3 }c                                      |
         {2:          }{6:  4 }^                                       |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
     end)
@@ -504,15 +353,7 @@ describe('Signs', function()
         {6:  2 }b                                                |
         {6:  3 }c                                                |
         {6:  4 }^                                                 |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
       -- single column with 1 sign with text and one sign without
@@ -522,15 +363,7 @@ describe('Signs', function()
         {2:  }{6:  2 }b                                              |
         {2:  }{6:  3 }c                                              |
         {2:  }{6:  4 }^                                               |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
     end)
@@ -548,15 +381,7 @@ describe('Signs', function()
         {8:  2 }b                                                |
         {6:  3 }c                                                |
         {6:  4 }^                                                 |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*9
                                                              |
       ]])
     end)
@@ -567,12 +392,7 @@ describe('Signs', function()
       feed(':sign place<cr>')
       screen:expect([[
         {1:>>}                                                   |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*6
         {4:                                                     }|
         :sign place                                          |
         {9:--- Signs ---}                                        |
@@ -585,18 +405,7 @@ describe('Signs', function()
       feed('<cr>')
       screen:expect([[
         {1:>>}^                                                   |
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
-        {0:~                                                    }|
+        {0:~                                                    }|*12
                                                              |
       ]])
     end)
@@ -614,15 +423,7 @@ describe('Signs', function()
       {2:  }^c                                                  |
       {2:  }d                                                  |
       >>e                                                  |
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
+      {0:~                                                    }|*9
                                                            |
     ]])
     command('sign unplace 10002')
@@ -631,15 +432,7 @@ describe('Signs', function()
       ^c                                                    |
       d                                                    |
       e                                                    |
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
+      {0:~                                                    }|*9
                                                            |
     ]])
   end)
@@ -658,13 +451,7 @@ describe('Signs', function()
       {2:  }c                                                  |
       {2:  }d                                                  |
       >>e                                                  |
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
+      {0:~                                                    }|*7
                                                            |
     ]])
     command('sign unplace 10002')
@@ -675,13 +462,7 @@ describe('Signs', function()
       c                                                    |
       d                                                    |
       e                                                    |
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
-      {0:~                                                    }|
+      {0:~                                                    }|*7
                                                            |
     ]])
   end)

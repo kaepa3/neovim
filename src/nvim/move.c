@@ -13,7 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
@@ -27,7 +27,7 @@
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -38,12 +38,12 @@
 #include "nvim/option_vars.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/search.h"
 #include "nvim/sign_defs.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -760,7 +760,7 @@ int win_col_off(win_T *wp)
   return ((wp->w_p_nu || wp->w_p_rnu || *wp->w_p_stc != NUL)
           ? (number_width(wp) + (*wp->w_p_stc == NUL)) : 0)
          + ((cmdwin_type == 0 || wp != curwin) ? 0 : 1)
-         + win_fdccol_count(wp) + (win_signcol_count(wp) * SIGN_WIDTH);
+         + win_fdccol_count(wp) + (wp->w_scwidth * SIGN_WIDTH);
 }
 
 int curwin_col_off(void)
@@ -1124,6 +1124,9 @@ void f_screenpos(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   if (pos.lnum > wp->w_buffer->b_ml.ml_line_count) {
     semsg(_(e_invalid_line_number_nr), pos.lnum);
     return;
+  }
+  if (pos.col < 0) {
+    pos.col = 0;
   }
   int row = 0;
   int scol = 0, ccol = 0, ecol = 0;

@@ -6,21 +6,21 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/drawscreen.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/memory.h"
 #include "nvim/mouse.h"
 #include "nvim/move.h"
 #include "nvim/option.h"
 #include "nvim/optionstr.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/strings.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -285,4 +285,14 @@ bool win_float_valid(const win_T *win)
     }
   }
   return false;
+}
+
+win_T *win_float_find_preview(void)
+{
+  for (win_T *wp = lastwin; wp && wp->w_floating; wp = wp->w_prev) {
+    if (wp->w_float_is_info) {
+      return wp;
+    }
+  }
+  return NULL;
 }

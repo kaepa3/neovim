@@ -7,12 +7,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include "auto/config.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
@@ -40,14 +42,15 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/grid_defs.h"
+#include "nvim/hashtab.h"
 #include "nvim/highlight_group.h"
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/lib/queue.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -60,13 +63,13 @@
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/fileio.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/lang.h"
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
@@ -74,12 +77,12 @@
 #include "nvim/search.h"
 #include "nvim/strings.h"
 #include "nvim/tag.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/usercmd.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 // TODO(ZyX-I): Remove DICT_MAXNEST, make users be non-recursive instead
@@ -497,6 +500,10 @@ static void evalvars_clear(void)
       p->vv_list = NULL;
     }
   }
+
+  partial_unref(vvlua_partial);
+  vimvars[VV_LUA].vv_partial = vvlua_partial = NULL;
+
   hash_clear(&vimvarht);
   hash_init(&vimvarht);    // garbage_collect() will access it
   hash_clear(&compat_hashtab);
@@ -674,7 +681,7 @@ int eval_charconvert(const char *const enc_from, const char *const enc_to,
   set_vim_var_string(VV_CC_TO, enc_to, -1);
   set_vim_var_string(VV_FNAME_IN, fname_from, -1);
   set_vim_var_string(VV_FNAME_OUT, fname_to, -1);
-  sctx_T *ctx = get_option_sctx("charconvert");
+  sctx_T *ctx = get_option_sctx(kOptCharconvert);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -703,7 +710,7 @@ void eval_diff(const char *const origfile, const char *const newfile, const char
   set_vim_var_string(VV_FNAME_NEW, newfile, -1);
   set_vim_var_string(VV_FNAME_OUT, outfile, -1);
 
-  sctx_T *ctx = get_option_sctx("diffexpr");
+  sctx_T *ctx = get_option_sctx(kOptDiffexpr);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -725,7 +732,7 @@ void eval_patch(const char *const origfile, const char *const difffile, const ch
   set_vim_var_string(VV_FNAME_DIFF, difffile, -1);
   set_vim_var_string(VV_FNAME_OUT, outfile, -1);
 
-  sctx_T *ctx = get_option_sctx("patchexpr");
+  sctx_T *ctx = get_option_sctx(kOptPatchexpr);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -1127,7 +1134,7 @@ list_T *eval_spell_expr(char *badword, char *expr)
   if (p_verbose == 0) {
     emsg_off++;
   }
-  sctx_T *ctx = get_option_sctx("spellsuggest");
+  sctx_T *ctx = get_option_sctx(kOptSpellsuggest);
   if (ctx != NULL) {
     current_sctx = *ctx;
   }
@@ -1271,7 +1278,7 @@ void *call_func_retlist(const char *func, int argc, typval_T *argv)
 int eval_foldexpr(win_T *wp, int *cp)
 {
   const sctx_T saved_sctx = current_sctx;
-  const bool use_sandbox = was_set_insecurely(wp, "foldexpr", OPT_LOCAL);
+  const bool use_sandbox = was_set_insecurely(wp, kOptFoldexpr, OPT_LOCAL);
 
   char *arg = wp->w_p_fde;
   current_sctx = wp->w_p_script_ctx[WV_FDE].script_ctx;
@@ -1319,7 +1326,7 @@ int eval_foldexpr(win_T *wp, int *cp)
 /// Evaluate 'foldtext', returning an Array or a String (NULL_STRING on failure).
 Object eval_foldtext(win_T *wp)
 {
-  const bool use_sandbox = was_set_insecurely(wp, "foldtext", OPT_LOCAL);
+  const bool use_sandbox = was_set_insecurely(wp, kOptFoldtext, OPT_LOCAL);
   char *arg = wp->w_p_fdt;
   funccal_entry_T funccal_entry;
 
@@ -3728,7 +3735,11 @@ static int eval_index_inner(typval_T *rettv, bool is_range, typval_T *var1, typv
     dictitem_T *const item = tv_dict_find(rettv->vval.v_dict, key, keylen);
 
     if (item == NULL && verbose) {
-      semsg(_(e_dictkey), key);
+      if (keylen > 0) {
+        semsg(_(e_dictkey_len), keylen, key);
+      } else {
+        semsg(_(e_dictkey), key);
+      }
     }
     if (item == NULL || tv_is_luafunc(&item->di_tv)) {
       return FAIL;
@@ -3756,10 +3767,12 @@ int eval_option(const char **const arg, typval_T *const rettv, const bool evalua
   FUNC_ATTR_NONNULL_ARG(1)
 {
   const bool working = (**arg == '+');  // has("+option")
+  OptIndex opt_idx;
   int scope;
 
   // Isolate the option name and find its value.
-  char *option_end = (char *)find_option_end(arg, &scope);
+  char *const option_end = (char *)find_option_var_end(arg, &opt_idx, &scope);
+
   if (option_end == NULL) {
     if (rettv != NULL) {
       semsg(_("E112: Option name missing: %s"), *arg);
@@ -3772,38 +3785,26 @@ int eval_option(const char **const arg, typval_T *const rettv, const bool evalua
     return OK;
   }
 
-  int ret = OK;
-  bool hidden;
   char c = *option_end;
   *option_end = NUL;
-  OptVal value = get_option_value(*arg, NULL, scope, &hidden);
 
-  if (rettv != NULL) {
-    switch (value.type) {
-    case kOptValTypeNil:
+  int ret = OK;
+  bool is_tty_opt = is_tty_option(*arg);
+
+  if (opt_idx == kOptInvalid && !is_tty_opt) {
+    // Only give error if result is going to be used.
+    if (rettv != NULL) {
       semsg(_("E113: Unknown option: %s"), *arg);
-      ret = FAIL;
-      break;
-    case kOptValTypeBoolean:
-      rettv->v_type = VAR_NUMBER;
-      rettv->vval.v_number = value.data.boolean;
-      break;
-    case kOptValTypeNumber:
-      rettv->v_type = VAR_NUMBER;
-      rettv->vval.v_number = value.data.number;
-      break;
-    case kOptValTypeString:
-      rettv->v_type = VAR_STRING;
-      rettv->vval.v_string = value.data.string.data;
-      break;
     }
-  } else {
-    // Value isn't being used, free it.
-    optval_free(value);
 
-    if (value.type == kOptValTypeNil || (working && hidden)) {
-      ret = FAIL;
-    }
+    ret = FAIL;
+  } else if (rettv != NULL) {
+    OptVal value = is_tty_opt ? get_tty_option(*arg) : get_option_value(opt_idx, scope);
+    assert(value.type != kOptValTypeNil);
+
+    *rettv = optval_as_tv(value, true);
+  } else if (working && !is_tty_opt && is_option_hidden(opt_idx)) {
+    ret = FAIL;
   }
 
   *option_end = c;                  // put back for error messages
@@ -4545,7 +4546,7 @@ bool garbage_collect(bool testing)
 
   // history items (ShaDa additional elements)
   if (p_hi) {
-    for (HistoryType i = 0; i < HIST_COUNT; i++) {
+    for (int i = 0; i < HIST_COUNT; i++) {
       const void *iter = NULL;
       do {
         histentry_T hist;
@@ -4704,7 +4705,7 @@ bool set_ref_in_ht(hashtab_T *ht, int copyID, list_stack_T **list_stack)
 /// @param ht_stack      Used to add hashtabs to be marked. Can be NULL.
 ///
 /// @returns             true if setting references failed somehow.
-bool set_ref_in_list(list_T *l, int copyID, ht_stack_T **ht_stack)
+bool set_ref_in_list_items(list_T *l, int copyID, ht_stack_T **ht_stack)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
   bool abort = false;
@@ -4781,7 +4782,7 @@ bool set_ref_in_item(typval_T *tv, int copyID, ht_stack_T **ht_stack, list_stack
       // Didn't see this list yet.
       ll->lv_copyID = copyID;
       if (list_stack == NULL) {
-        abort = set_ref_in_list(ll, copyID, ht_stack);
+        abort = set_ref_in_list_items(ll, copyID, ht_stack);
       } else {
         list_stack_T *const newitem = xmalloc(sizeof(list_stack_T));
         newitem->list = ll;
@@ -5023,7 +5024,7 @@ size_t string2float(const char *const text, float_T *const ret_value)
     return 3;
   }
   if (STRNICMP(text, "-inf", 3) == 0) {
-    *ret_value = (float_T) - INFINITY;
+    *ret_value = (float_T)(-INFINITY);
     return 4;
   }
   if (STRNICMP(text, "nan", 3) == 0) {
@@ -8132,13 +8133,14 @@ void ex_execute(exarg_T *eap)
   eap->nextcmd = check_nextcmd(arg);
 }
 
-/// Skip over the name of an option: "&option", "&g:option" or "&l:option".
+/// Skip over the name of an option variable: "&option", "&g:option" or "&l:option".
 ///
-/// @param arg  points to the "&" or '+' when called, to "option" when returning.
+/// @param[in,out]  arg       Points to the "&" or '+' when called, to "option" when returning.
+/// @param[out]     opt_idxp  Set to option index in options[] table.
+/// @param[out]     scope     Set to option scope.
 ///
-/// @return  NULL when no option name found.  Otherwise pointer to the char
-///          after the option name.
-const char *find_option_end(const char **const arg, int *const scope)
+/// @return NULL when no option name found. Otherwise pointer to the char after the option name.
+const char *find_option_var_end(const char **const arg, OptIndex *const opt_idxp, int *const scope)
 {
   const char *p = *arg;
 
@@ -8153,19 +8155,9 @@ const char *find_option_end(const char **const arg, int *const scope)
     *scope = 0;
   }
 
-  if (!ASCII_ISALPHA(*p)) {
-    return NULL;
-  }
-  *arg = p;
-
-  if (p[0] == 't' && p[1] == '_' && p[2] != NUL && p[3] != NUL) {
-    p += 4;  // t_xx/termcap option
-  } else {
-    while (ASCII_ISALPHA(*p)) {
-      p++;
-    }
-  }
-  return p;
+  const char *end = find_option_end(p, opt_idxp);
+  *arg = end == NULL ? *arg : p;
+  return end;
 }
 
 static var_flavour_T var_flavour(char *varname)
@@ -8709,7 +8701,7 @@ char *do_string_sub(char *str, char *pat, char *sub, typval_T *expr, const char 
     // If it's still empty it was changed and restored, need to restore in
     // the complicated way.
     if (*p_cpo == NUL) {
-      set_option_value_give_err("cpo", CSTR_AS_OPTVAL(save_cpo), 0);
+      set_option_value_give_err(kOptCpoptions, CSTR_AS_OPTVAL(save_cpo), 0);
     }
     free_string_option(save_cpo);
   }

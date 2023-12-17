@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
@@ -20,7 +20,7 @@
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/help.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -29,16 +29,17 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/tag.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -607,7 +608,7 @@ void cleanup_help_tags(int num_file, char **file)
 void prepare_help_buffer(void)
 {
   curbuf->b_help = true;
-  set_string_option_direct("buftype", -1, "help", OPT_FREE|OPT_LOCAL, 0);
+  set_string_option_direct(kOptBuftype, "help", OPT_FREE|OPT_LOCAL, 0);
 
   // Always set these options after jumping to a help tag, because the
   // user may have an autocommand that gets in the way.
@@ -616,13 +617,13 @@ void prepare_help_buffer(void)
   // Only set it when needed, buf_init_chartab() is some work.
   char *p = "!-~,^*,^|,^\",192-255";
   if (strcmp(curbuf->b_p_isk, p) != 0) {
-    set_string_option_direct("isk", -1, p, OPT_FREE|OPT_LOCAL, 0);
+    set_string_option_direct(kOptIskeyword, p, OPT_FREE|OPT_LOCAL, 0);
     check_buf_options(curbuf);
     (void)buf_init_chartab(curbuf, false);
   }
 
   // Don't use the global foldmethod.
-  set_string_option_direct("fdm", -1, "manual", OPT_FREE|OPT_LOCAL, 0);
+  set_string_option_direct(kOptFoldmethod, "manual", OPT_FREE|OPT_LOCAL, 0);
 
   curbuf->b_p_ts = 8;         // 'tabstop' is 8.
   curwin->w_p_list = false;   // No list mode.
@@ -648,7 +649,7 @@ void fix_help_buffer(void)
   // Set filetype to "help".
   if (strcmp(curbuf->b_p_ft, "help") != 0) {
     curbuf->b_ro_locked++;
-    set_option_value_give_err("ft", STATIC_CSTR_AS_OPTVAL("help"), OPT_LOCAL);
+    set_option_value_give_err(kOptFiletype, STATIC_CSTR_AS_OPTVAL("help"), OPT_LOCAL);
     curbuf->b_ro_locked--;
   }
 

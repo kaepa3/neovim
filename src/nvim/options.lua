@@ -2,10 +2,12 @@
 --- @field full_name string
 --- @field desc? string
 --- @field abbreviation? string
+--- @field alias? string|string[]
 --- @field short_desc? string|fun(): string
 --- @field varname? string
 --- @field pv_name? string
---- @field type 'bool'|'number'|'string'
+--- @field type 'boolean'|'number'|'string'
+--- @field immutable? boolean
 --- @field list? 'comma'|'onecomma'|'commacolon'|'onecommacolon'|'flags'|'flagscomma'
 --- @field scope vim.option_scope[]
 --- @field deny_duplicates? boolean
@@ -83,6 +85,7 @@ end
 return {
   cstr = cstr,
   --- @type vim.option_meta[]
+  --- The order of the options MUST be alphabetic for ":set all".
   options = {
     {
       abbreviation = 'al',
@@ -91,56 +94,6 @@ return {
       scope = { 'global' },
       short_desc = N_('ASCII code of the letter Aleph (Hebrew)'),
       type = 'number',
-    },
-    {
-      abbreviation = 'arab',
-      cb = 'did_set_arabic',
-      defaults = { if_true = false },
-      desc = [=[
-        This option can be set to start editing Arabic text.
-        Setting this option will:
-        - Set the 'rightleft' option, unless 'termbidi' is set.
-        - Set the 'arabicshape' option, unless 'termbidi' is set.
-        - Set the 'keymap' option to "arabic"; in Insert mode CTRL-^ toggles
-          between typing English and Arabic key mapping.
-        - Set the 'delcombine' option
-
-        Resetting this option will:
-        - Reset the 'rightleft' option.
-        - Disable the use of 'keymap' (without changing its value).
-        Note that 'arabicshape' and 'delcombine' are not reset (it is a global
-        option).
-        Also see |arabic.txt|.
-      ]=],
-      full_name = 'arabic',
-      redraw = { 'curswant' },
-      scope = { 'window' },
-      short_desc = N_('Arabic as a default second language'),
-      type = 'bool',
-    },
-    {
-      abbreviation = 'arshape',
-      defaults = { if_true = true },
-      desc = [=[
-        When on and 'termbidi' is off, the required visual character
-        corrections that need to take place for displaying the Arabic language
-        take effect.  Shaping, in essence, gets enabled; the term is a broad
-        one which encompasses:
-          a) the changing/morphing of characters based on their location
-             within a word (initial, medial, final and stand-alone).
-          b) the enabling of the ability to compose characters
-          c) the enabling of the required combining of some characters
-        When disabled the display shows each character's true stand-alone
-        form.
-        Arabic is a complex language which requires other settings, for
-        further details see |arabic.txt|.
-      ]=],
-      full_name = 'arabicshape',
-      redraw = { 'all_windows', 'ui_option' },
-      scope = { 'global' },
-      short_desc = N_('do shaping for Arabic characters'),
-      type = 'bool',
-      varname = 'p_arshape',
     },
     {
       abbreviation = 'ari',
@@ -154,7 +107,7 @@ return {
       full_name = 'allowrevins',
       scope = { 'global' },
       short_desc = N_('allow CTRL-_ in Insert and Command-line mode'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ari',
     },
     {
@@ -202,6 +155,56 @@ return {
       varname = 'p_ambw',
     },
     {
+      abbreviation = 'arab',
+      cb = 'did_set_arabic',
+      defaults = { if_true = false },
+      desc = [=[
+        This option can be set to start editing Arabic text.
+        Setting this option will:
+        - Set the 'rightleft' option, unless 'termbidi' is set.
+        - Set the 'arabicshape' option, unless 'termbidi' is set.
+        - Set the 'keymap' option to "arabic"; in Insert mode CTRL-^ toggles
+          between typing English and Arabic key mapping.
+        - Set the 'delcombine' option
+
+        Resetting this option will:
+        - Reset the 'rightleft' option.
+        - Disable the use of 'keymap' (without changing its value).
+        Note that 'arabicshape' and 'delcombine' are not reset (it is a global
+        option).
+        Also see |arabic.txt|.
+      ]=],
+      full_name = 'arabic',
+      redraw = { 'curswant' },
+      scope = { 'window' },
+      short_desc = N_('Arabic as a default second language'),
+      type = 'boolean',
+    },
+    {
+      abbreviation = 'arshape',
+      defaults = { if_true = true },
+      desc = [=[
+        When on and 'termbidi' is off, the required visual character
+        corrections that need to take place for displaying the Arabic language
+        take effect.  Shaping, in essence, gets enabled; the term is a broad
+        one which encompasses:
+          a) the changing/morphing of characters based on their location
+             within a word (initial, medial, final and stand-alone).
+          b) the enabling of the ability to compose characters
+          c) the enabling of the required combining of some characters
+        When disabled the display shows each character's true stand-alone
+        form.
+        Arabic is a complex language which requires other settings, for
+        further details see |arabic.txt|.
+      ]=],
+      full_name = 'arabicshape',
+      redraw = { 'all_windows', 'ui_option' },
+      scope = { 'global' },
+      short_desc = N_('do shaping for Arabic characters'),
+      type = 'boolean',
+      varname = 'p_arshape',
+    },
+    {
       abbreviation = 'acd',
       cb = 'did_set_autochdir',
       defaults = { if_true = false },
@@ -216,7 +219,7 @@ return {
       full_name = 'autochdir',
       scope = { 'global' },
       short_desc = N_('change directory to the file in the current window'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_acd',
     },
     {
@@ -238,7 +241,7 @@ return {
       full_name = 'autoindent',
       scope = { 'buffer' },
       short_desc = N_('take indent for new line from previous line'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ai',
     },
     {
@@ -258,7 +261,7 @@ return {
       full_name = 'autoread',
       scope = { 'global', 'buffer' },
       short_desc = N_('autom. read file when changed outside of Vim'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ar',
     },
     {
@@ -283,7 +286,7 @@ return {
       full_name = 'autowrite',
       scope = { 'global' },
       short_desc = N_('automatically write file if changed'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_aw',
     },
     {
@@ -298,7 +301,7 @@ return {
       full_name = 'autowriteall',
       scope = { 'global' },
       short_desc = N_("as 'autowrite', but works with more commands"),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_awa',
     },
     {
@@ -315,7 +318,7 @@ return {
         See |:hi-normal| if you want to set the background color explicitly.
         					*g:colors_name*
         When a color scheme is loaded (the "g:colors_name" variable is set)
-        setting 'background' will cause the color scheme to be reloaded.  If
+        changing 'background' will cause the color scheme to be reloaded.  If
         the color scheme adjusts to the value of 'background' this will work.
         However, if the color scheme sets 'background' itself the effect may
         be undone.  First delete the "g:colors_name" variable when needed.
@@ -325,13 +328,9 @@ return {
         	:if $TERM ==# "xterm"
         	:  set background=dark
         	:endif
-        <	When this option is set, the default settings for the highlight groups
+        <	When this option is changed, the default settings for the highlight groups
         will change.  To use other settings, place ":highlight" commands AFTER
         the setting of the 'background' option.
-        This option is also used in the "$VIMRUNTIME/syntax/syntax.vim" file
-        to select the colors for syntax highlighting.  After changing this
-        option, you must load syntax.vim again to see the result.  This can be
-        done with ":syntax on".
       ]=],
       expand_cb = 'expand_set_background',
       full_name = 'background',
@@ -386,7 +385,7 @@ return {
       full_name = 'backup',
       scope = { 'global' },
       short_desc = N_('keep backup file after overwriting a file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_bk',
     },
     {
@@ -670,7 +669,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('read/write/edit file in binary mode'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_bin',
     },
     {
@@ -698,7 +697,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('a Byte Order Mark to the file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_bomb',
     },
     {
@@ -732,7 +731,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('wrapped line repeats indent'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'briopt',
@@ -847,7 +846,7 @@ return {
       scope = { 'buffer' },
       short_desc = N_('whether the buffer shows up in the buffer list'),
       tags = { 'E85' },
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_bl',
     },
     {
@@ -949,7 +948,7 @@ return {
       scope = { 'global' },
       secure = true,
       short_desc = N_(':cd without argument goes to the home directory'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_cdh',
     },
     {
@@ -1087,7 +1086,7 @@ return {
       full_name = 'cindent',
       scope = { 'buffer' },
       short_desc = N_('do C program indenting'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_cin',
     },
     {
@@ -1128,6 +1127,25 @@ return {
       varname = 'p_cino',
     },
     {
+      abbreviation = 'cinsd',
+      alloced = true,
+      defaults = { if_true = 'public,protected,private' },
+      deny_duplicates = true,
+      desc = [=[
+        Keywords that are interpreted as a C++ scope declaration by |cino-g|.
+        Useful e.g. for working with the Qt framework that defines additional
+        scope declarations "signals", "public slots" and "private slots": >
+        	set cinscopedecls+=signals,public\ slots,private\ slots
+        <
+      ]=],
+      full_name = 'cinscopedecls',
+      list = 'onecomma',
+      scope = { 'buffer' },
+      short_desc = N_("words that are recognized by 'cino-g'"),
+      type = 'string',
+      varname = 'p_cinsd',
+    },
+    {
       abbreviation = 'cinw',
       alloced = true,
       defaults = { if_true = 'if,else,while,do,for,switch' },
@@ -1146,25 +1164,6 @@ return {
       short_desc = N_("words where 'si' and 'cin' add an indent"),
       type = 'string',
       varname = 'p_cinw',
-    },
-    {
-      abbreviation = 'cinsd',
-      alloced = true,
-      defaults = { if_true = 'public,protected,private' },
-      deny_duplicates = true,
-      desc = [=[
-        Keywords that are interpreted as a C++ scope declaration by |cino-g|.
-        Useful e.g. for working with the Qt framework that defines additional
-        scope declarations "signals", "public slots" and "private slots": >
-        	set cinscopedecls+=signals,public\ slots,private\ slots
-        <
-      ]=],
-      full_name = 'cinscopedecls',
-      list = 'onecomma',
-      scope = { 'buffer' },
-      short_desc = N_("words that are recognized by 'cino-g'"),
-      type = 'string',
-      varname = 'p_cinsd',
     },
     {
       abbreviation = 'cb',
@@ -1340,8 +1339,8 @@ return {
       full_name = 'compatible',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_off',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'cpt',
@@ -1391,6 +1390,100 @@ return {
       tags = { 'E535' },
       type = 'string',
       varname = 'p_cpt',
+    },
+    {
+      abbreviation = 'cfu',
+      alloced = true,
+      cb = 'did_set_completefunc',
+      defaults = { if_true = '' },
+      desc = [=[
+        This option specifies a function to be used for Insert mode completion
+        with CTRL-X CTRL-U. |i_CTRL-X_CTRL-U|
+        See |complete-functions| for an explanation of how the function is
+        invoked and what it should return.  The value can be the name of a
+        function, a |lambda| or a |Funcref|. See |option-value-function| for
+        more information.
+        This option cannot be set from a |modeline| or in the |sandbox|, for
+        security reasons.
+      ]=],
+      full_name = 'completefunc',
+      func = true,
+      scope = { 'buffer' },
+      secure = true,
+      short_desc = N_('function to be used for Insert mode completion'),
+      type = 'string',
+      varname = 'p_cfu',
+    },
+    {
+      abbreviation = 'cot',
+      cb = 'did_set_completeopt',
+      defaults = { if_true = 'menu,preview' },
+      deny_duplicates = true,
+      desc = [=[
+        A comma-separated list of options for Insert mode completion
+        |ins-completion|.  The supported values are:
+
+           menu	    Use a popup menu to show the possible completions.  The
+        	    menu is only shown when there is more than one match and
+        	    sufficient colors are available.  |ins-completion-menu|
+
+           menuone  Use the popup menu also when there is only one match.
+        	    Useful when there is additional information about the
+        	    match, e.g., what file it comes from.
+
+           longest  Only insert the longest common text of the matches.  If
+        	    the menu is displayed you can use CTRL-L to add more
+        	    characters.  Whether case is ignored depends on the kind
+        	    of completion.  For buffer text the 'ignorecase' option is
+        	    used.
+
+           preview  Show extra information about the currently selected
+        	    completion in the preview window.  Only works in
+        	    combination with "menu" or "menuone".
+
+          noinsert  Do not insert any text for a match until the user selects
+        	    a match from the menu. Only works in combination with
+        	    "menu" or "menuone". No effect if "longest" is present.
+
+          noselect  Do not select a match in the menu, force the user to
+        	    select one from the menu. Only works in combination with
+        	    "menu" or "menuone".
+
+           popup    Show extra information about the currently selected
+        	    completion in a popup window.  Only works in combination
+        	    with "menu" or "menuone".  Overrides "preview".
+      ]=],
+      expand_cb = 'expand_set_completeopt',
+      full_name = 'completeopt',
+      list = 'onecomma',
+      scope = { 'global' },
+      short_desc = N_('options for Insert mode completion'),
+      type = 'string',
+      varname = 'p_cot',
+    },
+    {
+      abbreviation = 'csl',
+      cb = 'did_set_completeslash',
+      defaults = { if_true = '' },
+      desc = [=[
+        		only for MS-Windows
+        When this option is set it overrules 'shellslash' for completion:
+        - When this option is set to "slash", a forward slash is used for path
+          completion in insert mode. This is useful when editing HTML tag, or
+          Makefile with 'noshellslash' on MS-Windows.
+        - When this option is set to "backslash", backslash is used. This is
+          useful when editing a batch file with 'shellslash' set on MS-Windows.
+        - When this option is empty, same character is used as for
+          'shellslash'.
+        For Insert mode completion the buffer-local value is used.  For
+        command line completion the global value is used.
+      ]=],
+      enable_if = 'BACKSLASH_IN_FILENAME',
+      expand_cb = 'expand_set_completeslash',
+      full_name = 'completeslash',
+      scope = { 'buffer' },
+      type = 'string',
+      varname = 'p_csl',
     },
     {
       abbreviation = 'cocu',
@@ -1452,96 +1545,6 @@ return {
       type = 'number',
     },
     {
-      abbreviation = 'cfu',
-      alloced = true,
-      cb = 'did_set_completefunc',
-      defaults = { if_true = '' },
-      desc = [=[
-        This option specifies a function to be used for Insert mode completion
-        with CTRL-X CTRL-U. |i_CTRL-X_CTRL-U|
-        See |complete-functions| for an explanation of how the function is
-        invoked and what it should return.  The value can be the name of a
-        function, a |lambda| or a |Funcref|. See |option-value-function| for
-        more information.
-        This option cannot be set from a |modeline| or in the |sandbox|, for
-        security reasons.
-      ]=],
-      full_name = 'completefunc',
-      func = true,
-      scope = { 'buffer' },
-      secure = true,
-      short_desc = N_('function to be used for Insert mode completion'),
-      type = 'string',
-      varname = 'p_cfu',
-    },
-    {
-      abbreviation = 'cot',
-      cb = 'did_set_completeopt',
-      defaults = { if_true = 'menu,preview' },
-      deny_duplicates = true,
-      desc = [=[
-        A comma-separated list of options for Insert mode completion
-        |ins-completion|.  The supported values are:
-
-           menu	    Use a popup menu to show the possible completions.  The
-        	    menu is only shown when there is more than one match and
-        	    sufficient colors are available.  |ins-completion-menu|
-
-           menuone  Use the popup menu also when there is only one match.
-        	    Useful when there is additional information about the
-        	    match, e.g., what file it comes from.
-
-           longest  Only insert the longest common text of the matches.  If
-        	    the menu is displayed you can use CTRL-L to add more
-        	    characters.  Whether case is ignored depends on the kind
-        	    of completion.  For buffer text the 'ignorecase' option is
-        	    used.
-
-           preview  Show extra information about the currently selected
-        	    completion in the preview window.  Only works in
-        	    combination with "menu" or "menuone".
-
-          noinsert  Do not insert any text for a match until the user selects
-        	    a match from the menu. Only works in combination with
-        	    "menu" or "menuone". No effect if "longest" is present.
-
-          noselect  Do not select a match in the menu, force the user to
-        	    select one from the menu. Only works in combination with
-        	    "menu" or "menuone".
-      ]=],
-      expand_cb = 'expand_set_completeopt',
-      full_name = 'completeopt',
-      list = 'onecomma',
-      scope = { 'global' },
-      short_desc = N_('options for Insert mode completion'),
-      type = 'string',
-      varname = 'p_cot',
-    },
-    {
-      abbreviation = 'csl',
-      cb = 'did_set_completeslash',
-      defaults = { if_true = '' },
-      desc = [=[
-        		only for MS-Windows
-        When this option is set it overrules 'shellslash' for completion:
-        - When this option is set to "slash", a forward slash is used for path
-          completion in insert mode. This is useful when editing HTML tag, or
-          Makefile with 'noshellslash' on MS-Windows.
-        - When this option is set to "backslash", backslash is used. This is
-          useful when editing a batch file with 'shellslash' set on MS-Windows.
-        - When this option is empty, same character is used as for
-          'shellslash'.
-        For Insert mode completion the buffer-local value is used.  For
-        command line completion the global value is used.
-      ]=],
-      enable_if = 'BACKSLASH_IN_FILENAME',
-      expand_cb = 'expand_set_completeslash',
-      full_name = 'completeslash',
-      scope = { 'buffer' },
-      type = 'string',
-      varname = 'p_csl',
-    },
-    {
       abbreviation = 'cf',
       defaults = { if_true = false },
       desc = [=[
@@ -1557,7 +1560,7 @@ return {
       full_name = 'confirm',
       scope = { 'global' },
       short_desc = N_('ask what to do about unsaved/read-only files'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_confirm',
     },
     {
@@ -1577,7 +1580,7 @@ return {
       full_name = 'copyindent',
       scope = { 'buffer' },
       short_desc = N_("make 'autoindent' use existing indent structure"),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ci',
     },
     {
@@ -1842,7 +1845,7 @@ return {
       pv_name = 'p_crbind',
       scope = { 'window' },
       short_desc = N_('move cursor in window as it moves in other windows'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'cuc',
@@ -1861,7 +1864,7 @@ return {
       redraw = { 'current_window_only' },
       scope = { 'window' },
       short_desc = N_('highlight the screen column of the cursor'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'cul',
@@ -1876,7 +1879,7 @@ return {
       redraw = { 'current_window_only' },
       scope = { 'window' },
       short_desc = N_('highlight the screen line of the cursor'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'culopt',
@@ -1977,7 +1980,7 @@ return {
       full_name = 'delcombine',
       scope = { 'global' },
       short_desc = N_('delete combining characters on their own'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_deco',
     },
     {
@@ -2029,7 +2032,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('diff mode for the current window'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'dex',
@@ -2182,7 +2185,7 @@ return {
       full_name = 'digraph',
       scope = { 'global' },
       short_desc = N_('enable the entering of digraphs in Insert mode'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_dg',
     },
     {
@@ -2298,8 +2301,8 @@ return {
       full_name = 'edcompatible',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_off',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'emo',
@@ -2316,7 +2319,7 @@ return {
       redraw = { 'all_windows', 'ui_option' },
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_emoji',
     },
     {
@@ -2353,7 +2356,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('write CTRL-Z for last line in file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_eof',
     },
     {
@@ -2379,7 +2382,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('write <EOL> for last line in file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_eol',
     },
     {
@@ -2405,7 +2408,7 @@ return {
       full_name = 'equalalways',
       scope = { 'global' },
       short_desc = N_('windows are automatically made the same size'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ea',
     },
     {
@@ -2441,7 +2444,7 @@ return {
       full_name = 'errorbells',
       scope = { 'global' },
       short_desc = N_('ring the bell for error messages'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_eb',
     },
     {
@@ -2516,7 +2519,7 @@ return {
       full_name = 'expandtab',
       scope = { 'buffer' },
       short_desc = N_('use spaces when <Tab> is inserted'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_et',
     },
     {
@@ -2538,7 +2541,7 @@ return {
       scope = { 'global' },
       secure = true,
       short_desc = N_('read .nvimrc and .exrc in the current directory'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_exrc',
     },
     {
@@ -2768,7 +2771,7 @@ return {
       full_name = 'fileignorecase',
       scope = { 'global' },
       short_desc = N_('ignore case when using file names'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_fic',
     },
     {
@@ -2900,7 +2903,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('make sure last line in file has <EOL>'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_fixeol',
     },
     {
@@ -2959,7 +2962,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('set to display all folds open'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'fde',
@@ -3240,27 +3243,6 @@ return {
       varname = 'p_fex',
     },
     {
-      abbreviation = 'fo',
-      alloced = true,
-      cb = 'did_set_formatoptions',
-      defaults = { if_true = macros('DFLT_FO_VIM') },
-      desc = [=[
-        This is a sequence of letters which describes how automatic
-        formatting is to be done.
-        See |fo-table| for possible values and |gq| for how to format text.
-        Commas can be inserted for readability.
-        To avoid problems with flags that are added in the future, use the
-        "+=" and "-=" feature of ":set" |add-option-flags|.
-      ]=],
-      expand_cb = 'expand_set_formatoptions',
-      full_name = 'formatoptions',
-      list = 'flags',
-      scope = { 'buffer' },
-      short_desc = N_('how automatic formatting is to be done'),
-      type = 'string',
-      varname = 'p_fo',
-    },
-    {
       abbreviation = 'flp',
       alloced = true,
       defaults = { if_true = '^\\s*\\d\\+[\\]:.)}\\t ]\\s*' },
@@ -3280,6 +3262,27 @@ return {
       short_desc = N_('pattern used to recognize a list header'),
       type = 'string',
       varname = 'p_flp',
+    },
+    {
+      abbreviation = 'fo',
+      alloced = true,
+      cb = 'did_set_formatoptions',
+      defaults = { if_true = macros('DFLT_FO_VIM') },
+      desc = [=[
+        This is a sequence of letters which describes how automatic
+        formatting is to be done.
+        See |fo-table| for possible values and |gq| for how to format text.
+        Commas can be inserted for readability.
+        To avoid problems with flags that are added in the future, use the
+        "+=" and "-=" feature of ":set" |add-option-flags|.
+      ]=],
+      expand_cb = 'expand_set_formatoptions',
+      full_name = 'formatoptions',
+      list = 'flags',
+      scope = { 'buffer' },
+      short_desc = N_('how automatic formatting is to be done'),
+      type = 'string',
+      varname = 'p_fo',
     },
     {
       abbreviation = 'fp',
@@ -3328,7 +3331,7 @@ return {
       scope = { 'global' },
       secure = true,
       short_desc = N_('whether to invoke fsync() after file write'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_fs',
     },
     {
@@ -3345,14 +3348,14 @@ return {
         	:s///g		  subst. one	  subst. all
         	:s///gg		  subst. all	  subst. one
 
-        DEPRECATED: Setting this option may break plugins that are not aware
-        of this option.  Also, many users get confused that adding the /g flag
-        has the opposite effect of that it normally does.
+        NOTE: Setting this option may break plugins that rely on the default
+        behavior of the 'g' flag. This will also make the 'g' flag have the
+        opposite effect of that documented in |:s_g|.
       ]=],
       full_name = 'gdefault',
       scope = { 'global' },
       short_desc = N_('the ":substitute" flag \'g\' is default on'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_gd',
     },
     {
@@ -3848,7 +3851,7 @@ return {
       full_name = 'hidden',
       scope = { 'global' },
       short_desc = N_("don't unload buffer when it is |abandon|ed"),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_hid',
     },
     {
@@ -3884,8 +3887,8 @@ return {
       full_name = 'hkmap',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_off',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'hkp',
@@ -3893,8 +3896,8 @@ return {
       full_name = 'hkmapp',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_off',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'hls',
@@ -3925,7 +3928,7 @@ return {
       redraw = { 'all_windows' },
       scope = { 'global' },
       short_desc = N_('highlight matches with last search pattern'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_hls',
     },
     {
@@ -3944,7 +3947,7 @@ return {
       full_name = 'icon',
       scope = { 'global' },
       short_desc = N_('Vim set the text of the window icon'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_icon',
     },
     {
@@ -3980,7 +3983,7 @@ return {
       full_name = 'ignorecase',
       scope = { 'global' },
       short_desc = N_('ignore case in search patterns'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ic',
     },
     {
@@ -3997,7 +4000,7 @@ return {
       full_name = 'imcmdline',
       scope = { 'global' },
       short_desc = N_('use IM when starting to edit a command line'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'imd',
@@ -4015,7 +4018,7 @@ return {
       full_name = 'imdisable',
       scope = { 'global' },
       short_desc = N_('do not use the IM in any mode'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'imi',
@@ -4194,7 +4197,7 @@ return {
       full_name = 'incsearch',
       scope = { 'global' },
       short_desc = N_('highlight match while typing search pattern'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_is',
     },
     {
@@ -4282,7 +4285,7 @@ return {
       full_name = 'infercase',
       scope = { 'buffer' },
       short_desc = N_('adjust case of match for keyword completion'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_inf',
     },
     {
@@ -4291,8 +4294,8 @@ return {
       full_name = 'insertmode',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_off',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'isf',
@@ -4468,7 +4471,7 @@ return {
       full_name = 'joinspaces',
       scope = { 'global' },
       short_desc = N_('two spaces after a period with a join command'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_js',
     },
     {
@@ -4663,7 +4666,7 @@ return {
       full_name = 'langnoremap',
       scope = { 'global' },
       short_desc = N_("do not apply 'langmap' to mapped characters"),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_lnr',
     },
     {
@@ -4678,7 +4681,7 @@ return {
       full_name = 'langremap',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_lrm',
     },
     {
@@ -4717,7 +4720,7 @@ return {
       full_name = 'lazyredraw',
       scope = { 'global' },
       short_desc = N_("don't redraw while executing macros"),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_lz',
     },
     {
@@ -4738,7 +4741,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('wrap long lines at a blank'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       defaults = {
@@ -4801,7 +4804,7 @@ return {
       full_name = 'lisp',
       scope = { 'buffer' },
       short_desc = N_('indenting for Lisp'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_lisp',
     },
     {
@@ -4867,7 +4870,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('<Tab> and <EOL>'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'lcs',
@@ -4995,7 +4998,7 @@ return {
       full_name = 'loadplugins',
       scope = { 'global' },
       short_desc = N_('load plugin scripts when starting up'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_lpl',
     },
     {
@@ -5012,7 +5015,7 @@ return {
       full_name = 'magic',
       scope = { 'global' },
       short_desc = N_('special characters in search patterns'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_magic',
     },
     {
@@ -5279,7 +5282,7 @@ return {
       full_name = 'modeline',
       scope = { 'buffer' },
       short_desc = N_('recognize modelines at start or end of file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ml',
     },
     {
@@ -5296,7 +5299,7 @@ return {
       scope = { 'global' },
       secure = true,
       short_desc = N_('allow some options to be set in modeline'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_mle',
     },
     {
@@ -5328,7 +5331,7 @@ return {
       scope = { 'buffer' },
       short_desc = N_('changes to the text are not possible'),
       tags = { 'E21' },
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ma',
     },
     {
@@ -5363,7 +5366,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('buffer has been modified'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_mod',
     },
     {
@@ -5376,7 +5379,7 @@ return {
       full_name = 'more',
       scope = { 'global' },
       short_desc = N_('listings when the whole screen is filled'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_more',
     },
     {
@@ -5442,7 +5445,7 @@ return {
       redraw = { 'ui_option' },
       scope = { 'global' },
       short_desc = N_('keyboard focus follows the mouse'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_mousef',
     },
     {
@@ -5458,7 +5461,7 @@ return {
       redraw = { 'ui_option' },
       scope = { 'global' },
       short_desc = N_('hide mouse pointer while typing'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_mh',
     },
     {
@@ -5535,7 +5538,7 @@ return {
       redraw = { 'ui_option' },
       scope = { 'global' },
       short_desc = N_('deliver mouse move events to input queue'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_mousemev',
     },
     {
@@ -5732,7 +5735,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('print the line number in front of each line'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'nuw',
@@ -5796,7 +5799,7 @@ return {
       full_name = 'opendevice',
       scope = { 'global' },
       short_desc = N_('allow reading/writing devices on MS-Windows'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'opfunc',
@@ -5863,7 +5866,7 @@ return {
       pri_mkrc = true,
       scope = { 'global' },
       short_desc = N_('pasting text'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_paste',
     },
     {
@@ -6003,7 +6006,7 @@ return {
       full_name = 'preserveindent',
       scope = { 'buffer' },
       short_desc = N_('preserve the indent structure when reindenting'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_pi',
     },
     {
@@ -6034,15 +6037,15 @@ return {
       scope = { 'window' },
       short_desc = N_('identifies the preview window'),
       tags = { 'E590' },
-      type = 'bool',
+      type = 'boolean',
     },
     {
       defaults = { if_true = true },
       full_name = 'prompt',
       scope = { 'global' },
       short_desc = N_('enable prompt in Ex mode'),
-      type = 'bool',
-      varname = 'p_force_on',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'pb',
@@ -6175,7 +6178,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('disallow writing the buffer'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ro',
     },
     {
@@ -6291,15 +6294,15 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('show relative line number in front of each line'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       defaults = { if_true = true },
       full_name = 'remap',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_on',
+      type = 'boolean',
+      immutable = true,
     },
     {
       defaults = { if_true = 2 },
@@ -6327,7 +6330,7 @@ return {
       full_name = 'revins',
       scope = { 'global' },
       short_desc = N_('inserting characters will work backwards'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ri',
     },
     {
@@ -6348,7 +6351,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('window is right-to-left oriented'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'rlc',
@@ -6402,7 +6405,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'global' },
       short_desc = N_('show cursor line and column in the status line'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ru',
     },
     {
@@ -6556,27 +6559,6 @@ return {
       type = 'number',
     },
     {
-      abbreviation = 'sms',
-      cb = 'did_set_smoothscroll',
-      defaults = { if_true = false },
-      desc = [=[
-        Scrolling works with screen lines.  When 'wrap' is set and the first
-        line in the window wraps part of it may not be visible, as if it is
-        above the window. "<<<" is displayed at the start of the first line,
-        highlighted with |hl-NonText|.
-        You may also want to add "lastline" to the 'display' option to show as
-        much of the last line as possible.
-        NOTE: only partly implemented, currently works with CTRL-E, CTRL-Y
-        and scrolling with the mouse.
-      ]=],
-      full_name = 'smoothscroll',
-      pv_name = 'p_sms',
-      redraw = { 'current_window' },
-      scope = { 'window' },
-      short_desc = N_("scroll by screen lines when 'wrap' is set"),
-      type = 'bool',
-    },
-    {
       abbreviation = 'scbk',
       cb = 'did_set_scrollback',
       defaults = {
@@ -6618,7 +6600,7 @@ return {
       pv_name = 'p_scbind',
       scope = { 'window' },
       short_desc = N_('scroll in window as other windows scroll'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'sj',
@@ -6720,7 +6702,7 @@ return {
       scope = { 'global' },
       secure = true,
       short_desc = N_('No description'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_secure',
     },
     {
@@ -6829,6 +6811,7 @@ return {
     },
     {
       abbreviation = 'sd',
+      alias = { 'vi', 'viminfo' },
       cb = 'did_set_shada',
       defaults = {
         if_true = "!,'100,<50,s10,h",
@@ -6960,6 +6943,7 @@ return {
     },
     {
       abbreviation = 'sdf',
+      alias = { 'vif', 'viminfofile' },
       defaults = { if_true = '' },
       deny_duplicates = true,
       desc = [=[
@@ -7204,7 +7188,7 @@ return {
       full_name = 'shellslash',
       scope = { 'global' },
       short_desc = N_('use forward slash for shell file names'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ssl',
     },
     {
@@ -7225,8 +7209,25 @@ return {
       full_name = 'shelltemp',
       scope = { 'global' },
       short_desc = N_('whether to use a temp file for shell commands'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_stmp',
+    },
+    {
+      abbreviation = 'sxe',
+      defaults = { if_true = '' },
+      desc = [=[
+        When 'shellxquote' is set to "(" then the characters listed in this
+        option will be escaped with a '^' character.  This makes it possible
+        to execute most external commands with cmd.exe.
+        This option cannot be set from a |modeline| or in the |sandbox|, for
+        security reasons.
+      ]=],
+      full_name = 'shellxescape',
+      scope = { 'global' },
+      secure = true,
+      short_desc = N_("characters to escape when 'shellxquote' is ("),
+      type = 'string',
+      varname = 'p_sxe',
     },
     {
       abbreviation = 'sxq',
@@ -7255,23 +7256,6 @@ return {
       varname = 'p_sxq',
     },
     {
-      abbreviation = 'sxe',
-      defaults = { if_true = '' },
-      desc = [=[
-        When 'shellxquote' is set to "(" then the characters listed in this
-        option will be escaped with a '^' character.  This makes it possible
-        to execute most external commands with cmd.exe.
-        This option cannot be set from a |modeline| or in the |sandbox|, for
-        security reasons.
-      ]=],
-      full_name = 'shellxescape',
-      scope = { 'global' },
-      secure = true,
-      short_desc = N_("characters to escape when 'shellxquote' is ("),
-      type = 'string',
-      varname = 'p_sxe',
-    },
-    {
       abbreviation = 'sr',
       defaults = { if_true = false },
       desc = [=[
@@ -7282,7 +7266,7 @@ return {
       full_name = 'shiftround',
       scope = { 'global' },
       short_desc = N_('round indent to multiple of shiftwidth'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sr',
     },
     {
@@ -7414,7 +7398,7 @@ return {
       full_name = 'showcmd',
       scope = { 'global' },
       short_desc = N_('show (partial) command in status line'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sc',
     },
     {
@@ -7457,7 +7441,7 @@ return {
       full_name = 'showfulltag',
       scope = { 'global' },
       short_desc = N_('show full tag pattern when completing tag'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sft',
     },
     {
@@ -7483,7 +7467,7 @@ return {
       full_name = 'showmatch',
       scope = { 'global' },
       short_desc = N_('briefly jump to matching bracket if insert one'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sm',
     },
     {
@@ -7497,7 +7481,7 @@ return {
       full_name = 'showmode',
       scope = { 'global' },
       short_desc = N_('message on status line to show current mode'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_smd',
     },
     {
@@ -7612,7 +7596,7 @@ return {
       full_name = 'smartcase',
       scope = { 'global' },
       short_desc = N_('no ignore case when pattern has uppercase'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_scs',
     },
     {
@@ -7642,7 +7626,7 @@ return {
       full_name = 'smartindent',
       scope = { 'buffer' },
       short_desc = N_('smart autoindenting for C programs'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_si',
     },
     {
@@ -7663,8 +7647,29 @@ return {
       full_name = 'smarttab',
       scope = { 'global' },
       short_desc = N_("use 'shiftwidth' when inserting <Tab>"),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sta',
+    },
+    {
+      abbreviation = 'sms',
+      cb = 'did_set_smoothscroll',
+      defaults = { if_true = false },
+      desc = [=[
+        Scrolling works with screen lines.  When 'wrap' is set and the first
+        line in the window wraps part of it may not be visible, as if it is
+        above the window. "<<<" is displayed at the start of the first line,
+        highlighted with |hl-NonText|.
+        You may also want to add "lastline" to the 'display' option to show as
+        much of the last line as possible.
+        NOTE: only partly implemented, currently works with CTRL-E, CTRL-Y
+        and scrolling with the mouse.
+      ]=],
+      full_name = 'smoothscroll',
+      pv_name = 'p_sms',
+      redraw = { 'current_window' },
+      scope = { 'window' },
+      short_desc = N_("scroll by screen lines when 'wrap' is set"),
+      type = 'boolean',
     },
     {
       abbreviation = 'sts',
@@ -7703,7 +7708,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('spell checking'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'spc',
@@ -7820,6 +7825,31 @@ return {
       varname = 'p_spl',
     },
     {
+      abbreviation = 'spo',
+      cb = 'did_set_spelloptions',
+      defaults = { if_true = '' },
+      deny_duplicates = true,
+      desc = [=[
+        A comma-separated list of options for spell checking:
+        camel		When a word is CamelCased, assume "Cased" is a
+        		separate word: every upper-case character in a word
+        		that comes after a lower case character indicates the
+        		start of a new word.
+        noplainbuffer	Only spellcheck a buffer when 'syntax' is enabled,
+        		or when extmarks are set within the buffer. Only
+        		designated regions of the buffer are spellchecked in
+        		this case.
+      ]=],
+      expand_cb = 'expand_set_spelloptions',
+      full_name = 'spelloptions',
+      list = 'onecomma',
+      redraw = { 'current_buffer' },
+      scope = { 'buffer' },
+      secure = true,
+      type = 'string',
+      varname = 'p_spo',
+    },
+    {
       abbreviation = 'sps',
       cb = 'did_set_spellsuggest',
       defaults = { if_true = 'best' },
@@ -7900,31 +7930,6 @@ return {
       varname = 'p_sps',
     },
     {
-      abbreviation = 'spo',
-      cb = 'did_set_spelloptions',
-      defaults = { if_true = '' },
-      deny_duplicates = true,
-      desc = [=[
-        A comma-separated list of options for spell checking:
-        camel		When a word is CamelCased, assume "Cased" is a
-        		separate word: every upper-case character in a word
-        		that comes after a lower case character indicates the
-        		start of a new word.
-        noplainbuffer	Only spellcheck a buffer when 'syntax' is enabled,
-        		or when extmarks are set within the buffer. Only
-        		designated regions of the buffer are spellchecked in
-        		this case.
-      ]=],
-      expand_cb = 'expand_set_spelloptions',
-      full_name = 'spelloptions',
-      list = 'onecomma',
-      redraw = { 'current_buffer' },
-      scope = { 'buffer' },
-      secure = true,
-      type = 'string',
-      varname = 'p_spo',
-    },
-    {
       abbreviation = 'sb',
       defaults = { if_true = false },
       desc = [=[
@@ -7934,7 +7939,7 @@ return {
       full_name = 'splitbelow',
       scope = { 'global' },
       short_desc = N_('new window from split is below the current one'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sb',
     },
     {
@@ -7972,7 +7977,7 @@ return {
       full_name = 'splitright',
       scope = { 'global' },
       short_desc = N_('new window is put right of the current one'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_spr',
     },
     {
@@ -7993,7 +7998,7 @@ return {
       full_name = 'startofline',
       scope = { 'global' },
       short_desc = N_('commands move cursor to first non-blank in line'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_sol',
       vim = false,
     },
@@ -8355,7 +8360,7 @@ return {
       redraw = { 'statuslines' },
       scope = { 'buffer' },
       short_desc = N_('whether to use a swapfile for a buffer'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_swf',
     },
     {
@@ -8453,28 +8458,6 @@ return {
       short_desc = N_('syntax to be loaded for current buffer'),
       type = 'string',
       varname = 'p_syn',
-    },
-    {
-      abbreviation = 'tfu',
-      cb = 'did_set_tagfunc',
-      defaults = { if_true = '' },
-      desc = [=[
-        This option specifies a function to be used to perform tag searches.
-        The function gets the tag pattern and should return a List of matching
-        tags.  See |tag-function| for an explanation of how to write the
-        function and an example.  The value can be the name of a function, a
-        |lambda| or a |Funcref|. See |option-value-function| for more
-        information.
-        This option cannot be set from a |modeline| or in the |sandbox|, for
-        security reasons.
-      ]=],
-      full_name = 'tagfunc',
-      func = true,
-      scope = { 'buffer' },
-      secure = true,
-      short_desc = N_('function used to perform tag searches'),
-      type = 'string',
-      varname = 'p_tfu',
     },
     {
       abbreviation = 'tal',
@@ -8631,7 +8614,7 @@ return {
       full_name = 'tagbsearch',
       scope = { 'global' },
       short_desc = N_('use binary searching in tags files'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_tbs',
     },
     {
@@ -8655,6 +8638,28 @@ return {
       varname = 'p_tc',
     },
     {
+      abbreviation = 'tfu',
+      cb = 'did_set_tagfunc',
+      defaults = { if_true = '' },
+      desc = [=[
+        This option specifies a function to be used to perform tag searches.
+        The function gets the tag pattern and should return a List of matching
+        tags.  See |tag-function| for an explanation of how to write the
+        function and an example.  The value can be the name of a function, a
+        |lambda| or a |Funcref|. See |option-value-function| for more
+        information.
+        This option cannot be set from a |modeline| or in the |sandbox|, for
+        security reasons.
+      ]=],
+      full_name = 'tagfunc',
+      func = true,
+      scope = { 'buffer' },
+      secure = true,
+      short_desc = N_('function used to perform tag searches'),
+      type = 'string',
+      varname = 'p_tfu',
+    },
+    {
       abbreviation = 'tl',
       defaults = { if_true = 0 },
       desc = [=[
@@ -8676,7 +8681,7 @@ return {
       full_name = 'tagrelative',
       scope = { 'global' },
       short_desc = N_('file names in tag file are relative'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_tr',
     },
     {
@@ -8726,7 +8731,7 @@ return {
       full_name = 'tagstack',
       scope = { 'global' },
       short_desc = N_('push tags onto the tag stack'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_tgst',
     },
     {
@@ -8745,7 +8750,7 @@ return {
       full_name = 'termbidi',
       scope = { 'global' },
       short_desc = N_('terminal takes care of bi-directionality'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_tbidi',
     },
     {
@@ -8763,12 +8768,16 @@ return {
         Enables 24-bit RGB color in the |TUI|.  Uses "gui" |:highlight|
         attributes instead of "cterm" attributes. |guifg|
         Requires an ISO-8613-3 compatible terminal.
+
+        Nvim will automatically attempt to determine if the host terminal
+        supports 24-bit color and will enable this option if it does
+        (unless explicitly disabled by the user).
       ]=],
       full_name = 'termguicolors',
       redraw = { 'ui_option' },
       scope = { 'global' },
       short_desc = N_('Terminal true color support'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_tgc',
     },
     {
@@ -8815,7 +8824,7 @@ return {
       redraw = { 'ui_option' },
       scope = { 'global' },
       short_desc = N_('synchronize redraw output with the host terminal'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_termsync',
     },
     {
@@ -8823,8 +8832,8 @@ return {
       full_name = 'terse',
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_off',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'tw',
@@ -8905,7 +8914,7 @@ return {
       full_name = 'tildeop',
       scope = { 'global' },
       short_desc = N_('tilde command "~" behaves like an operator'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_to',
     },
     {
@@ -8920,7 +8929,7 @@ return {
       full_name = 'timeout',
       scope = { 'global' },
       short_desc = N_('time out on mappings and key codes'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_timeout',
     },
     {
@@ -8954,7 +8963,7 @@ return {
       full_name = 'title',
       scope = { 'global' },
       short_desc = N_('Vim set the title of the window'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_title',
     },
     {
@@ -9043,7 +9052,7 @@ return {
       redraw = { 'ui_option' },
       scope = { 'global' },
       short_desc = N_('out on mappings'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ttimeout',
     },
     {
@@ -9068,8 +9077,8 @@ return {
       no_mkrc = true,
       scope = { 'global' },
       short_desc = N_('No description'),
-      type = 'bool',
-      varname = 'p_force_on',
+      type = 'boolean',
+      immutable = true,
     },
     {
       abbreviation = 'udir',
@@ -9124,7 +9133,7 @@ return {
       full_name = 'undofile',
       scope = { 'buffer' },
       short_desc = N_('save undo information in a file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_udf',
     },
     {
@@ -9370,22 +9379,6 @@ return {
       varname = 'p_vop',
     },
     {
-      abbreviation = 'vi',
-      full_name = 'viminfo',
-      nodefault = true,
-      scope = { 'global' },
-      short_desc = N_('Alias for shada'),
-      type = 'string',
-    },
-    {
-      abbreviation = 'vif',
-      full_name = 'viminfofile',
-      nodefault = true,
-      scope = { 'global' },
-      short_desc = N_('Alias for shadafile instead'),
-      type = 'string',
-    },
-    {
       abbreviation = 've',
       cb = 'did_set_virtualedit',
       defaults = { if_true = '' },
@@ -9436,7 +9429,7 @@ return {
       full_name = 'visualbell',
       scope = { 'global' },
       short_desc = N_('use visual bell instead of beeping'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_vb',
     },
     {
@@ -9448,7 +9441,7 @@ return {
       full_name = 'warn',
       scope = { 'global' },
       short_desc = N_('for shell command when buffer was changed'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_warn',
     },
     {
@@ -9573,7 +9566,7 @@ return {
       full_name = 'wildignorecase',
       scope = { 'global' },
       short_desc = N_('ignore case when completing file names'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_wic',
     },
     {
@@ -9621,7 +9614,7 @@ return {
       full_name = 'wildmenu',
       scope = { 'global' },
       short_desc = N_('use menu for command line completion'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_wmnu',
     },
     {
@@ -9788,39 +9781,6 @@ return {
       type = 'number',
     },
     {
-      abbreviation = 'winhl',
-      alloced = true,
-      cb = 'did_set_winhighlight',
-      defaults = { if_true = '' },
-      deny_duplicates = true,
-      desc = [=[
-        Window-local highlights.  Comma-delimited list of highlight
-        |group-name| pairs "{hl-from}:{hl-to},..." where each {hl-from} is
-        a |highlight-groups| item to be overridden by {hl-to} group in
-        the window.
-
-        Note: highlight namespaces take precedence over 'winhighlight'.
-        See |nvim_win_set_hl_ns()| and |nvim_set_hl()|.
-
-        Highlights of vertical separators are determined by the window to the
-        left of the separator.  The 'tabline' highlight of a tabpage is
-        decided by the last-focused window of the tabpage.  Highlights of
-        the popupmenu are determined by the current window.  Highlights in the
-        message area cannot be overridden.
-
-        Example: show a different color for non-current windows: >
-        	set winhighlight=Normal:MyNormal,NormalNC:MyNormalNC
-        <
-      ]=],
-      expand_cb = 'expand_set_winhighlight',
-      full_name = 'winhighlight',
-      list = 'onecommacolon',
-      redraw = { 'current_window' },
-      scope = { 'window' },
-      short_desc = N_('Setup window-local highlights'),
-      type = 'string',
-    },
-    {
       abbreviation = 'wi',
       cb = 'did_set_window',
       defaults = {
@@ -9843,6 +9803,35 @@ return {
       short_desc = N_('nr of lines to scroll for CTRL-F and CTRL-B'),
       type = 'number',
       varname = 'p_window',
+    },
+    {
+      abbreviation = 'wfh',
+      defaults = { if_true = false },
+      desc = [=[
+        Keep the window height when windows are opened or closed and
+        'equalalways' is set.  Also for |CTRL-W_=|.  Set by default for the
+        |preview-window| and |quickfix-window|.
+        The height may be changed anyway when running out of room.
+      ]=],
+      full_name = 'winfixheight',
+      redraw = { 'statuslines' },
+      scope = { 'window' },
+      short_desc = N_('keep window height when opening/closing windows'),
+      type = 'boolean',
+    },
+    {
+      abbreviation = 'wfw',
+      defaults = { if_true = false },
+      desc = [=[
+        Keep the window width when windows are opened or closed and
+        'equalalways' is set.  Also for |CTRL-W_=|.
+        The width may be changed anyway when running out of room.
+      ]=],
+      full_name = 'winfixwidth',
+      redraw = { 'statuslines' },
+      scope = { 'window' },
+      short_desc = N_('keep window width when opening/closing windows'),
+      type = 'boolean',
     },
     {
       abbreviation = 'wh',
@@ -9874,33 +9863,37 @@ return {
       varname = 'p_wh',
     },
     {
-      abbreviation = 'wfh',
-      defaults = { if_true = false },
+      abbreviation = 'winhl',
+      alloced = true,
+      cb = 'did_set_winhighlight',
+      defaults = { if_true = '' },
+      deny_duplicates = true,
       desc = [=[
-        Keep the window height when windows are opened or closed and
-        'equalalways' is set.  Also for |CTRL-W_=|.  Set by default for the
-        |preview-window| and |quickfix-window|.
-        The height may be changed anyway when running out of room.
+        Window-local highlights.  Comma-delimited list of highlight
+        |group-name| pairs "{hl-from}:{hl-to},..." where each {hl-from} is
+        a |highlight-groups| item to be overridden by {hl-to} group in
+        the window.
+
+        Note: highlight namespaces take precedence over 'winhighlight'.
+        See |nvim_win_set_hl_ns()| and |nvim_set_hl()|.
+
+        Highlights of vertical separators are determined by the window to the
+        left of the separator.  The 'tabline' highlight of a tabpage is
+        decided by the last-focused window of the tabpage.  Highlights of
+        the popupmenu are determined by the current window.  Highlights in the
+        message area cannot be overridden.
+
+        Example: show a different color for non-current windows: >
+        	set winhighlight=Normal:MyNormal,NormalNC:MyNormalNC
+        <
       ]=],
-      full_name = 'winfixheight',
-      redraw = { 'statuslines' },
+      expand_cb = 'expand_set_winhighlight',
+      full_name = 'winhighlight',
+      list = 'onecommacolon',
+      redraw = { 'current_window' },
       scope = { 'window' },
-      short_desc = N_('keep window height when opening/closing windows'),
-      type = 'bool',
-    },
-    {
-      abbreviation = 'wfw',
-      defaults = { if_true = false },
-      desc = [=[
-        Keep the window width when windows are opened or closed and
-        'equalalways' is set.  Also for |CTRL-W_=|.
-        The width may be changed anyway when running out of room.
-      ]=],
-      full_name = 'winfixwidth',
-      redraw = { 'statuslines' },
-      scope = { 'window' },
-      short_desc = N_('keep window width when opening/closing windows'),
-      type = 'bool',
+      short_desc = N_('Setup window-local highlights'),
+      type = 'string',
     },
     {
       abbreviation = 'wmh',
@@ -9991,7 +9984,7 @@ return {
       redraw = { 'current_window' },
       scope = { 'window' },
       short_desc = N_('lines wrap and continue on the next line'),
-      type = 'bool',
+      type = 'boolean',
     },
     {
       abbreviation = 'wm',
@@ -10022,7 +10015,7 @@ return {
       scope = { 'global' },
       short_desc = N_('searches wrap around the end of the file'),
       tags = { 'E384', 'E385' },
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_ws',
     },
     {
@@ -10037,7 +10030,7 @@ return {
       full_name = 'write',
       scope = { 'global' },
       short_desc = N_('to a file is allowed'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_write',
     },
     {
@@ -10049,7 +10042,7 @@ return {
       full_name = 'writeany',
       scope = { 'global' },
       short_desc = N_('write to file with no need for "!" override'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_wa',
     },
     {
@@ -10072,7 +10065,7 @@ return {
       full_name = 'writebackup',
       scope = { 'global' },
       short_desc = N_('make a backup before overwriting a file'),
-      type = 'bool',
+      type = 'boolean',
       varname = 'p_wb',
     },
     {

@@ -362,11 +362,7 @@ describe(':terminal prints more lines than the screen height and exits', functio
     -- closes the buffer correctly after pressing a key
     screen:expect([[
       ^                              |
-      ~                             |
-      ~                             |
-      ~                             |
-      ~                             |
-      ~                             |
+      ~                             |*5
                                     |
     ]])
   end)
@@ -392,9 +388,9 @@ describe("'scrollback' option", function()
   it('set to 0 behaves as 1', function()
     local screen
     if is_os('win') then
-      screen = thelpers.screen_setup(nil, "['cmd.exe']", 30)
+      screen = thelpers.screen_setup(nil, { 'cmd.exe' }, 30)
     else
-      screen = thelpers.screen_setup(nil, "['sh']", 30)
+      screen = thelpers.screen_setup(nil, { 'sh' }, 30)
     end
 
     meths.set_option_value('scrollback', 0, {})
@@ -407,10 +403,10 @@ describe("'scrollback' option", function()
     local screen
     if is_os('win') then
       command([[let $PROMPT='$$']])
-      screen = thelpers.screen_setup(nil, "['cmd.exe']", 30)
+      screen = thelpers.screen_setup(nil, { 'cmd.exe' }, 30)
     else
       command('let $PS1 = "$"')
-      screen = thelpers.screen_setup(nil, "['sh']", 30)
+      screen = thelpers.screen_setup(nil, { 'sh' }, 30)
     end
 
     meths.set_option_value('scrollback', 200, {})
@@ -580,41 +576,41 @@ describe("pending scrollback line handling", function()
     ]]
     screen:expect [[
       {1:  1 }^a                         |
-      {1:  2 } a                        |
-      {1:  3 }  a                       |
-      {1:  4 }   a                      |
-      {1:  5 }    a                     |
-      {1:  6 }     a                    |
+      {1:  2 }a                         |
+      {1:  3 }a                         |
+      {1:  4 }a                         |
+      {1:  5 }a                         |
+      {1:  6 }a                         |
                                     |
     ]]
     feed('G')
     screen:expect [[
-      {1:  7 }      a                   |
-      {1:  8 }       a                  |
-      {1:  9 }        a                 |
-      {1: 10 }         a                |
-      {1: 11 }          a               |
-      {1: 12 }           ^a              |
+      {1:  7 }a                         |
+      {1:  8 }a                         |
+      {1:  9 }a                         |
+      {1: 10 }a                         |
+      {1: 11 }a                         |
+      {1: 12 }^a                         |
                                     |
     ]]
     assert_alive()
   end)
 
-  it("does not crash after nvim_buf_call #14891", function()
-    skip(is_os('win'))
-    exec_lua [[
+  it('does not crash after nvim_buf_call #14891', function()
+    exec_lua([[
       local bufnr = vim.api.nvim_create_buf(false, true)
+      local args = ...
       vim.api.nvim_buf_call(bufnr, function()
-        vim.fn.termopen({"echo", ("hi\n"):rep(11)})
+        vim.fn.termopen(args)
       end)
       vim.api.nvim_win_set_buf(0, bufnr)
-      vim.cmd("startinsert")
-    ]]
+      vim.cmd('startinsert')
+    ]], is_os('win')
+          and {'cmd.exe', '/c', 'for /L %I in (1,1,12) do @echo hi'}
+          or {'printf', ('hi\n'):rep(12)}
+    )
     screen:expect [[
-      hi                            |
-      hi                            |
-      hi                            |
-                                    |
+      hi                            |*4
                                     |
       [Process exited 0]{2: }           |
       {3:-- TERMINAL --}                |

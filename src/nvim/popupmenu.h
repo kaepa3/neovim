@@ -2,10 +2,11 @@
 
 #include <stdbool.h>
 
+#include "nvim/buffer_defs.h"
+#include "nvim/eval/typval_defs.h"  // IWYU pragma: keep
 #include "nvim/grid_defs.h"
-#include "nvim/macros.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/macros_defs.h"
+#include "nvim/menu_defs.h"  // IWYU pragma: keep
 
 /// Used for popup menu items.
 typedef struct {

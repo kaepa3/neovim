@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,7 +9,7 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/api/ui.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/cursor_shape.h"
@@ -23,19 +22,24 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/time.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/ui.h"
 #include "nvim/ui_client.h"
 #include "nvim/ui_compositor.h"
-#include "nvim/vim.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
+
+typedef struct ui_event_callback {
+  LuaRef cb;
+  bool ext_widgets[kUIGlobalCount];
+} UIEventCallback;
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "ui.c.generated.h"
@@ -59,6 +63,7 @@ bool ui_cb_ext[kUIExtCount];  ///< Internalized UI capabilities.
 
 static bool has_mouse = false;
 static int pending_has_mouse = -1;
+static bool pending_default_colors = false;
 
 static Array call_buf = ARRAY_DICT_INIT;
 
@@ -130,6 +135,8 @@ void ui_free_all_mem(void)
     free_ui_event_callback(event_cb);
   })
   map_destroy(uint32_t, &ui_event_cbs);
+
+  multiqueue_free(resize_events);
 }
 #endif
 
@@ -228,7 +235,7 @@ void ui_refresh(void)
   p_lz = save_p_lz;
 
   if (ext_widgets[kUIMessages]) {
-    set_option_value("cmdheight", NUMBER_OPTVAL(0), 0);
+    set_option_value(kOptCmdheight, NUMBER_OPTVAL(0), 0);
     command_height();
   }
   ui_mode_info_set();
@@ -272,13 +279,26 @@ static void ui_refresh_event(void **argv)
 
 void ui_schedule_refresh(void)
 {
-  multiqueue_put(resize_events, ui_refresh_event, 0);
+  multiqueue_put(resize_events, ui_refresh_event, NULL);
 }
 
 void ui_default_colors_set(void)
 {
-  ui_call_default_colors_set(normal_fg, normal_bg, normal_sp,
-                             cterm_normal_fg_color, cterm_normal_bg_color);
+  // Throttle setting of default colors at startup, so it only happens once
+  // if the user sets the colorscheme in startup.
+  pending_default_colors = true;
+  if (starting == 0) {
+    ui_may_set_default_colors();
+  }
+}
+
+static void ui_may_set_default_colors(void)
+{
+  if (pending_default_colors) {
+    pending_default_colors = false;
+    ui_call_default_colors_set(normal_fg, normal_bg, normal_sp,
+                               cterm_normal_fg_color, cterm_normal_bg_color);
+  }
 }
 
 void ui_busy_start(void)
@@ -435,6 +455,9 @@ void ui_line(ScreenGrid *grid, int row, int startcol, int endcol, int clearcol, 
     startcol = 0;
     flags |= kLineFlagInvalid;
   }
+
+  // set default colors now so that that text won't have to be repainted later
+  ui_may_set_default_colors();
 
   size_t off = grid->line_offset[row] + (size_t)startcol;
 
@@ -692,7 +715,7 @@ void ui_call_event(char *name, Array args)
   ui_log(name);
 }
 
-void ui_cb_update_ext(void)
+static void ui_cb_update_ext(void)
 {
   memset(ui_cb_ext, 0, ARRAY_SIZE(ui_cb_ext));
 
@@ -708,7 +731,7 @@ void ui_cb_update_ext(void)
   }
 }
 
-void free_ui_event_callback(UIEventCallback *event_cb)
+static void free_ui_event_callback(UIEventCallback *event_cb)
 {
   api_free_luaref(event_cb->cb);
   xfree(event_cb);

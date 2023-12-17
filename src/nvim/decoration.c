@@ -2,24 +2,23 @@
 #include <limits.h>
 #include <stddef.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "nvim/api/extmark.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
 #include "nvim/buffer.h"
 #include "nvim/decoration.h"
 #include "nvim/drawscreen.h"
 #include "nvim/extmark.h"
 #include "nvim/fold.h"
+#include "nvim/grid.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
-#include "nvim/mbyte.h"
+#include "nvim/marktree.h"
 #include "nvim/memory.h"
 #include "nvim/move.h"
 #include "nvim/option_vars.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/sign.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
@@ -27,7 +26,7 @@
 #endif
 
 // TODO(bfredl): These should maybe be per-buffer, so that all resources
-// asssociated with a buffer can be freed when the buffer is unloaded.
+// associated with a buffer can be freed when the buffer is unloaded.
 kvec_t(DecorSignHighlight) decor_items = KV_INITIAL_VALUE;
 uint32_t decor_freelist = UINT32_MAX;
 
@@ -115,7 +114,7 @@ void decor_redraw(buf_T *buf, int row1, int row2, DecorInline decor)
       idx = sh->next;
     }
   } else {
-    decor_redraw_sh(buf, row1, row2, decor_sh_from_inline(decor.data.hl, (String)STRING_INIT));
+    decor_redraw_sh(buf, row1, row2, decor_sh_from_inline(decor.data.hl));
   }
 }
 
@@ -153,14 +152,14 @@ DecorVirtText *decor_put_vt(DecorVirtText vt, DecorVirtText *next)
   return decor_alloc;
 }
 
-DecorSignHighlight decor_sh_from_inline(DecorHighlightInline item, String conceal_large)
+DecorSignHighlight decor_sh_from_inline(DecorHighlightInline item)
 {
   // TODO(bfredl): Eventually simple signs will be inlinable as well
   assert(!(item.flags & kSHIsSign));
   DecorSignHighlight conv = {
     .flags = item.flags,
     .priority = item.priority,
-    .text.data = { 0 },
+    .text.sc[0] = item.conceal_char,
     .hl_id = item.hl_id,
     .number_hl_id = 0,
     .line_hl_id = 0,
@@ -168,23 +167,10 @@ DecorSignHighlight decor_sh_from_inline(DecorHighlightInline item, String concea
     .next = DECOR_ID_INVALID,
   };
 
-  // TODO(bfredl): 'tis a little bullshit. Won't need it once conceals and signs to use schar_T
-  if (conceal_large.size) {
-    String c = conceal_large;
-    if (c.size <= 8) {
-      memcpy(conv.text.data, c.data, c.size + (c.size < 8 ? 1 : 0));
-    } else {
-      conv.flags |= kSHConcealAlloc;
-      conv.text.ptr = xstrdup(conceal_large.data);
-    }
-  } else {
-    memcpy(conv.text.data, item.conceal_char, 4);
-    conv.text.data[4] = NUL;
-  }
   return conv;
 }
 
-void buf_put_decor(buf_T *buf, DecorInline decor, int row)
+void buf_put_decor(buf_T *buf, DecorInline decor, int row, int row2)
 {
   if (decor.ext) {
     DecorVirtText *vt = decor.data.ext.vt;
@@ -196,7 +182,7 @@ void buf_put_decor(buf_T *buf, DecorInline decor, int row)
     uint32_t idx = decor.data.ext.sh_idx;
     while (idx != DECOR_ID_INVALID) {
       DecorSignHighlight *sh = &kv_A(decor_items, idx);
-      buf_put_decor_sh(buf, sh, row);
+      buf_put_decor_sh(buf, sh, row, row2);
       idx = sh->next;
     }
   }
@@ -217,21 +203,21 @@ void buf_put_decor_virt(buf_T *buf, DecorVirtText *vt)
 }
 
 static int sign_add_id = 0;
-void buf_put_decor_sh(buf_T *buf, DecorSignHighlight *sh, int row)
+void buf_put_decor_sh(buf_T *buf, DecorSignHighlight *sh, int row1, int row2)
 {
   if (sh->flags & kSHIsSign) {
     sh->sign_add_id = sign_add_id++;
     buf->b_signs++;
     if (sh->text.ptr) {
       buf->b_signs_with_text++;
-      buf_signcols_add_check(buf, row + 1);
+      buf_signcols_invalidate_range(buf, row1, row2, 1);
     }
   }
 }
 
-void buf_decor_remove(buf_T *buf, int row, int row2, DecorInline decor, bool free)
+void buf_decor_remove(buf_T *buf, int row1, int row2, DecorInline decor, bool free)
 {
-  decor_redraw(buf, row, row2, decor);
+  decor_redraw(buf, row1, row2, decor);
   if (decor.ext) {
     DecorVirtText *vt = decor.data.ext.vt;
     while (vt) {
@@ -241,7 +227,7 @@ void buf_decor_remove(buf_T *buf, int row, int row2, DecorInline decor, bool fre
     uint32_t idx = decor.data.ext.sh_idx;
     while (idx != DECOR_ID_INVALID) {
       DecorSignHighlight *sh = &kv_A(decor_items, idx);
-      buf_remove_decor_sh(buf, row, row2, sh);
+      buf_remove_decor_sh(buf, row1, row2, sh);
       idx = sh->next;
     }
     if (free) {
@@ -263,7 +249,7 @@ void buf_remove_decor_virt(buf_T *buf, DecorVirtText *vt)
   }
 }
 
-void buf_remove_decor_sh(buf_T *buf, int row, int row2, DecorSignHighlight *sh)
+void buf_remove_decor_sh(buf_T *buf, int row1, int row2, DecorSignHighlight *sh)
 {
   if (sh->flags & kSHIsSign) {
     assert(buf->b_signs > 0);
@@ -271,8 +257,8 @@ void buf_remove_decor_sh(buf_T *buf, int row, int row2, DecorSignHighlight *sh)
     if (sh->text.ptr) {
       assert(buf->b_signs_with_text > 0);
       buf->b_signs_with_text--;
-      if (row2 >= row) {
-        buf_signcols_del_check(buf, row + 1, row2 + 1);
+      if (row2 >= row1) {
+        buf_signcols_invalidate_range(buf, row1, row2, -1);
       }
     }
   }
@@ -326,12 +312,13 @@ void decor_free_inner(DecorVirtText *vt, uint32_t first_idx)
   uint32_t idx = first_idx;
   while (idx != DECOR_ID_INVALID) {
     DecorSignHighlight *sh = &kv_A(decor_items, idx);
-    if (sh->flags & (kSHIsSign | kSHConcealAlloc)) {
+    if (sh->flags & kSHIsSign) {
       xfree(sh->text.ptr);
     }
     if (sh->flags & kSHIsSign) {
       xfree(sh->sign_name);
     }
+    sh->flags = 0;
     if (sh->next == DECOR_ID_INVALID) {
       sh->next = decor_freelist;
       decor_freelist = first_idx;
@@ -370,6 +357,16 @@ void clear_virtlines(VirtLines *lines)
   }
   kv_destroy(*lines);
   *lines = (VirtLines)KV_INITIAL_VALUE;
+}
+
+void decor_check_invalid_glyphs(void)
+{
+  for (size_t i = 0; i < kv_size(decor_items); i++) {
+    DecorSignHighlight *it = &kv_A(decor_items, i);
+    if ((it->flags & kSHConceal) && schar_high(it->text.sc[0])) {
+      it->text.sc[0] = schar_from_char(schar_get_first_codepoint(it->text.sc[0]));
+    }
+  }
 }
 
 /// Get the next chunk of a virtual text item.
@@ -503,7 +500,7 @@ static void decor_range_add_from_inline(DecorState *state, int start_row, int st
       idx = sh->next;
     }
   } else {
-    DecorSignHighlight sh = decor_sh_from_inline(decor.data.hl, (String)STRING_INIT);
+    DecorSignHighlight sh = decor_sh_from_inline(decor.data.hl);
     decor_range_add_sh(state, start_row, start_col, end_row, end_col, &sh, owned, ns, mark_id);
   }
 }
@@ -541,6 +538,10 @@ void decor_range_add_virt(DecorState *state, int start_row, int start_col, int e
 void decor_range_add_sh(DecorState *state, int start_row, int start_col, int end_row, int end_col,
                         DecorSignHighlight *sh, bool owned, uint32_t ns, uint32_t mark_id)
 {
+  if (sh->flags & kSHIsSign) {
+    return;
+  }
+
   DecorRange range = {
     .start_row = start_row, .start_col = start_col, .end_row = end_row, .end_col = end_col,
     .kind = kDecorKindHighlight,
@@ -551,7 +552,7 @@ void decor_range_add_sh(DecorState *state, int start_row, int start_col, int end
     .draw_col = -10,
   };
 
-  if (sh->hl_id || (sh->flags & (kSHIsSign | kSHConceal | kSHSpellOn | kSHSpellOff))) {
+  if (sh->hl_id || (sh->flags & (kSHConceal | kSHSpellOn | kSHSpellOff))) {
     if (sh->hl_id) {
       range.attr_id = syn_id2attr(sh->hl_id);
     }
@@ -628,7 +629,7 @@ next_mark:
   int attr = 0;
   size_t j = 0;
   int conceal = 0;
-  int conceal_char = 0;
+  schar_T conceal_char = 0;
   int conceal_attr = 0;
   TriState spell = kNone;
 
@@ -661,10 +662,7 @@ next_mark:
       if (item.start_row == state->row && item.start_col == col) {
         DecorSignHighlight *sh = &item.data.sh;
         conceal = 2;
-        char *text = (sh->flags & kSHConcealAlloc) ? sh->text.ptr : sh->text.data;
-        // TODO(bfredl): kSHConcealAlloc is obviously a waste unless we change
-        // `conceal_char` to schar_T
-        conceal_char = utf_ptr2char(text);
+        conceal_char = sh->text.sc[0];
         state->col_until = MIN(state->col_until, item.start_col);
         conceal_attr = item.attr_id;
       }
@@ -721,7 +719,7 @@ void decor_redraw_signs(win_T *wp, buf_T *buf, int row, SignTextAttrs sattrs[], 
                         int *cul_id, int *num_id)
 {
   MarkTreeIter itr[1];
-  if (!buf->b_signs || !marktree_itr_get_overlap(buf->b_marktree, row, 0, itr)) {
+  if (!marktree_itr_get_overlap(buf->b_marktree, row, 0, itr)) {
     return;
   }
 
@@ -732,10 +730,8 @@ void decor_redraw_signs(win_T *wp, buf_T *buf, int row, SignTextAttrs sattrs[], 
   while (marktree_itr_step_overlap(buf->b_marktree, itr, &pair)) {
     if (!mt_invalid(pair.start) && mt_decor_sign(pair.start)) {
       DecorSignHighlight *sh = decor_find_sign(mt_decor(pair.start));
-      if (sh) {
-        num_text += (sh->text.ptr != NULL);
-        kv_push(signs, ((SignItem){ sh, pair.start.id }));
-      }
+      num_text += (sh->text.ptr != NULL);
+      kv_push(signs, ((SignItem){ sh, pair.start.id }));
     }
   }
 
@@ -746,10 +742,8 @@ void decor_redraw_signs(win_T *wp, buf_T *buf, int row, SignTextAttrs sattrs[], 
     }
     if (!mt_end(mark) && !mt_invalid(mark) && mt_decor_sign(mark)) {
       DecorSignHighlight *sh = decor_find_sign(mt_decor(mark));
-      if (sh) {
-        num_text += (sh->text.ptr != NULL);
-        kv_push(signs, ((SignItem){ sh, mark.id }));
-      }
+      num_text += (sh->text.ptr != NULL);
+      kv_push(signs, ((SignItem){ sh, mark.id }));
     }
 
     marktree_itr_next(buf->b_marktree, itr);
@@ -798,61 +792,129 @@ DecorSignHighlight *decor_find_sign(DecorInline decor)
   }
 }
 
-// Get the maximum required amount of sign columns needed between row and
-// end_row.
-int decor_signcols(buf_T *buf, int row, int end_row, int max)
+static void buf_signcols_validate_row(buf_T *buf, int count, int add)
 {
-  if (max <= 1 && buf->b_signs_with_text >= (size_t)max) {
-    return max;
+  // If "count" is greater than current max, set it and reset "max_count".
+  if (count > buf->b_signcols.max) {
+    buf->b_signcols.max = count;
+    buf->b_signcols.max_count = 0;
+    buf->b_signcols.resized = true;
+  }
+  // If row has or had "max" signs, adjust "max_count" with sign of "add".
+  if (count == buf->b_signcols.max - (add < 0 ? -add : 0)) {
+    buf->b_signcols.max_count += (add > 0) - (add < 0);
+  }
+}
+
+/// Validate a range by counting the number of overlapping signs and adjusting
+/// "b_signcols" accordingly.
+static void buf_signcols_validate_range(buf_T *buf, int row1, int row2, int add)
+{
+  if (-add == buf->b_signcols.max) {
+    buf->b_signcols.max_count -= (row2 + 1 - row1);
+    return;  // max signs were removed from the range, no need to count.
   }
 
-  if (buf->b_signs_with_text == 0) {
-    return 0;
-  }
+  int currow = row1;
+  MTPair pair = { 0 };
+  MarkTreeIter itr[1];
 
-  int signcols = 0;  // highest value of count
-  // TODO(bfredl): only need to use marktree_itr_get_overlap once.
-  // then we can process both start and end events and update state for each row
-  for (int currow = row; currow <= end_row; currow++) {
-    MarkTreeIter itr[1];
-    if (!marktree_itr_get_overlap(buf->b_marktree, currow, 0, itr)) {
-      continue;
-    }
+  // Allocate an array of integers holding the overlapping signs in the range.
+  assert(row2 >= row1);
+  int *overlap = xcalloc(sizeof(int), (size_t)(row2 + 1 - row1));
 
-    int count = 0;
-    MTPair pair;
-    while (marktree_itr_step_overlap(buf->b_marktree, itr, &pair)) {
-      if (!mt_invalid(pair.start) && (pair.start.flags & MT_FLAG_DECOR_SIGNTEXT)) {
-        count++;
-      }
-    }
-
-    while (itr->x) {
-      MTKey mark = marktree_itr_current(itr);
-      if (mark.pos.row != currow) {
-        break;
-      }
-      if (!mt_invalid(mark) && !mt_end(mark) && (mark.flags & MT_FLAG_DECOR_SIGNTEXT)) {
-        DecorSignHighlight *sh = decor_find_sign(mt_decor(mark));
-        if (sh && sh->text.ptr) {
-          count++;
-        }
-      }
-      marktree_itr_next(buf->b_marktree, itr);
-    }
-
-    if (count > signcols) {
-      if (row != end_row) {
-        buf->b_signcols.sentinel = currow + 1;
-      }
-      if (count >= max) {
-        return max;
-      }
-      signcols = count;
+  // First find the number of overlapping signs at "row1".
+  (void)marktree_itr_get_overlap(buf->b_marktree, currow, 0, itr);
+  while (marktree_itr_step_overlap(buf->b_marktree, itr, &pair)) {
+    if (!mt_invalid(pair.start) && pair.start.flags & MT_FLAG_DECOR_SIGNTEXT) {
+      overlap[0]++;
     }
   }
 
-  return signcols;
+  // Continue traversing the marktree until beyond "row2".
+  while (itr->x) {
+    MTKey mark = marktree_itr_current(itr);
+    if (mark.pos.row > row2) {
+      break;
+    }
+    // Finish the count at the previous row.
+    if (mark.pos.row != currow) {
+      buf_signcols_validate_row(buf, overlap[currow - row1], add);
+      currow = mark.pos.row;
+    }
+    // Increment overlap array for the start and range of a paired sign mark.
+    if (!mt_invalid(mark) && !mt_end(mark) && (mark.flags & MT_FLAG_DECOR_SIGNTEXT)) {
+      MTPos end = marktree_get_altpos(buf->b_marktree, mark, NULL);
+      for (int i = currow; i <= MIN(row2, end.row < 0 ? currow : end.row); i++) {
+        overlap[i - row1]++;
+      }
+    }
+
+    marktree_itr_next(buf->b_marktree, itr);
+  }
+  buf_signcols_validate_row(buf, overlap[currow - row1], add);
+  xfree(overlap);
+}
+
+int buf_signcols_validate(win_T *wp, buf_T *buf, bool stc_check)
+{
+  if (!map_size(buf->b_signcols.invalid)) {
+    return buf->b_signcols.max;
+  }
+
+  int start;
+  SignRange range;
+  map_foreach(buf->b_signcols.invalid, start, range, {
+    // Leave rest of the ranges invalid if max is already at configured
+    // maximum or resize is detected for a 'statuscolumn' rebuild.
+    if ((stc_check && buf->b_signcols.resized)
+        || (!stc_check && range.add > 0 && buf->b_signcols.max >= wp->w_maxscwidth)) {
+      return wp->w_maxscwidth;
+    }
+    buf_signcols_validate_range(buf, start, range.end, range.add);
+  });
+
+  // Check if we need to scan the entire buffer.
+  if (buf->b_signcols.max_count == 0) {
+    buf->b_signcols.max = 0;
+    buf->b_signcols.resized = true;
+    buf_signcols_validate_range(buf, 0, buf->b_ml.ml_line_count, 1);
+  }
+
+  map_clear(int, buf->b_signcols.invalid);
+  return buf->b_signcols.max;
+}
+
+static void buf_signcols_invalidate_range(buf_T *buf, int row1, int row2, int add)
+{
+  if (!buf->b_signs_with_text) {
+    buf->b_signcols.max = buf->b_signcols.max_count = 0;
+    buf->b_signcols.resized = true;
+    map_clear(int, buf->b_signcols.invalid);
+    return;
+  }
+
+  // Remove an invalid range if sum of added/removed signs is now 0.
+  SignRange *srp = map_ref(int, SignRange)(buf->b_signcols.invalid, row1, NULL);
+  if (srp && srp->end == row2 && srp->add + add == 0) {
+    map_del(int, SignRange)(buf->b_signcols.invalid, row1, NULL);
+    return;
+  }
+
+  // Merge with overlapping invalid range.
+  int start;
+  SignRange range;
+  map_foreach(buf->b_signcols.invalid, start, range, {
+    if (row1 <= range.end && start <= row2) {
+      row1 = MIN(row1, start);
+      row2 = MAX(row2, range.end);
+      break;
+    }
+  });
+
+  srp = map_put_ref(int, SignRange)(buf->b_signcols.invalid, row1, NULL, NULL);
+  srp->end = row2;
+  srp->add += add;
 }
 
 void decor_redraw_end(DecorState *state)
@@ -964,20 +1026,16 @@ void decor_to_dict_legacy(Dictionary *dict, DecorInline decor, bool hl_name)
       idx = sh->next;
     }
   } else {
-    sh_hl = decor_sh_from_inline(decor.data.hl, (String)STRING_INIT);
+    sh_hl = decor_sh_from_inline(decor.data.hl);
   }
 
   if (sh_hl.hl_id) {
     PUT(*dict, "hl_group", hl_group_name(sh_hl.hl_id, hl_name));
     PUT(*dict, "hl_eol", BOOLEAN_OBJ(sh_hl.flags & kSHHlEol));
     if (sh_hl.flags & kSHConceal) {
-      String name;
-      if (sh_hl.flags & kSHConcealAlloc) {
-        name = cstr_to_string(sh_hl.text.ptr);
-      } else {
-        name = cbuf_to_string(sh_hl.text.data, strnlen(sh_hl.text.data, 8));
-      }
-      PUT(*dict, "conceal", STRING_OBJ(name));
+      char buf[MAX_SCHAR_SIZE];
+      schar_get(buf, sh_hl.text.sc[0]);
+      PUT(*dict, "conceal", CSTR_TO_OBJ(buf));
     }
 
     if (sh_hl.flags & kSHSpellOn) {

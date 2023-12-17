@@ -80,6 +80,9 @@ function vim.api.nvim__id_float(flt) end
 function vim.api.nvim__inspect_cell(grid, row, col) end
 
 --- @private
+--- For testing. The condition in schar_cache_clear_if_full is hard to reach,
+--- so this function can be used to force a cache clear in a test.
+---
 function vim.api.nvim__invalidate_glyph_cache() end
 
 --- @private
@@ -148,7 +151,7 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 ---                    `nvim_buf_lines_event`. Else the first notification
 ---                    will be `nvim_buf_changedtick_event`. Not for Lua
 ---                    callbacks.
---- @param opts table<string,function> Optional parameters.
+--- @param opts vim.api.keyset.buf_attach Optional parameters.
 ---                    • on_lines: Lua callback invoked on change. Return `true` to detach. Args:
 ---                      • the string "lines"
 ---                      • buffer handle
@@ -281,16 +284,10 @@ function vim.api.nvim_buf_del_var(buffer, name) end
 --- Deletes the buffer. See `:bwipeout`
 ---
 --- @param buffer integer Buffer handle, or 0 for current buffer
---- @param opts table<string,any> Optional parameters. Keys:
+--- @param opts vim.api.keyset.buf_delete Optional parameters. Keys:
 ---               • force: Force deletion and ignore unsaved changes.
 ---               • unload: Unloaded only, do not delete. See `:bunload`
 function vim.api.nvim_buf_delete(buffer, opts) end
-
---- Deactivates buffer-update events on the channel.
----
---- @param buffer integer Buffer handle, or 0 for current buffer
---- @return boolean
-function vim.api.nvim_buf_detach(buffer) end
 
 --- Gets a changed tick of a buffer
 ---
@@ -310,7 +307,7 @@ function vim.api.nvim_buf_get_commands(buffer, opts) end
 --- @param buffer integer Buffer handle, or 0 for current buffer
 --- @param ns_id integer Namespace id from `nvim_create_namespace()`
 --- @param id integer Extmark id
---- @param opts table<string,any> Optional parameters. Keys:
+--- @param opts vim.api.keyset.get_extmark Optional parameters. Keys:
 ---               • details: Whether to include the details dict
 ---               • hl_name: Whether to include highlight group name instead
 ---                 of id, true if omitted
@@ -443,7 +440,7 @@ function vim.api.nvim_buf_get_option(buffer, name) end
 --- @param start_col integer Starting column (byte offset) on first line
 --- @param end_row integer Last line index, inclusive
 --- @param end_col integer Ending column (byte offset) on last line, exclusive
---- @param opts table<string,any> Optional parameters. Currently unused.
+--- @param opts vim.api.keyset.empty Optional parameters. Currently unused.
 --- @return string[]
 function vim.api.nvim_buf_get_text(buffer, start_row, start_col, end_row, end_col, opts) end
 
@@ -629,7 +626,7 @@ function vim.api.nvim_buf_set_lines(buffer, start, end_, strict_indexing, replac
 --- @param name string Mark name
 --- @param line integer Line number
 --- @param col integer Column/row number
---- @param opts table<string,any> Optional parameters. Reserved for future use.
+--- @param opts vim.api.keyset.empty Optional parameters. Reserved for future use.
 --- @return boolean
 function vim.api.nvim_buf_set_mark(buffer, name, line, col, opts) end
 
@@ -678,25 +675,9 @@ function vim.api.nvim_buf_set_var(buffer, name, value) end
 --- @param src_id integer
 --- @param line integer
 --- @param chunks any[]
---- @param opts table<string,any>
+--- @param opts vim.api.keyset.empty
 --- @return integer
 function vim.api.nvim_buf_set_virtual_text(buffer, src_id, line, chunks, opts) end
-
---- Calls many API methods atomically.
---- This has two main usages:
---- 1. To perform several requests from an async context atomically, i.e.
----    without interleaving redraws, RPC requests from other clients, or user
----    interactions (however API methods may trigger autocommands or event
----    processing which have such side effects, e.g. `:sleep` may wake
----    timers).
---- 2. To minimize RPC overhead (roundtrips) of a sequence of many requests.
----
----
---- @param calls any[] an array of calls, where each call is described by an array
----              with two elements: the request name, and an array of
----              arguments.
---- @return any[]
-function vim.api.nvim_call_atomic(calls) end
 
 --- Calls a Vimscript `Dictionary-function` with the given arguments.
 --- On execution error: fails with Vimscript error, updates v:errmsg.
@@ -791,6 +772,16 @@ function vim.api.nvim_command(command) end
 --- @param command string
 --- @return string
 function vim.api.nvim_command_output(command) end
+
+--- Set info for the completion candidate index. if the info was shown in a
+--- window, then the window and buffer ids are returned for further
+--- customization. If the text was not shown, an empty dict is returned.
+---
+--- @param index integer the completion candidate index
+--- @param opts vim.api.keyset.complete_set Optional parameters.
+---              • info: (string) info text.
+--- @return table<string,any>
+function vim.api.nvim_complete_set(index, opts) end
 
 --- Create or get an autocommand group `autocmd-groups`.
 --- To get an existing group id, do:
@@ -1019,10 +1010,6 @@ function vim.api.nvim_err_write(str) end
 --- @param str string Message
 function vim.api.nvim_err_writeln(str) end
 
---- @param lvl integer
---- @param data string
-function vim.api.nvim_error_event(lvl, data) end
-
 --- Evaluates a Vimscript `expression`. Dictionaries and Lists are recursively
 --- expanded.
 --- On execution error: fails with Vimscript error, updates v:errmsg.
@@ -1087,22 +1074,6 @@ function vim.api.nvim_exec2(src, opts) end
 ---                callback. See `nvim_create_autocmd()` for details.
 function vim.api.nvim_exec_autocmds(event, opts) end
 
---- Execute Lua code. Parameters (if any) are available as `...` inside the
---- chunk. The chunk can return a value.
---- Only statements are executed. To evaluate an expression, prefix it with
---- `return`: return my_function(...)
----
---- @param code string Lua code to execute
---- @param args any[] Arguments to the code
---- @return any
-function vim.api.nvim_exec_lua(code, args) end
-
---- @deprecated
---- @param code string
---- @param args any[]
---- @return any
-function vim.api.nvim_execute_lua(code, args) end
-
 --- Sends input-keys to Nvim, subject to various quirks controlled by `mode`
 --- flags. This is a blocking call, unlike `nvim_input()`.
 --- On execution error: does not fail, but updates v:errmsg.
@@ -1129,12 +1100,6 @@ function vim.api.nvim_feedkeys(keys, mode, escape_ks) end
 ---
 --- @return table<string,any>
 function vim.api.nvim_get_all_options_info() end
-
---- Returns a 2-tuple (Array), where item 0 is the current channel id and item
---- 1 is the `api-metadata` map (Dictionary).
----
---- @return any[]
-function vim.api.nvim_get_api_info() end
 
 --- Get all autocommands that match the corresponding {opts}.
 --- These examples will get autocommands matching ALL the given criteria:
@@ -1286,7 +1251,7 @@ function vim.api.nvim_get_keymap(mode) end
 --- Marks are (1,0)-indexed. `api-indexing`
 ---
 --- @param name string Mark name
---- @param opts table<string,any> Optional parameters. Reserved for future use.
+--- @param opts vim.api.keyset.empty Optional parameters. Reserved for future use.
 --- @return any[]
 function vim.api.nvim_get_mark(name, opts) end
 
@@ -1484,13 +1449,15 @@ function vim.api.nvim_notify(msg, log_level, opts) end
 --- virtual terminal having the intended size.
 ---
 --- @param buffer integer the buffer to use (expected to be empty)
---- @param opts table<string,function> Optional parameters.
+--- @param opts vim.api.keyset.open_term Optional parameters.
 ---               • on_input: Lua callback for input sent, i e keypresses in
 ---                 terminal mode. Note: keypresses are sent raw as they would
 ---                 be to the pty master end. For instance, a carriage return
 ---                 is sent as a "\r", not as a "\n". `textlock` applies. It
 ---                 is possible to call `nvim_chan_send()` directly in the
 ---                 callback however. ["input", term, bufnr, data]
+---               • force_crlf: (boolean, default true) Convert "\n" to
+---                 "\r\n".
 --- @return integer
 function vim.api.nvim_open_term(buffer, opts) end
 
@@ -1647,7 +1614,7 @@ function vim.api.nvim_out_write(str) end
 --- Doesn't check the validity of command arguments.
 ---
 --- @param str string Command line string to parse. Cannot contain "\n".
---- @param opts table<string,any> Optional parameters. Reserved for future use.
+--- @param opts vim.api.keyset.empty Optional parameters. Reserved for future use.
 --- @return table<string,any>
 function vim.api.nvim_parse_cmd(str, opts) end
 
@@ -1730,61 +1697,8 @@ function vim.api.nvim_replace_termcodes(str, from_part, do_lt, special) end
 ---               inserted in the buffer. Ignored for `cmdline-completion`.
 --- @param finish boolean Finish the completion and dismiss the popup menu. Implies
 ---               {insert}.
---- @param opts table<string,any> Optional parameters. Reserved for future use.
+--- @param opts vim.api.keyset.empty Optional parameters. Reserved for future use.
 function vim.api.nvim_select_popupmenu_item(item, insert, finish, opts) end
-
---- Self-identifies the client.
---- The client/plugin/application should call this after connecting, to
---- provide hints about its identity and purpose, for debugging and
---- orchestration.
---- Can be called more than once; the caller should merge old info if
---- appropriate. Example: library first identifies the channel, then a plugin
---- using that library later identifies itself.
----
---- @param name string Short name for the connected client
---- @param version table<string,any> Dictionary describing the version, with these (optional)
----                   keys:
----                   • "major" major version (defaults to 0 if not set, for
----                     no release yet)
----                   • "minor" minor version
----                   • "patch" patch number
----                   • "prerelease" string describing a prerelease, like
----                     "dev" or "beta1"
----                   • "commit" hash or similar identifier of commit
---- @param type string Must be one of the following values. Client libraries
----                   should default to "remote" unless overridden by the
----                   user.
----                   • "remote" remote client connected "Nvim flavored"
----                     MessagePack-RPC (responses must be in reverse order of
----                     requests). `msgpack-rpc`
----                   • "msgpack-rpc" remote client connected to Nvim via
----                     fully MessagePack-RPC compliant protocol.
----                   • "ui" gui frontend
----                   • "embedder" application using Nvim as a component (for
----                     example, IDE/editor implementing a vim mode).
----                   • "host" plugin host, typically started by nvim
----                   • "plugin" single plugin, started by nvim
---- @param methods table<string,any> Builtin methods in the client. For a host, this does not
----                   include plugin methods which will be discovered later.
----                   The key should be the method name, the values are dicts
----                   with these (optional) keys (more keys may be added in
----                   future versions of Nvim, thus unknown keys are ignored.
----                   Clients must only use keys defined in this or later
----                   versions of Nvim):
----                   • "async" if true, send as a notification. If false or
----                     unspecified, use a blocking request
----                   • "nargs" Number of arguments. Could be a single integer
----                     or an array of two integers, minimum and maximum
----                     inclusive.
---- @param attributes table<string,any> Arbitrary string:string map of informal client
----                   properties. Suggested keys:
----                   • "website": Client homepage URL (e.g. GitHub
----                     repository)
----                   • "license": License description ("Apache 2", "GPLv3",
----                     "MIT", …)
----                   • "logo": URI or path to image, preferably small logo or
----                     icon. .png or .svg format is preferred.
-function vim.api.nvim_set_client_info(name, version, type, methods, attributes) end
 
 --- Sets the current buffer.
 ---
@@ -1973,11 +1887,6 @@ function vim.api.nvim_set_vvar(name, value) end
 --- @return integer
 function vim.api.nvim_strwidth(text) end
 
---- Subscribes to event broadcasts.
----
---- @param event string Event type string
-function vim.api.nvim_subscribe(event) end
-
 --- Removes a tab-scoped (t:) variable
 ---
 --- @param tabpage integer Tabpage handle, or 0 for current tabpage
@@ -2021,79 +1930,6 @@ function vim.api.nvim_tabpage_list_wins(tabpage) end
 --- @param name string Variable name
 --- @param value any Variable value
 function vim.api.nvim_tabpage_set_var(tabpage, name, value) end
-
---- Activates UI events on the channel.
---- Entry point of all UI clients. Allows `--embed` to continue startup.
---- Implies that the client is ready to show the UI. Adds the client to the
---- list of UIs. `nvim_list_uis()`
----
---- @param width integer Requested screen columns
---- @param height integer Requested screen rows
---- @param options table<string,any> `ui-option` map
-function vim.api.nvim_ui_attach(width, height, options) end
-
---- Deactivates UI events on the channel.
---- Removes the client from the list of UIs. `nvim_list_uis()`
----
-function vim.api.nvim_ui_detach() end
-
---- Tells Nvim the geometry of the popupmenu, to align floating windows with
---- an external popup menu.
---- Note that this method is not to be confused with
---- `nvim_ui_pum_set_height()`, which sets the number of visible items in the
---- popup menu, while this function sets the bounding box of the popup menu,
---- including visual elements such as borders and sliders. Floats need not use
---- the same font size, nor be anchored to exact grid corners, so one can set
---- floating-point numbers to the popup menu geometry.
----
---- @param width number Popupmenu width.
---- @param height number Popupmenu height.
---- @param row number Popupmenu row.
---- @param col number Popupmenu height.
-function vim.api.nvim_ui_pum_set_bounds(width, height, row, col) end
-
---- Tells Nvim the number of elements displaying in the popupmenu, to decide
---- <PageUp> and <PageDown> movement.
----
---- @param height integer Popupmenu height, must be greater than zero.
-function vim.api.nvim_ui_pum_set_height(height) end
-
---- @param gained boolean
-function vim.api.nvim_ui_set_focus(gained) end
-
---- @param name string
---- @param value any
-function vim.api.nvim_ui_set_option(name, value) end
-
---- Tells Nvim when a terminal event has occurred
---- The following terminal events are supported:
----
---- • "termresponse": The terminal sent an OSC or DCS response sequence to
----   Nvim. The payload is the received response. Sets `v:termresponse` and
----   fires `TermResponse`.
----
----
---- @param event string Event name
---- @param value any
-function vim.api.nvim_ui_term_event(event, value) end
-
---- @param width integer
---- @param height integer
-function vim.api.nvim_ui_try_resize(width, height) end
-
---- Tell Nvim to resize a grid. Triggers a grid_resize event with the
---- requested grid size or the maximum size if it exceeds size limits.
---- On invalid grid handle, fails with error.
----
---- @param grid integer The handle of the grid to be changed.
---- @param width integer The new requested width.
---- @param height integer The new requested height.
-function vim.api.nvim_ui_try_resize_grid(grid, width, height) end
-
---- Unsubscribes to event broadcasts.
----
---- @param event string Event type string
-function vim.api.nvim_unsubscribe(event) end
 
 --- Calls a function with window as temporary current window.
 ---

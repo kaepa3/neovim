@@ -24,8 +24,8 @@
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
-#include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -71,7 +71,7 @@
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
 #include "nvim/math.h"
@@ -82,7 +82,6 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
-#include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
 #include "nvim/ops.h"
@@ -91,7 +90,7 @@
 #include "nvim/optionstr.h"
 #include "nvim/os/dl.h"
 #include "nvim/os/fileio.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os.h"
 #include "nvim/os/pty_process.h"
 #include "nvim/os/shell.h"
@@ -100,7 +99,7 @@
 #include "nvim/path.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
@@ -114,7 +113,7 @@
 #include "nvim/tag.h"
 #include "nvim/ui.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 /// Describe data to return from find_some_match()
@@ -356,10 +355,7 @@ static void api_wrapper(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     goto end;
   }
 
-  if (!object_to_vim(result, rettv, &err)) {
-    assert(ERROR_SET(&err));
-    semsg(_("Error converting the call result: %s"), err.msg);
-  }
+  object_to_vim(result, rettv, &err);
 
 end:
   api_free_array(args);
@@ -429,7 +425,7 @@ static void f_and(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void f_api_info(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   Dictionary metadata = api_metadata();
-  (void)object_to_vim(DICTIONARY_OBJ(metadata), rettv, NULL);
+  object_to_vim(DICTIONARY_OBJ(metadata), rettv, NULL);
 }
 
 /// "atan2()" function
@@ -1024,7 +1020,7 @@ static void f_ctxget(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   Dictionary ctx_dict = ctx_to_dict(ctx);
   Error err = ERROR_INIT;
-  (void)object_to_vim(DICTIONARY_OBJ(ctx_dict), rettv, &err);
+  object_to_vim(DICTIONARY_OBJ(ctx_dict), rettv, &err);
   api_free_dictionary(ctx_dict);
   api_clear_error(&err);
 }
@@ -1720,6 +1716,8 @@ static void f_exists(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     } else {
       n = au_exists(p + 1);
     }
+  } else if (strncmp(p, "v:lua.", 6) == 0 && nlua_func_exists(p + 6)) {
+    n = true;
   } else {  // Internal variable.
     n = var_exists(p);
   }
@@ -2175,7 +2173,7 @@ static void f_float2nr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     return;
   }
 
-  if (f <= (float_T) - VARNUMBER_MAX + DBL_EPSILON) {
+  if (f <= (float_T)(-VARNUMBER_MAX) + DBL_EPSILON) {
     rettv->vval.v_number = -VARNUMBER_MAX;
   } else if (f >= (float_T)VARNUMBER_MAX - DBL_EPSILON) {
     rettv->vval.v_number = VARNUMBER_MAX;
@@ -3899,13 +3897,16 @@ static void f_jobresize(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   rettv->vval.v_number = 1;
 }
 
-static const char *ignored_env_vars[] = {
+static const char *pty_ignored_env_vars[] = {
 #ifndef MSWIN
   "COLUMNS",
   "LINES",
   "TERMCAP",
   "COLORFGBG",
+  "COLORTERM",
 #endif
+  "VIM",
+  "VIMRUNTIME",
   NULL
 };
 
@@ -3944,9 +3945,9 @@ static dict_T *create_environment(const dictitem_T *job_env, const bool clear_en
       // child process.  We're removing them here so the user can still decide
       // they want to explicitly set them.
       for (size_t i = 0;
-           i < ARRAY_SIZE(ignored_env_vars) && ignored_env_vars[i];
+           i < ARRAY_SIZE(pty_ignored_env_vars) && pty_ignored_env_vars[i];
            i++) {
-        dictitem_T *dv = tv_dict_find(env, ignored_env_vars[i], -1);
+        dictitem_T *dv = tv_dict_find(env, pty_ignored_env_vars[i], -1);
         if (dv) {
           tv_dict_item_remove(env, dv);
         }
@@ -3954,10 +3955,6 @@ static dict_T *create_environment(const dictitem_T *job_env, const bool clear_en
 #ifndef MSWIN
       // Set COLORTERM to "truecolor" if termguicolors is set
       if (p_tgc) {
-        dictitem_T *dv = tv_dict_find(env, S_LEN("COLORTERM"));
-        if (dv) {
-          tv_dict_item_remove(env, dv);
-        }
         tv_dict_add_str(env, S_LEN("COLORTERM"), "truecolor");
       }
 #endif
@@ -6755,10 +6752,7 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     goto end;
   }
 
-  if (!object_to_vim(result, rettv, &err)) {
-    assert(ERROR_SET(&err));
-    semsg(_("Error converting the call result: %s"), err.msg);
-  }
+  object_to_vim(result, rettv, &err);
 
 end:
   arena_mem_free(res_mem);
@@ -7247,7 +7241,7 @@ int do_searchpair(const char *spat, const char *mpat, const char *epat, int dir,
     // If it's still empty it was changed and restored, need to restore in
     // the complicated way.
     if (*p_cpo == NUL) {
-      set_option_value_give_err("cpo", CSTR_AS_OPTVAL(save_cpo), 0);
+      set_option_value_give_err(kOptCpoptions, CSTR_AS_OPTVAL(save_cpo), 0);
     }
     free_string_option(save_cpo);
   }
@@ -7441,7 +7435,7 @@ static void f_setenv(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   char valbuf[NUMBUFLEN];
   const char *name = tv_get_string_buf(&argvars[0], namebuf);
 
-  // seting an environment variable may be dangerous, e.g. you could
+  // setting an environment variable may be dangerous, e.g. you could
   // setenv GCONV_PATH=/tmp and then have iconv() unexpectedly call
   // a shell command using some shared library:
   if (check_secure()) {

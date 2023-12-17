@@ -61,14 +61,13 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cursor.h"
 #include "nvim/decoration.h"
-#include "nvim/decoration_defs.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
 #include "nvim/digraph.h"
@@ -92,10 +91,9 @@
 #include "nvim/normal.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/os_defs.h"
 #include "nvim/plines.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
@@ -106,11 +104,11 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 /// corner value flags for hsep_connected and vsep_connected
@@ -605,13 +603,6 @@ int update_screen(void)
         buf->b_mod_tick_decor = display_tick;
       }
     }
-
-    // Reset 'statuscolumn' if there is no dedicated signcolumn but it is invalid.
-    if (*wp->w_p_stc != NUL && !wp->w_buffer->b_signcols.valid && wp->w_minscwidth <= SCL_NO) {
-      wp->w_nrwidth_line_count = 0;
-      wp->w_valid &= ~VALID_WCOL;
-      wp->w_redr_type = UPD_NOT_VALID;
-    }
   }
 
   // Go from top to bottom through the windows, redrawing the ones that need it.
@@ -619,11 +610,6 @@ int update_screen(void)
   screen_search_hl.rm.regprog = NULL;
 
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    // Validate b_signcols if there is no dedicated signcolumn but 'statuscolumn' is set.
-    if (*wp->w_p_stc != NUL && wp->w_minscwidth <= SCL_NO) {
-      buf_signcols(wp->w_buffer, 0);
-    }
-
     if (wp->w_redr_type == UPD_CLEAR && wp->w_floating && wp->w_grid_alloc.chars) {
       grid_invalidate(&wp->w_grid_alloc);
       wp->w_redr_type = UPD_NOT_VALID;
@@ -663,10 +649,11 @@ int update_screen(void)
 
   win_check_ns_hl(NULL);
 
-  // Reset b_mod_set flags.  Going through all windows is probably faster
-  // than going through all buffers (there could be many buffers).
+  // Reset b_mod_set and b_signcols.resized flags.  Going through all windows is
+  // probably faster than going through all buffers (there could be many buffers).
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
     wp->w_buffer->b_mod_set = false;
+    wp->w_buffer->b_signcols.resized = false;
   }
 
   updating_screen = 0;
@@ -1205,16 +1192,31 @@ void comp_col(void)
   set_vim_var_nr(VV_ECHOSPACE, sc_col - 1);
 }
 
-static void redraw_win_signcol(win_T *wp)
+/// Redraw entire window "wp" if configured 'signcolumn' width changes.
+static bool win_redraw_signcols(win_T *wp)
 {
-  // If we can compute a change in the automatic sizing of the sign column
-  // under 'signcolumn=auto:X' and signs currently placed in the buffer, better
-  // figuring it out here so we can redraw the entire screen for it.
-  int scwidth = wp->w_scwidth;
-  wp->w_scwidth = win_signcol_count(wp);
-  if (wp->w_scwidth != scwidth) {
-    changed_line_abv_curs_win(wp);
+  int width;
+  bool rebuild_stc = false;
+  buf_T *buf = wp->w_buffer;
+
+  if (wp->w_minscwidth <= SCL_NO) {
+    if (*wp->w_p_stc) {
+      buf_signcols_validate(wp, buf, true);
+      if (buf->b_signcols.resized) {
+        rebuild_stc = true;
+        wp->w_nrwidth_line_count = 0;
+      }
+    }
+    width = 0;
+  } else if (wp->w_maxscwidth <= 1 && buf->b_signs_with_text >= (size_t)wp->w_maxscwidth) {
+    width = wp->w_maxscwidth;
+  } else {
+    width = buf_signcols_validate(wp, buf, false);
   }
+
+  int scwidth = wp->w_scwidth;
+  wp->w_scwidth = MAX(wp->w_minscwidth, width);
+  return (wp->w_scwidth != scwidth || rebuild_stc);
 }
 
 /// Check if horizontal separator of window "wp" at specified window corner is connected to the
@@ -1494,7 +1496,11 @@ static void win_update(win_T *wp, DecorProviders *providers)
   DecorProviders line_providers;
   decor_providers_invoke_win(wp, providers, &line_providers);
 
-  redraw_win_signcol(wp);
+  if (win_redraw_signcols(wp)) {
+    wp->w_lines_valid = 0;
+    wp->w_redr_type = UPD_NOT_VALID;
+    changed_line_abv_curs_win(wp);
+  }
 
   init_search_hl(wp, &screen_search_hl);
 
@@ -2647,8 +2653,9 @@ int number_width(win_T *wp)
 /// Set must_redraw only if not already set to a higher value.
 /// e.g. if must_redraw is UPD_CLEAR, type UPD_NOT_VALID will do nothing.
 void redraw_later(win_T *wp, int type)
-  FUNC_ATTR_NONNULL_ALL
 {
+  // curwin may have been set to NULL when exiting
+  assert(wp != NULL || exiting);
   if (!exiting && wp->w_redr_type < type) {
     wp->w_redr_type = type;
     if (type >= UPD_NOT_VALID) {

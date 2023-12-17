@@ -8,11 +8,12 @@
 #include <string.h>
 
 #include "klib/kvec.h"
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand_defs.h"
@@ -29,8 +30,8 @@
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
-#include "nvim/map.h"
+#include "nvim/macros_defs.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
@@ -38,9 +39,9 @@
 #include "nvim/os/time.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 /// \addtogroup SG_SET
 /// @{
@@ -134,263 +135,308 @@ static const char e_missing_argument_str[]
 // they still work when the runtime files can't be found.
 
 static const char *highlight_init_both[] = {
-  "Conceal      ctermbg=DarkGrey ctermfg=LightGrey guibg=DarkGrey guifg=LightGrey",
-  "Cursor       guibg=fg guifg=bg",
-  "lCursor      guibg=fg guifg=bg",
-  "DiffText     cterm=bold ctermbg=Red gui=bold guibg=Red",
-  "ErrorMsg     ctermbg=DarkRed ctermfg=White guibg=Red guifg=White",
-  "IncSearch    cterm=reverse gui=reverse",
-  "ModeMsg      cterm=bold gui=bold",
-  "NonText      ctermfg=Blue gui=bold guifg=Blue",
-  "Normal       cterm=NONE gui=NONE",
-  "PmenuSbar    ctermbg=Grey guibg=Grey",
-  "StatusLine   cterm=reverse,bold gui=reverse,bold",
-  "StatusLineNC cterm=reverse gui=reverse",
-  "TabLineFill  cterm=reverse gui=reverse",
-  "TabLineSel   cterm=bold gui=bold",
-  "TermCursor   cterm=reverse gui=reverse",
-  "WinBar       cterm=bold gui=bold",
-  "WildMenu     ctermbg=Yellow ctermfg=Black guibg=Yellow guifg=Black",
-  "default link VertSplit Normal",
-  "default link WinSeparator VertSplit",
-  "default link WinBarNC WinBar",
-  "default link EndOfBuffer NonText",
-  "default link LineNrAbove LineNr",
-  "default link LineNrBelow LineNr",
-  "default link QuickFixLine Search",
-  "default link CursorLineSign SignColumn",
+  "Cursor            guifg=bg      guibg=fg",
+  "CursorLineNr      gui=bold      cterm=bold",
+  "RedrawDebugNormal gui=reverse   cterm=reverse",
+  "TabLineSel        gui=bold      cterm=bold",
+  "TermCursor        gui=reverse   cterm=reverse",
+  "Title             gui=bold      cterm=bold",
+  "Todo              gui=bold      cterm=bold",
+  "Underlined        gui=underline cterm=underline",
+  "lCursor           guifg=bg      guibg=fg",
+
+  "Constant   guifg=NONE",
+  "Operator   guifg=NONE",
+  "PreProc    guifg=NONE",
+  "Type       guifg=NONE",
+  "Delimiter  guifg=NONE",
+
+  // UI
+  "default link CursorIM       Cursor",
   "default link CursorLineFold FoldColumn",
-  "default link CurSearch Search",
-  "default link PmenuKind Pmenu",
-  "default link PmenuKindSel PmenuSel",
-  "default link PmenuExtra Pmenu",
-  "default link PmenuExtraSel PmenuSel",
-  "default link Substitute Search",
-  "default link Whitespace NonText",
-  "default link MsgSeparator StatusLine",
-  "default link NormalFloat Pmenu",
-  "default link FloatBorder WinSeparator",
-  "default link FloatTitle Title",
-  "default link FloatFooter Title",
-  "default FloatShadow blend=80 guibg=Black",
-  "default FloatShadowThrough blend=100 guibg=Black",
-  "RedrawDebugNormal cterm=reverse gui=reverse",
-  "RedrawDebugClear ctermbg=Yellow guibg=Yellow",
-  "RedrawDebugComposed ctermbg=Green guibg=Green",
-  "RedrawDebugRecompose ctermbg=Red guibg=Red",
-  "Error term=reverse cterm=NONE ctermfg=White ctermbg=Red gui=NONE guifg=White guibg=Red",
-  "Todo term=standout cterm=NONE ctermfg=Black ctermbg=Yellow gui=NONE guifg=Blue guibg=Yellow",
-  "default link String Constant",
-  "default link Character Constant",
-  "default link Number Constant",
-  "default link Boolean Constant",
-  "default link Float Number",
-  "default link Function Identifier",
-  "default link Conditional Statement",
-  "default link Repeat Statement",
-  "default link Label Statement",
-  "default link Operator Statement",
-  "default link Keyword Statement",
-  "default link Exception Statement",
-  "default link Include PreProc",
-  "default link Define PreProc",
-  "default link Macro PreProc",
-  "default link PreCondit PreProc",
-  "default link StorageClass Type",
-  "default link Structure Type",
-  "default link Typedef Type",
-  "default link Tag Special",
-  "default link SpecialChar Special",
-  "default link Delimiter Special",
+  "default link CursorLineSign SignColumn",
+  "default link EndOfBuffer    NonText",
+  "default link FloatBorder    NormalFloat",
+  "default link FloatFooter    FloatTitle",
+  "default link FloatTitle     Title",
+  "default link FoldColumn     SignColumn",
+  "default link IncSearch      Search",
+  "default link LineNrAbove    LineNr",
+  "default link LineNrBelow    LineNr",
+  "default link MsgSeparator   StatusLine",
+  "default link MsgArea        NONE",
+  "default link NormalNC       NONE",
+  "default link PmenuExtra     Pmenu",
+  "default link PmenuExtraSel  PmenuSel",
+  "default link PmenuKind      Pmenu",
+  "default link PmenuKindSel   PmenuSel",
+  "default link PmenuSbar      Pmenu",
+  "default link Substitute     Search",
+  "default link TabLine        StatusLine",
+  "default link TabLineFill    TabLine",
+  "default link TermCursorNC   NONE",
+  "default link VertSplit      WinSeparator",
+  "default link VisualNOS      Visual",
+  "default link Whitespace     NonText",
+  "default link WildMenu       PmenuSel",
+  "default link WinBar         StatusLine",
+  "default link WinBarNC       StatusLineNC",
+  "default link WinSeparator   Normal",
+
+  // Syntax
+  "default link Character      Constant",
+  "default link Number         Constant",
+  "default link Boolean        Constant",
+  "default link Float          Number",
+  "default link Conditional    Statement",
+  "default link Repeat         Statement",
+  "default link Label          Statement",
+  "default link Keyword        Statement",
+  "default link Exception      Statement",
+  "default link Include        PreProc",
+  "default link Define         PreProc",
+  "default link Macro          PreProc",
+  "default link PreCondit      PreProc",
+  "default link StorageClass   Type",
+  "default link Structure      Type",
+  "default link Typedef        Type",
+  "default link Tag            Special",
+  "default link SpecialChar    Special",
   "default link SpecialComment Special",
-  "default link Debug Special",
-  "default DiagnosticError ctermfg=1 guifg=Red",
-  "default DiagnosticWarn ctermfg=3 guifg=Orange",
-  "default DiagnosticInfo ctermfg=4 guifg=LightBlue",
-  "default DiagnosticHint ctermfg=7 guifg=LightGrey",
-  "default DiagnosticOk ctermfg=10 guifg=LightGreen",
-  "default DiagnosticUnderlineError cterm=underline gui=underline guisp=Red",
-  "default DiagnosticUnderlineWarn cterm=underline gui=underline guisp=Orange",
-  "default DiagnosticUnderlineInfo cterm=underline gui=underline guisp=LightBlue",
-  "default DiagnosticUnderlineHint cterm=underline gui=underline guisp=LightGrey",
-  "default DiagnosticUnderlineOk cterm=underline gui=underline guisp=LightGreen",
-  "default link DiagnosticVirtualTextError DiagnosticError",
-  "default link DiagnosticVirtualTextWarn DiagnosticWarn",
-  "default link DiagnosticVirtualTextInfo DiagnosticInfo",
-  "default link DiagnosticVirtualTextHint DiagnosticHint",
-  "default link DiagnosticVirtualTextOk DiagnosticOk",
-  "default link DiagnosticFloatingError DiagnosticError",
-  "default link DiagnosticFloatingWarn DiagnosticWarn",
-  "default link DiagnosticFloatingInfo DiagnosticInfo",
-  "default link DiagnosticFloatingHint DiagnosticHint",
-  "default link DiagnosticFloatingOk DiagnosticOk",
-  "default link DiagnosticSignError DiagnosticError",
-  "default link DiagnosticSignWarn DiagnosticWarn",
-  "default link DiagnosticSignInfo DiagnosticInfo",
-  "default link DiagnosticSignHint DiagnosticHint",
-  "default link DiagnosticSignOk DiagnosticOk",
-  "default DiagnosticDeprecated cterm=strikethrough gui=strikethrough guisp=Red",
-  "default link DiagnosticUnnecessary Comment",
-  "default link LspInlayHint NonText",
+  "default link Debug          Special",
+  "default link Ignore         Normal",
+  "default link LspInlayHint   NonText",
   "default link SnippetTabstop Visual",
 
+  // Diagnostic
+  "default link DiagnosticFloatingError    DiagnosticError",
+  "default link DiagnosticFloatingWarn     DiagnosticWarn",
+  "default link DiagnosticFloatingInfo     DiagnosticInfo",
+  "default link DiagnosticFloatingHint     DiagnosticHint",
+  "default link DiagnosticFloatingOk       DiagnosticOk",
+  "default link DiagnosticVirtualTextError DiagnosticError",
+  "default link DiagnosticVirtualTextWarn  DiagnosticWarn",
+  "default link DiagnosticVirtualTextInfo  DiagnosticInfo",
+  "default link DiagnosticVirtualTextHint  DiagnosticHint",
+  "default link DiagnosticVirtualTextOk    DiagnosticOk",
+  "default link DiagnosticSignError        DiagnosticError",
+  "default link DiagnosticSignWarn         DiagnosticWarn",
+  "default link DiagnosticSignInfo         DiagnosticInfo",
+  "default link DiagnosticSignHint         DiagnosticHint",
+  "default link DiagnosticSignOk           DiagnosticOk",
+  "default link DiagnosticUnnecessary      Comment",
+
   // Text
-  "default link @text.literal Comment",
+  "default link @text.literal   Comment",
   "default link @text.reference Identifier",
-  "default link @text.title Title",
-  "default link @text.uri Underlined",
+  "default link @text.title     Title",
+  "default link @text.uri       Underlined",
   "default link @text.underline Underlined",
-  "default link @text.todo Todo",
+  "default link @text.todo      Todo",
 
   // Miscs
-  "default link @comment Comment",
+  "default link @comment     Comment",
   "default link @punctuation Delimiter",
 
   // Constants
-  "default link @constant Constant",
-  "default link @constant.builtin Special",
-  "default link @constant.macro Define",
-  "default link @define Define",
-  "default link @macro Macro",
-  "default link @string String",
-  "default link @string.escape SpecialChar",
-  "default link @string.special SpecialChar",
-  "default link @character Character",
+  "default link @constant          Constant",
+  "default link @constant.builtin  Special",
+  "default link @constant.macro    Define",
+  "default link @define            Define",
+  "default link @macro             Macro",
+  "default link @string            String",
+  "default link @string.escape     SpecialChar",
+  "default link @string.special    SpecialChar",
+  "default link @character         Character",
   "default link @character.special SpecialChar",
-  "default link @number Number",
-  "default link @boolean Boolean",
-  "default link @float Float",
+  "default link @number            Number",
+  "default link @boolean           Boolean",
+  "default link @float             Float",
 
   // Functions
-  "default link @function Function",
+  "default link @function         Function",
   "default link @function.builtin Special",
-  "default link @function.macro Macro",
-  "default link @parameter Identifier",
-  "default link @method Function",
-  "default link @field Identifier",
-  "default link @property Identifier",
-  "default link @constructor Special",
+  "default link @function.macro   Macro",
+  "default link @parameter        Identifier",
+  "default link @method           Function",
+  "default link @field            Identifier",
+  "default link @property         Identifier",
+  "default link @constructor      Special",
 
   // Keywords
   "default link @conditional Conditional",
-  "default link @repeat Repeat",
-  "default link @label Label",
-  "default link @operator Operator",
-  "default link @keyword Keyword",
-  "default link @exception Exception",
+  "default link @repeat      Repeat",
+  "default link @label       Label",
+  "default link @operator    Operator",
+  "default link @keyword     Keyword",
+  "default link @exception   Exception",
 
-  "default link @variable Identifier",
-  "default link @type Type",
+  "default link @variable        NONE",  // don't highlight to reduce visual overload
+  "default link @type            Type",
   "default link @type.definition Typedef",
-  "default link @storageclass StorageClass",
-  "default link @namespace Identifier",
-  "default link @include Include",
-  "default link @preproc PreProc",
-  "default link @debug Debug",
-  "default link @tag Tag",
+  "default link @storageclass    StorageClass",
+  "default link @namespace       Identifier",
+  "default link @include         Include",
+  "default link @preproc         PreProc",
+  "default link @debug           Debug",
+  "default link @tag             Tag",
 
   // LSP semantic tokens
-  "default link @lsp.type.class Structure",
-  "default link @lsp.type.comment Comment",
-  "default link @lsp.type.decorator Function",
-  "default link @lsp.type.enum Structure",
-  "default link @lsp.type.enumMember Constant",
-  "default link @lsp.type.function Function",
-  "default link @lsp.type.interface Structure",
-  "default link @lsp.type.macro Macro",
-  "default link @lsp.type.method Function",
-  "default link @lsp.type.namespace Structure",
-  "default link @lsp.type.parameter Identifier",
-  "default link @lsp.type.property Identifier",
-  "default link @lsp.type.struct Structure",
-  "default link @lsp.type.type Type",
+  "default link @lsp.type.class         Structure",
+  "default link @lsp.type.comment       Comment",
+  "default link @lsp.type.decorator     Function",
+  "default link @lsp.type.enum          Structure",
+  "default link @lsp.type.enumMember    Constant",
+  "default link @lsp.type.function      Function",
+  "default link @lsp.type.interface     Structure",
+  "default link @lsp.type.macro         Macro",
+  "default link @lsp.type.method        Function",
+  "default link @lsp.type.namespace     Structure",
+  "default link @lsp.type.parameter     Identifier",
+  "default link @lsp.type.property      Identifier",
+  "default link @lsp.type.struct        Structure",
+  "default link @lsp.type.type          Type",
   "default link @lsp.type.typeParameter TypeDef",
-  "default link @lsp.type.variable Identifier",
+  "default link @lsp.type.variable      NONE",  // don't highlight to reduce visual overload
 
   NULL
 };
 
 // Default colors only used with a light background.
 static const char *highlight_init_light[] = {
-  "ColorColumn  ctermbg=LightRed guibg=LightRed",
-  "CursorColumn ctermbg=LightGrey guibg=Grey90",
-  "CursorLine   cterm=underline guibg=Grey90",
-  "CursorLineNr cterm=underline ctermfg=Brown gui=bold guifg=Brown",
-  "DiffAdd      ctermbg=LightBlue guibg=LightBlue",
-  "DiffChange   ctermbg=LightMagenta guibg=LightMagenta",
-  "DiffDelete   ctermfg=Blue ctermbg=LightCyan gui=bold guifg=Blue guibg=LightCyan",
-  "Directory    ctermfg=DarkBlue guifg=Blue",
-  "FoldColumn   ctermbg=Grey ctermfg=DarkBlue guibg=Grey guifg=DarkBlue",
-  "Folded       ctermbg=Grey ctermfg=DarkBlue guibg=LightGrey guifg=DarkBlue",
-  "LineNr       ctermfg=Brown guifg=Brown",
-  "MatchParen   ctermbg=Cyan guibg=Cyan",
-  "MoreMsg      ctermfg=DarkGreen gui=bold guifg=SeaGreen",
-  "Pmenu        ctermbg=LightMagenta ctermfg=Black guibg=LightMagenta",
-  "PmenuSel     ctermbg=LightGrey ctermfg=Black guibg=Grey",
-  "PmenuThumb   ctermbg=Black guibg=Black",
-  "Question     ctermfg=DarkGreen gui=bold guifg=SeaGreen",
-  "Search       ctermbg=Yellow ctermfg=NONE guibg=Yellow guifg=NONE",
-  "SignColumn   ctermbg=Grey ctermfg=DarkBlue guibg=Grey guifg=DarkBlue",
-  "SpecialKey   ctermfg=DarkBlue guifg=Blue",
-  "SpellBad     ctermbg=LightRed guisp=Red gui=undercurl",
-  "SpellCap     ctermbg=LightBlue guisp=Blue gui=undercurl",
-  "SpellLocal   ctermbg=Cyan guisp=DarkCyan gui=undercurl",
-  "SpellRare    ctermbg=LightMagenta guisp=Magenta gui=undercurl",
-  "TabLine      cterm=underline ctermfg=black ctermbg=LightGrey gui=underline guibg=LightGrey",
-  "Title        ctermfg=DarkMagenta gui=bold guifg=Magenta",
-  "Visual       guibg=LightGrey",
-  "WarningMsg   ctermfg=DarkRed guifg=Red",
-  "Comment      term=bold cterm=NONE ctermfg=DarkBlue ctermbg=NONE gui=NONE guifg=Blue guibg=NONE",
-  "Constant     term=underline cterm=NONE ctermfg=DarkRed ctermbg=NONE gui=NONE guifg=Magenta guibg=NONE",
-  "Special      term=bold cterm=NONE ctermfg=DarkMagenta ctermbg=NONE gui=NONE guifg=#6a5acd guibg=NONE",
-  "Identifier   term=underline cterm=NONE ctermfg=DarkCyan ctermbg=NONE gui=NONE guifg=DarkCyan guibg=NONE",
-  "Statement    term=bold cterm=NONE ctermfg=Brown ctermbg=NONE gui=bold guifg=Brown guibg=NONE",
-  "PreProc      term=underline cterm=NONE ctermfg=DarkMagenta ctermbg=NONE gui=NONE guifg=#6a0dad guibg=NONE",
-  "Type         term=underline cterm=NONE ctermfg=DarkGreen ctermbg=NONE gui=bold guifg=SeaGreen guibg=NONE",
-  "Underlined   term=underline cterm=underline ctermfg=DarkMagenta gui=underline guifg=SlateBlue",
-  "Ignore       term=NONE cterm=NONE ctermfg=white ctermbg=NONE gui=NONE guifg=bg guibg=NONE",
+  "Normal guifg=NvimDarkGrey2 guibg=NvimLightGrey2 ctermfg=NONE ctermbg=NONE",
+
+  // UI
+  "ColorColumn                               guibg=NvimLightGrey4            cterm=reverse",
+  "Conceal              guifg=NvimLightGrey4",
+  "CurSearch            guifg=NvimLightGrey1 guibg=NvimDarkYellow            ctermfg=15 ctermbg=3",
+  "CursorColumn                              guibg=NvimLightGrey3",
+  "CursorLine                                guibg=NvimLightGrey3",
+  "DiffAdd              guifg=NvimDarkGrey1  guibg=NvimLightGreen            ctermfg=15 ctermbg=2",
+  "DiffChange           guifg=NvimDarkGrey1  guibg=NvimLightGrey4",
+  "DiffDelete           guifg=NvimDarkRed                          gui=bold  ctermfg=1 cterm=bold",
+  "DiffText             guifg=NvimDarkGrey1  guibg=NvimLightCyan             ctermfg=15 ctermbg=6",
+  "Directory            guifg=NvimDarkCyan                                   ctermfg=6",
+  "ErrorMsg             guifg=NvimDarkRed                                    ctermfg=1",
+  "FloatShadow                               guibg=NvimLightGrey4            ctermbg=0 blend=80",
+  "FloatShadowThrough                        guibg=NvimLightGrey4            ctermbg=0 blend=100",
+  "Folded               guifg=NvimDarkGrey4  guibg=NvimLightGrey3",
+  "LineNr               guifg=NvimLightGrey4",
+  "MatchParen                                guibg=NvimLightGrey4  gui=bold  cterm=bold,underline",
+  "ModeMsg              guifg=NvimDarkGreen                                  ctermfg=2",
+  "MoreMsg              guifg=NvimDarkCyan                                   ctermfg=6",
+  "NonText              guifg=NvimLightGrey4",
+  "NormalFloat                               guibg=NvimLightGrey1",
+  "Pmenu                                     guibg=NvimLightGrey3            cterm=reverse",
+  "PmenuSel             guifg=NvimLightGrey3 guibg=NvimDarkGrey2             cterm=reverse,underline blend=0",
+  "PmenuThumb                                guibg=NvimLightGrey4",
+  "Question             guifg=NvimDarkCyan                                   ctermfg=6",
+  "QuickFixLine         guifg=NvimDarkCyan                                   ctermfg=6",
+  "RedrawDebugClear                          guibg=NvimLightYellow           ctermfg=15 ctermbg=3",
+  "RedrawDebugComposed                       guibg=NvimLightGreen            ctermfg=15 ctermbg=2",
+  "RedrawDebugRecompose                      guibg=NvimLightRed              ctermfg=15 ctermbg=1",
+  "Search               guifg=NvimDarkGrey1  guibg=NvimLightYellow           ctermfg=15 ctermbg=3",
+  "SignColumn           guifg=NvimLightGrey4",
+  "SpecialKey           guifg=NvimLightGrey4",
+  "SpellBad             guisp=NvimDarkRed    gui=undercurl                   cterm=undercurl",
+  "SpellCap             guisp=NvimDarkYellow gui=undercurl                   cterm=undercurl",
+  "SpellLocal           guisp=NvimDarkGreen  gui=undercurl                   cterm=undercurl",
+  "SpellRare            guisp=NvimDarkCyan   gui=undercurl                   cterm=undercurl",
+  "StatusLine           guifg=NvimDarkGrey3  guibg=NvimLightGrey1            cterm=reverse",
+  "StatusLineNC         guifg=NvimDarkGrey4  guibg=NvimLightGrey1            cterm=bold",
+  "Visual                                    guibg=NvimLightGrey4            ctermfg=15 ctermbg=0",
+  "WarningMsg           guifg=NvimDarkYellow                                 ctermfg=3",
+
+  // Syntax
+  "Comment    guifg=NvimDarkGrey4",
+  "String     guifg=NvimDarkGreen                    ctermfg=2",
+  "Identifier guifg=NvimDarkBlue                     ctermfg=4",
+  "Function   guifg=NvimDarkCyan                     ctermfg=6",
+  "Statement  gui=bold                               cterm=bold",
+  "Special    guifg=NvimDarkCyan                     ctermfg=6",
+  "Error      guifg=NvimDarkGrey1 guibg=NvimLightRed ctermfg=15 ctermbg=1",
+
+  // Diagnostic
+  "DiagnosticError          guifg=NvimDarkRed                      ctermfg=1",
+  "DiagnosticWarn           guifg=NvimDarkYellow                   ctermfg=3",
+  "DiagnosticInfo           guifg=NvimDarkCyan                     ctermfg=6",
+  "DiagnosticHint           guifg=NvimDarkBlue                     ctermfg=4",
+  "DiagnosticOk             guifg=NvimDarkGreen                    ctermfg=2",
+  "DiagnosticUnderlineError guisp=NvimDarkRed    gui=underline     cterm=underline",
+  "DiagnosticUnderlineWarn  guisp=NvimDarkYellow gui=underline     cterm=underline",
+  "DiagnosticUnderlineInfo  guisp=NvimDarkCyan   gui=underline     cterm=underline",
+  "DiagnosticUnderlineHint  guisp=NvimDarkBlue   gui=underline     cterm=underline",
+  "DiagnosticUnderlineOk    guisp=NvimDarkGreen  gui=underline     cterm=underline",
+  "DiagnosticDeprecated     guisp=NvimDarkRed    gui=strikethrough cterm=strikethrough",
   NULL
 };
 
 // Default colors only used with a dark background.
 static const char *highlight_init_dark[] = {
-  "ColorColumn  ctermbg=DarkRed guibg=DarkRed",
-  "CursorColumn ctermbg=DarkGrey guibg=Grey40",
-  "CursorLine   cterm=underline guibg=Grey40",
-  "CursorLineNr cterm=underline ctermfg=Yellow gui=bold guifg=Yellow",
-  "DiffAdd      ctermbg=DarkBlue guibg=DarkBlue",
-  "DiffChange   ctermbg=DarkMagenta guibg=DarkMagenta",
-  "DiffDelete   ctermfg=Blue ctermbg=DarkCyan gui=bold guifg=Blue guibg=DarkCyan",
-  "Directory    ctermfg=LightCyan guifg=Cyan",
-  "FoldColumn   ctermbg=DarkGrey ctermfg=Cyan guibg=Grey guifg=Cyan",
-  "Folded       ctermbg=DarkGrey ctermfg=Cyan guibg=DarkGrey guifg=Cyan",
-  "LineNr       ctermfg=Yellow guifg=Yellow",
-  "MatchParen   ctermbg=DarkCyan guibg=DarkCyan",
-  "MoreMsg      ctermfg=LightGreen gui=bold guifg=SeaGreen",
-  "Pmenu        ctermbg=Magenta ctermfg=Black guibg=Magenta",
-  "PmenuSel     ctermbg=Black ctermfg=DarkGrey guibg=DarkGrey",
-  "PmenuThumb   ctermbg=White guibg=White",
-  "Question     ctermfg=LightGreen gui=bold guifg=Green",
-  "Search       ctermbg=Yellow ctermfg=Black guibg=Yellow guifg=Black",
-  "SignColumn   ctermbg=DarkGrey ctermfg=Cyan guibg=Grey guifg=Cyan",
-  "SpecialKey   ctermfg=LightBlue guifg=Cyan",
-  "SpellBad     ctermbg=Red guisp=Red gui=undercurl",
-  "SpellCap     ctermbg=Blue guisp=Blue gui=undercurl",
-  "SpellLocal   ctermbg=Cyan guisp=Cyan gui=undercurl",
-  "SpellRare    ctermbg=Magenta guisp=Magenta gui=undercurl",
-  "TabLine      cterm=underline ctermfg=white ctermbg=DarkGrey gui=underline guibg=DarkGrey",
-  "Title        ctermfg=LightMagenta gui=bold guifg=Magenta",
-  "Visual       guibg=DarkGrey",
-  "WarningMsg   ctermfg=LightRed guifg=Red",
-  "Comment      term=bold cterm=NONE ctermfg=Cyan ctermbg=NONE gui=NONE guifg=#80a0ff guibg=NONE",
-  "Constant     term=underline cterm=NONE ctermfg=Magenta ctermbg=NONE gui=NONE guifg=#ffa0a0 guibg=NONE",
-  "Special      term=bold cterm=NONE ctermfg=LightRed ctermbg=NONE gui=NONE guifg=Orange guibg=NONE",
-  "Identifier   term=underline cterm=bold ctermfg=Cyan ctermbg=NONE gui=NONE guifg=#40ffff guibg=NONE",
-  "Statement    term=bold cterm=NONE ctermfg=Yellow ctermbg=NONE gui=bold guifg=#ffff60 guibg=NONE",
-  "PreProc      term=underline cterm=NONE ctermfg=LightBlue ctermbg=NONE gui=NONE guifg=#ff80ff guibg=NONE",
-  "Type         term=underline cterm=NONE ctermfg=LightGreen ctermbg=NONE gui=bold guifg=#60ff60 guibg=NONE",
-  "Underlined   term=underline cterm=underline ctermfg=LightBlue gui=underline guifg=#80a0ff",
-  "Ignore       term=NONE cterm=NONE ctermfg=black ctermbg=NONE gui=NONE guifg=bg guibg=NONE",
+  "Normal guifg=NvimLightGrey2 guibg=NvimDarkGrey2 ctermfg=NONE ctermbg=NONE",
+
+  // UI
+  "ColorColumn                                guibg=NvimDarkGrey4           cterm=reverse",
+  "Conceal              guifg=NvimDarkGrey4",
+  "CurSearch            guifg=NvimDarkGrey1   guibg=NvimLightYellow         ctermfg=0 ctermbg=11",
+  "CursorColumn                               guibg=NvimDarkGrey3",
+  "CursorLine                                 guibg=NvimDarkGrey3",
+  "DiffAdd              guifg=NvimLightGrey1  guibg=NvimDarkGreen           ctermfg=0 ctermbg=10",
+  "DiffChange           guifg=NvimLightGrey1  guibg=NvimDarkGrey4",
+  "DiffDelete           guifg=NvimLightRed                         gui=bold ctermfg=9 cterm=bold",
+  "DiffText             guifg=NvimLightGrey1  guibg=NvimDarkCyan            ctermfg=0 ctermbg=14",
+  "Directory            guifg=NvimLightCyan                                 ctermfg=14",
+  "ErrorMsg             guifg=NvimLightRed                                  ctermfg=9",
+  "FloatShadow                                guibg=NvimDarkGrey4           ctermbg=0 blend=80",
+  "FloatShadowThrough                         guibg=NvimDarkGrey4           ctermbg=0 blend=100",
+  "Folded               guifg=NvimLightGrey4  guibg=NvimDarkGrey3",
+  "LineNr               guifg=NvimDarkGrey4",
+  "MatchParen                                 guibg=NvimDarkGrey4  gui=bold cterm=bold,underline",
+  "ModeMsg              guifg=NvimLightGreen                                ctermfg=10",
+  "MoreMsg              guifg=NvimLightCyan                                 ctermfg=14",
+  "NonText              guifg=NvimDarkGrey4",
+  "NormalFloat                                guibg=NvimDarkGrey1",
+  "Pmenu                                      guibg=NvimDarkGrey3           cterm=reverse",
+  "PmenuSel             guifg=NvimDarkGrey3   guibg=NvimLightGrey2          cterm=reverse,underline blend=0",
+  "PmenuThumb                                 guibg=NvimDarkGrey4",
+  "Question             guifg=NvimLightCyan                                 ctermfg=14",
+  "QuickFixLine         guifg=NvimLightCyan                                 ctermfg=14",
+  "RedrawDebugClear                           guibg=NvimDarkYellow          ctermfg=0 ctermbg=11",
+  "RedrawDebugComposed                        guibg=NvimDarkGreen           ctermfg=0 ctermbg=10",
+  "RedrawDebugRecompose                       guibg=NvimDarkRed             ctermfg=0 ctermbg=9",
+  "Search               guifg=NvimLightGrey1  guibg=NvimDarkYellow          ctermfg=0 ctermbg=11",
+  "SignColumn           guifg=NvimDarkGrey4",
+  "SpecialKey           guifg=NvimDarkGrey4",
+  "SpellBad             guisp=NvimLightRed    gui=undercurl                 cterm=undercurl",
+  "SpellCap             guisp=NvimLightYellow gui=undercurl                 cterm=undercurl",
+  "SpellLocal           guisp=NvimLightGreen  gui=undercurl                 cterm=undercurl",
+  "SpellRare            guisp=NvimLightCyan   gui=undercurl                 cterm=undercurl",
+  "StatusLine           guifg=NvimLightGrey3  guibg=NvimDarkGrey1           cterm=reverse",
+  "StatusLineNC         guifg=NvimLightGrey4  guibg=NvimDarkGrey1           cterm=bold",
+  "Visual                                     guibg=NvimDarkGrey4           ctermfg=0 ctermbg=15",
+  "WarningMsg           guifg=NvimLightYellow                               ctermfg=11",
+
+  // Syntax
+  "Comment    guifg=NvimLightGrey4",
+  "String     guifg=NvimLightGreen                   ctermfg=10",
+  "Identifier guifg=NvimLightBlue                    ctermfg=12",
+  "Function   guifg=NvimLightCyan                    ctermfg=14",
+  "Statement  gui=bold                               cterm=bold",
+  "Special    guifg=NvimLightCyan                    ctermfg=14",
+  "Error      guifg=NvimLightGrey1 guibg=NvimDarkRed ctermfg=0 ctermbg=9",
+
+  // Diagnostic
+  "DiagnosticError          guifg=NvimLightRed                      ctermfg=9",
+  "DiagnosticWarn           guifg=NvimLightYellow                   ctermfg=11",
+  "DiagnosticInfo           guifg=NvimLightCyan                     ctermfg=14",
+  "DiagnosticHint           guifg=NvimLightBlue                     ctermfg=12",
+  "DiagnosticOk             guifg=NvimLightGreen                    ctermfg=10",
+  "DiagnosticUnderlineError guisp=NvimLightRed    gui=underline     cterm=underline",
+  "DiagnosticUnderlineWarn  guisp=NvimLightYellow gui=underline     cterm=underline",
+  "DiagnosticUnderlineInfo  guisp=NvimLightCyan   gui=underline     cterm=underline",
+  "DiagnosticUnderlineHint  guisp=NvimLightBlue   gui=underline     cterm=underline",
+  "DiagnosticUnderlineOk    guisp=NvimLightGreen  gui=underline     cterm=underline",
+  "DiagnosticDeprecated     guisp=NvimLightRed    gui=strikethrough cterm=strikethrough",
   NULL
 };
 
@@ -659,22 +705,6 @@ void init_highlight(bool both, bool reset)
                                  : highlight_init_dark);
   for (size_t i = 0; pp[i] != NULL; i++) {
     do_highlight(pp[i], reset, true);
-  }
-
-  // Reverse looks ugly, but grey may not work for 8 colors.  Thus let it
-  // depend on the number of colors available.
-  // With 8 colors brown is equal to yellow, need to use black for Search fg
-  // to avoid Statement highlighted text disappears.
-  // Clear the attributes, needed when changing the t_Co value.
-  if (t_colors > 8) {
-    do_highlight((*p_bg == 'l'
-                  ? "Visual cterm=NONE ctermbg=LightGrey"
-                  : "Visual cterm=NONE ctermbg=DarkGrey"), false, true);
-  } else {
-    do_highlight("Visual cterm=reverse ctermbg=NONE", false, true);
-    if (*p_bg == 'l') {
-      do_highlight("Search ctermfg=black", false, true);
-    }
   }
 
   syn_init_cmdline_highlight(false, false);
@@ -1278,9 +1308,10 @@ void do_highlight(const char *line, const bool forceit, const bool init)
                   // wrong.
                   if (dark != -1
                       && dark != (*p_bg == 'd')
-                      && !option_was_set("bg")) {
-                    set_option_value_give_err("bg", CSTR_AS_OPTVAL(dark ? "dark" : "light"), 0);
-                    reset_option_was_set("bg");
+                      && !option_was_set(kOptBackground)) {
+                    set_option_value_give_err(kOptBackground,
+                                              CSTR_AS_OPTVAL(dark ? "dark" : "light"), 0);
+                    reset_option_was_set(kOptBackground);
                   }
                 }
               }
@@ -2827,6 +2858,29 @@ color_name_table_T color_name_table[] = {
   { "NavajoWhite4", RGB_(0x8b, 0x79, 0x5e) },
   { "Navy", RGB_(0x00, 0x00, 0x80) },
   { "NavyBlue", RGB_(0x0, 0x0, 0x80) },
+  // Default Neovim palettes.
+  // Dark/light palette is used for background in dark/light color scheme and
+  // for foreground in light/dark color scheme.
+  { "NvimDarkBlue", RGB_(0x00, 0x4c, 0x73) },
+  { "NvimDarkCyan", RGB_(0x00, 0x73, 0x73) },
+  { "NvimDarkGreen", RGB_(0x00, 0x55, 0x23) },
+  { "NvimDarkGrey1", RGB_(0x07, 0x08, 0x0d) },
+  { "NvimDarkGrey2", RGB_(0x14, 0x16, 0x1b) },
+  { "NvimDarkGrey3", RGB_(0x2c, 0x2e, 0x33) },
+  { "NvimDarkGrey4", RGB_(0x4f, 0x52, 0x58) },
+  { "NvimDarkMagenta", RGB_(0x47, 0x00, 0x45) },
+  { "NvimDarkRed", RGB_(0x59, 0x00, 0x08) },
+  { "NvimDarkYellow", RGB_(0x6b, 0x53, 0x00) },
+  { "NvimLightBlue", RGB_(0xa6, 0xdb, 0xff) },
+  { "NvimLightCyan", RGB_(0x8c, 0xf8, 0xf7) },
+  { "NvimLightGreen", RGB_(0xb3, 0xf6, 0xc0) },
+  { "NvimLightGrey1", RGB_(0xee, 0xf1, 0xf8) },
+  { "NvimLightGrey2", RGB_(0xe0, 0xe2, 0xea) },
+  { "NvimLightGrey3", RGB_(0xc4, 0xc6, 0xcd) },
+  { "NvimLightGrey4", RGB_(0x9b, 0x9e, 0xa4) },
+  { "NvimLightMagenta", RGB_(0xff, 0xca, 0xff) },
+  { "NvimLightRed", RGB_(0xff, 0xc0, 0xb9) },
+  { "NvimLightYellow", RGB_(0xfc, 0xe0, 0x94) },
   { "OldLace", RGB_(0xfd, 0xf5, 0xe6) },
   { "Olive", RGB_(0x80, 0x80, 0x00) },
   { "OliveDrab", RGB_(0x6b, 0x8e, 0x23) },

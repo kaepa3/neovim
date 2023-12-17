@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
@@ -20,7 +20,7 @@
 #include "nvim/fold.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -29,13 +29,14 @@
 #include "nvim/move.h"
 #include "nvim/normal.h"
 #include "nvim/option_vars.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/path.h"
 #include "nvim/quickfix.h"
 #include "nvim/strings.h"
 #include "nvim/textobject.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 // This file contains routines to maintain and manipulate marks.
 
@@ -1287,12 +1288,12 @@ void mark_adjust_buf(buf_T *buf, linenr_T line1, linenr_T line2, linenr_T amount
     if (posp->lnum == lnum && posp->col >= mincol) { \
       posp->lnum += lnum_amount; \
       assert(col_amount > INT_MIN && col_amount <= INT_MAX); \
-      if (col_amount < 0 && posp->col <= (colnr_T) - col_amount) { \
+      if (col_amount < 0 && posp->col <= -col_amount) { \
         posp->col = 0; \
       } else if (posp->col < spaces_removed) { \
-        posp->col = (int)col_amount + spaces_removed; \
+        posp->col = col_amount + spaces_removed; \
       } else { \
-        posp->col += (colnr_T)col_amount; \
+        posp->col += col_amount; \
       } \
     } \
   }

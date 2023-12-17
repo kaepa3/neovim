@@ -9,19 +9,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/cursor_shape.h"
 #include "nvim/decoration.h"
-#include "nvim/decoration_defs.h"
 #include "nvim/decoration_provider.h"
 #include "nvim/diff.h"
 #include "nvim/drawline.h"
 #include "nvim/drawscreen.h"
 #include "nvim/eval.h"
 #include "nvim/fold.h"
+#include "nvim/fold_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight.h"
@@ -36,7 +36,7 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/quickfix.h"
 #include "nvim/sign.h"
 #include "nvim/spell.h"
@@ -45,12 +45,11 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
-#define MB_FILLER_CHAR '<'  // character used when a double-width character
-                            // doesn't fit.
+#define MB_FILLER_CHAR '<'  // character used when a double-width character doesn't fit.
 
 /// possible draw states in win_line(), drawn in sequence.
 typedef enum {
@@ -705,8 +704,8 @@ static void handle_breakindent(win_T *wp, winlinevars_T *wlv)
   if (wlv->draw_state == WL_BRI - 1 && wlv->n_extra == 0) {
     wlv->draw_state = WL_BRI;
     // if wlv->need_showbreak is set, breakindent also applies
-    if (wp->w_p_bri && (wlv->row != wlv->startrow || wlv->need_showbreak)
-        && wlv->filler_lines == 0) {
+    if (wp->w_p_bri && (wlv->row > wlv->startrow + wlv->filler_lines
+                        || wlv->need_showbreak)) {
       wlv->char_attr = 0;
       if (wlv->diff_hlf != (hlf_T)0) {
         wlv->char_attr = win_hl_attr(wp, (int)wlv->diff_hlf);
@@ -2460,6 +2459,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
           && ((syntax_flags & HL_CONCEAL) != 0 || has_match_conc > 0 || decor_conceal > 0)
           && !(lnum_in_visual_area && vim_strchr(wp->w_p_cocu, 'v') == NULL)) {
         wlv.char_attr = conceal_attr;
+        bool is_conceal_char = false;
         if (((prev_syntax_id != syntax_seqnr && (syntax_flags & HL_CONCEAL) != 0)
              || has_match_conc > 1 || decor_conceal > 1)
             && (syn_get_sub_char() != NUL
@@ -2472,7 +2472,9 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
           if (has_match_conc && match_conc) {
             mb_c = match_conc;
           } else if (decor_conceal && decor_state.conceal_char) {
-            mb_c = decor_state.conceal_char;
+            mb_schar = decor_state.conceal_char;
+            mb_c = schar_get_first_codepoint(mb_schar);
+            is_conceal_char = true;
             if (decor_state.conceal_attr) {
               wlv.char_attr = decor_state.conceal_attr;
             }
@@ -2500,7 +2502,9 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, bool number_onl
           is_concealing = true;
           wlv.skip_cells = 1;
         }
-        mb_schar = schar_from_char(mb_c);
+        if (!is_conceal_char) {
+          mb_schar = schar_from_char(mb_c);
+        }
       } else {
         prev_syntax_id = 0;
         is_concealing = false;

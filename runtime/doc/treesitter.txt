@@ -165,6 +165,10 @@ TSNode:named_descendant_for_range({start_row}, {start_col}, {end_row}, {end_col}
 TSNode:equal({node})
     Check if {node} refers to the same node within the same tree.
 
+                                                        *TSNode:byte_length()*
+TSNode:byte_length()
+    Return the number of bytes spanned by this node.
+
 ==============================================================================
 TREESITTER QUERIES                                          *treesitter-query*
 
@@ -612,6 +616,8 @@ get_node({opts})                                   *vim.treesitter.get_node()*
                 • pos table|nil 0-indexed (row, col) tuple. Defaults to cursor
                   position in the current window. Required if {bufnr} is not
                   the current buffer
+                • lang string|nil Parser language. (default: from buffer
+                  filetype)
                 • ignore_injections boolean Ignore injected languages (default
                   true)
 

@@ -4,7 +4,7 @@
 #   pitfalls: https://izzys.casa/2019/02/everything-you-never-wanted-to-know-about-cmake/
 
 # Version should match the tested CMAKE_URL in .github/workflows/build.yml.
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
 
 # Can be removed once minimum version is at least 3.15
 if(POLICY CMP0092)
@@ -13,9 +13,6 @@ endif()
 
 project(nvim C)
 
-if(POLICY CMP0075)
-  cmake_policy(SET CMP0075 NEW)
-endif()
 if(POLICY CMP0135)
   cmake_policy(SET CMP0135 NEW)
 endif()
@@ -226,9 +223,6 @@ add_glob_target(
   FLAGS -ll ${PROJECT_SOURCE_DIR}/test/lua_runner.lua ${CMAKE_BINARY_DIR}/usr luacheck -q
   GLOB_DIRS runtime/ scripts/ src/ test/
   GLOB_PAT *.lua
-  EXCLUDE
-    runtime/lua/vim/_meta/.*
-    runtime/lua/coxpcall.lua
   TOUCH_STRATEGY SINGLE)
 add_dependencies(lintlua-luacheck lua-dev-deps)
 
@@ -236,10 +230,8 @@ add_glob_target(
   TARGET lintlua-stylua
   COMMAND ${STYLUA_PRG}
   FLAGS --color=always --check --respect-ignores
-  GLOB_DIRS runtime/
+  GLOB_DIRS runtime/ scripts/ src/ test/unit/
   GLOB_PAT *.lua
-  EXCLUDE
-    /runtime/lua/vim/_meta
   TOUCH_STRATEGY SINGLE)
 
 add_custom_target(lintlua)
@@ -261,12 +253,12 @@ add_custom_target(lint)
 add_dependencies(lint lintc lintlua lintsh lintcommit)
 
 # Format
-add_custom_target(formatlua
-  COMMAND ${CMAKE_COMMAND}
-    -D FORMAT_PRG=${STYLUA_PRG}
-    -D LANG=lua
-    -P ${PROJECT_SOURCE_DIR}/cmake/Format.cmake
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+add_glob_target(
+  TARGET formatlua
+  COMMAND ${STYLUA_PRG}
+  FLAGS --respect-ignores
+  GLOB_DIRS runtime/ scripts/ src/ test/unit/
+  GLOB_PAT *.lua)
 
 add_custom_target(format)
 add_dependencies(format formatc formatlua)
@@ -290,24 +282,24 @@ endif()
 ExternalProject_Add(uncrustify
   URL https://github.com/uncrustify/uncrustify/archive/uncrustify-0.78.1.tar.gz
   URL_HASH SHA256=ecaf4c0adca14c36dfffa30bc28e69865115ecd602c90eb16a8cddccb41caad2
-  DOWNLOAD_NO_PROGRESS TRUE
   DOWNLOAD_DIR ${DEPS_DOWNLOAD_DIR}/uncrustify
   CMAKE_ARGS ${DEPS_CMAKE_ARGS}
   CMAKE_CACHE_ARGS ${DEPS_CMAKE_CACHE_ARGS}
-  EXCLUDE_FROM_ALL TRUE)
+  EXCLUDE_FROM_ALL TRUE
+  ${EXTERNALPROJECT_OPTIONS})
 
 option(USE_BUNDLED_BUSTED "Use bundled busted" ON)
 if(USE_BUNDLED_BUSTED)
   ExternalProject_Add(lua-dev-deps
     URL https://github.com/neovim/deps/raw/5a1f71cceb24990a0b15fd9a472a5f549f019248/opt/lua-dev-deps.tar.gz
     URL_HASH SHA256=27db2495f5eddc7fc191701ec9b291486853530c6125609d3197d03481e8d5a2
-    DOWNLOAD_NO_PROGRESS TRUE
     DOWNLOAD_DIR ${DEPS_DOWNLOAD_DIR}/lua-dev-deps
     SOURCE_DIR ${DEPS_SHARE_DIR}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ""
     INSTALL_COMMAND ""
-    EXCLUDE_FROM_ALL TRUE)
+    EXCLUDE_FROM_ALL TRUE
+    ${EXTERNALPROJECT_OPTIONS})
 else()
   add_custom_target(lua-dev-deps)
 endif()

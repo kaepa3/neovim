@@ -11,6 +11,7 @@ local insert = helpers.insert
 local clear = helpers.clear
 local eq = helpers.eq
 local ok = helpers.ok
+local pesc = helpers.pesc
 local eval = helpers.eval
 local feed = helpers.feed
 local pcall_err = helpers.pcall_err
@@ -270,9 +271,7 @@ describe('lua stdlib', function()
     screen:attach()
     screen:expect{grid=[[
       ^                                                            |
-      {1:~                                                           }|
-      {1:~                                                           }|
-      {1:~                                                           }|
+      {1:~                                                           }|*3
                                                                   |
     ]]}
 
@@ -2769,6 +2768,23 @@ describe('lua stdlib', function()
         eq({'notification', 'wait', {-2}}, next_msg(500))
       end)
     end)
+
+    it('should not run in fast callbacks #26122', function()
+      local screen = Screen.new(80, 10)
+      screen:attach()
+      exec_lua([[
+        local timer = vim.uv.new_timer()
+        timer:start(0, 0, function()
+          timer:close()
+          vim.wait(100, function() end)
+        end)
+      ]])
+      screen:expect({
+        any = pesc('E5560: vim.wait must not be called in a lua loop callback'),
+      })
+      feed('<CR>')
+      assert_alive()
+    end)
   end)
 
   it('vim.notify_once', function()
@@ -2780,25 +2796,19 @@ describe('lua stdlib', function()
     screen:attach()
     screen:expect{grid=[[
       ^                                                            |
-      {0:~                                                           }|
-      {0:~                                                           }|
-      {0:~                                                           }|
+      {0:~                                                           }|*3
                                                                   |
     ]]}
     exec_lua [[vim.notify_once("I'll only tell you this once...", vim.log.levels.WARN)]]
     screen:expect{grid=[[
       ^                                                            |
-      {0:~                                                           }|
-      {0:~                                                           }|
-      {0:~                                                           }|
+      {0:~                                                           }|*3
       {1:I'll only tell you this once...}                             |
     ]]}
     feed('<C-l>')
     screen:expect{grid=[[
       ^                                                            |
-      {0:~                                                           }|
-      {0:~                                                           }|
-      {0:~                                                           }|
+      {0:~                                                           }|*3
                                                                   |
     ]]}
     exec_lua [[vim.notify_once("I'll only tell you this once...")]]
@@ -3341,5 +3351,23 @@ describe('vim.keymap', function()
 
     eq(1, exec_lua[[return GlobalCount]])
   end)
+end)
 
+describe('Vimscript function exists()', function()
+  it('can check a lua function', function()
+    eq(1, exec_lua[[
+      _G.test = function() print("hello") end
+      return vim.fn.exists('v:lua.test')
+    ]])
+
+    eq(1, funcs.exists('v:lua.require("mpack").decode'))
+    eq(1, funcs.exists("v:lua.require('mpack').decode"))
+    eq(1, funcs.exists('v:lua.require"mpack".decode'))
+    eq(1, funcs.exists("v:lua.require'mpack'.decode"))
+    eq(1, funcs.exists("v:lua.require('vim.lsp').start"))
+    eq(1, funcs.exists('v:lua.require"vim.lsp".start'))
+    eq(1, funcs.exists("v:lua.require'vim.lsp'.start"))
+    eq(0, funcs.exists("v:lua.require'vim.lsp'.unknown"))
+    eq(0, funcs.exists('v:lua.?'))
+  end)
 end)

@@ -3,7 +3,6 @@
 #include <inttypes.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +11,7 @@
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
@@ -41,9 +40,9 @@
 #include "nvim/grid.h"
 #include "nvim/hashtab.h"
 #include "nvim/keycodes.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mapping.h"  // IWYU pragma: keep (langmap_adjust_mb)
 #include "nvim/mark.h"
 #include "nvim/match.h"
@@ -56,11 +55,10 @@
 #include "nvim/option.h"
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/os.h"
-#include "nvim/os/os_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/quickfix.h"
 #include "nvim/search.h"
 #include "nvim/state.h"
@@ -68,11 +66,11 @@
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/ui_compositor.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -4428,6 +4426,10 @@ void tabpage_move(int nr)
     return;
   }
 
+  if (tabpage_move_disallowed) {
+    return;
+  }
+
   int n = 1;
   tabpage_T *tp;
 
@@ -4472,11 +4474,12 @@ void tabpage_move(int nr)
   redraw_tabline = true;
 }
 
-// Go to another window.
-// When jumping to another buffer, stop Visual mode.  Do this before
-// changing windows so we can yank the selection into the '*' register.
-// When jumping to another window on the same buffer, adjust its cursor
-// position to keep the same Visual area.
+/// Go to another window.
+/// When jumping to another buffer, stop Visual mode.  Do this before
+/// changing windows so we can yank the selection into the '*' register.
+/// (note: this may trigger ModeChanged autocommand!)
+/// When jumping to another window on the same buffer, adjust its cursor
+/// position to keep the same Visual area.
 void win_goto(win_T *wp)
 {
   win_T *owp = curwin;
@@ -4487,9 +4490,15 @@ void win_goto(win_T *wp)
   }
 
   if (wp->w_buffer != curbuf) {
+    // careful: triggers ModeChanged autocommand
     reset_VIsual_and_resel();
   } else if (VIsual_active) {
     wp->w_cursor = curwin->w_cursor;
+  }
+
+  // autocommand may have made wp invalid
+  if (!win_valid(wp)) {
+    return;
   }
 
   win_enter(wp, true);
@@ -4973,7 +4982,7 @@ void free_wininfo(wininfo_T *wip, buf_T *bp)
 /// Remove window 'wp' from the window list and free the structure.
 ///
 /// @param tp  tab page "win" is in, NULL for current
-static void win_free(win_T *wp, tabpage_T *tp)
+void win_free(win_T *wp, tabpage_T *tp)
 {
   pmap_del(int)(&window_handles, wp->handle, NULL);
   clearFolding(wp);
@@ -5178,7 +5187,7 @@ void win_new_screensize(void)
   if (old_Rows != Rows) {
     // If 'window' uses the whole screen, keep it using that.
     // Don't change it when set with "-w size" on the command line.
-    if (p_window == old_Rows - 1 || (old_Rows == 0 && !option_was_set("window"))) {
+    if (p_window == old_Rows - 1 || (old_Rows == 0 && !option_was_set(kOptWindow))) {
       p_window = Rows - 1;
     }
     old_Rows = Rows;
@@ -7102,8 +7111,9 @@ void reset_lnums(void)
 {
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     if (wp->w_buffer == curbuf) {
-      // Restore the value if the autocommand didn't change it and it was
-      // set.
+      // Restore the value if the autocommand didn't change it and it was set.
+      // Note: This triggers e.g. on BufReadPre, when the buffer is not yet
+      //       loaded, so cannot validate the buffer line
       if (equalpos(wp->w_save_cursor.w_cursor_corr, wp->w_cursor)
           && wp->w_save_cursor.w_cursor_save.lnum != 0) {
         wp->w_cursor = wp->w_save_cursor.w_cursor_save;
@@ -7111,6 +7121,9 @@ void reset_lnums(void)
       if (wp->w_save_cursor.w_topline_corr == wp->w_topline
           && wp->w_save_cursor.w_topline_save != 0) {
         wp->w_topline = wp->w_save_cursor.w_topline_save;
+      }
+      if (wp->w_save_cursor.w_topline_save > wp->w_buffer->b_ml.ml_line_count) {
+        wp->w_valid &= ~VALID_TOPLINE;
       }
     }
   }

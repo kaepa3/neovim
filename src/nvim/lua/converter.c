@@ -7,13 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "klib/kvec.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/memory.h"
-// FIXME: vim.h is not actually needed, but otherwise it states MAXPATHL is
-//        redefined
-#include "klib/kvec.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/eval/decode.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -22,10 +19,11 @@
 #include "nvim/gettext.h"
 #include "nvim/lua/converter.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
+#include "nvim/memory.h"
 #include "nvim/message.h"
-#include "nvim/types.h"
-#include "nvim/vim.h"
+#include "nvim/types_defs.h"
+#include "nvim/vim_defs.h"
 
 /// Determine, which keys lua table contains
 typedef struct {
@@ -150,7 +148,7 @@ static LuaTableProps nlua_traverse_table(lua_State *const lstate)
     }
   } else {
     if (tsize == 0
-        || (tsize == ret.maxidx
+        || (tsize <= ret.maxidx
             && other_keys_num == 0
             && ret.string_keys_num == 0)) {
       ret.type = kObjectTypeArray;
@@ -1131,10 +1129,6 @@ Object nlua_pop_Object(lua_State *const lstate, bool ref, Error *const err)
         }
         const size_t idx = cur.obj->data.array.size++;
         lua_rawgeti(lstate, -1, (int)idx + 1);
-        if (lua_isnil(lstate, -1)) {
-          lua_pop(lstate, 2);
-          continue;
-        }
         kvi_push(stack, cur);
         cur = (ObjPopStackItem) {
           .obj = &cur.obj->data.array.items[idx],
@@ -1260,7 +1254,7 @@ handle_T nlua_pop_handle(lua_State *lstate, Error *err)
   handle_T ret;
   if (lua_type(lstate, -1) != LUA_TNUMBER) {
     api_set_error(err, kErrorTypeValidation, "Expected Lua number");
-    ret = (handle_T) - 1;
+    ret = (handle_T)(-1);
   } else {
     ret = (handle_T)lua_tonumber(lstate, -1);
   }

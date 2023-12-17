@@ -9,7 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "klib/kvec.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
@@ -23,17 +24,18 @@
 #include "nvim/eval/userfunc.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
+#include "nvim/extmark.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/insexpand.h"
 #include "nvim/keycodes.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -48,7 +50,7 @@
 #include "nvim/os/time.h"
 #include "nvim/path.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
 #include "nvim/spell.h"
@@ -56,11 +58,12 @@
 #include "nvim/strings.h"
 #include "nvim/tag.h"
 #include "nvim/textformat.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
+#include "nvim/winfloat.h"
 
 // Definitions used for CTRL-X submode.
 // Note: If you change CTRL-X submode, you must also maintain ctrl_x_msgs[]
@@ -251,6 +254,8 @@ static colnr_T compl_col = 0;           ///< column where the text starts
                                         ///< that is being completed
 static char *compl_orig_text = NULL;    ///< text as it was before
                                         ///< completion started
+/// Undo information to restore extmarks for original text.
+static extmark_undo_vec_t compl_orig_extmarks;
 static int compl_cont_mode = 0;
 static expand_T compl_xp;
 
@@ -743,6 +748,16 @@ int ins_compl_add_infercase(char *str_arg, int len, bool icase, char *fname, Dir
   return res;
 }
 
+/// free cptext
+static inline void free_cptext(char *const *const cptext)
+{
+  if (cptext != NULL) {
+    for (size_t i = 0; i < CPT_COUNT; i++) {
+      xfree(cptext[i]);
+    }
+  }
+}
+
 /// Add a match to the list of matches
 ///
 /// @param[in]  str     text of the match to add
@@ -780,16 +795,10 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
   } else {
     os_breakcheck();
   }
-#define FREE_CPTEXT(cptext, cptext_allocated) \
-  do { \
-    if ((cptext) != NULL && (cptext_allocated)) { \
-      for (size_t i = 0; i < CPT_COUNT; i++) { \
-        xfree((cptext)[i]); \
-      } \
-    } \
-  } while (0)
   if (got_int) {
-    FREE_CPTEXT(cptext, cptext_allocated);
+    if (cptext_allocated) {
+      free_cptext(cptext);
+    }
     return FAIL;
   }
   if (len < 0) {
@@ -803,7 +812,9 @@ static int ins_compl_add(char *const str, int len, char *const fname, char *cons
       if (!match_at_original_text(match)
           && strncmp(match->cp_str, str, (size_t)len) == 0
           && ((int)strlen(match->cp_str) <= len || match->cp_str[len] == NUL)) {
-        FREE_CPTEXT(cptext, cptext_allocated);
+        if (cptext_allocated) {
+          free_cptext(cptext);
+        }
         return NOTDONE;
       }
       match = match->cp_next;
@@ -1280,6 +1291,28 @@ void ins_compl_show_pum(void)
   }
 }
 
+/// used for set or update info
+void compl_set_info(int pum_idx)
+{
+  compl_T *comp = compl_first_match;
+  char *pum_text = compl_match_array[pum_idx].pum_text;
+
+  while (comp != NULL) {
+    if (pum_text == comp->cp_str
+        || pum_text == comp->cp_text[CPT_ABBR]) {
+      comp->cp_text[CPT_INFO] = compl_match_array[pum_idx].pum_info;
+
+      // if comp is current match update completed_item value
+      if (comp == compl_curr_match) {
+        dict_T *dict = ins_compl_dict_alloc(compl_curr_match);
+        set_vim_var_dict(VV_COMPLETED_ITEM, dict);
+      }
+      break;
+    }
+    comp = comp->cp_next;
+  }
+}
+
 #define DICT_FIRST      (1)     ///< use just first element in "dict"
 #define DICT_EXACT      (2)     ///< "dict" is the exact name of a file
 
@@ -1548,9 +1581,7 @@ static void ins_compl_free(void)
     if (match->cp_flags & CP_FREE_FNAME) {
       xfree(match->cp_fname);
     }
-    for (int i = 0; i < CPT_COUNT; i++) {
-      xfree(match->cp_text[i]);
-    }
+    free_cptext(match->cp_text);
     tv_clear(&match->cp_user_data);
     xfree(match);
   } while (compl_curr_match != NULL && !is_first_match(compl_curr_match));
@@ -1568,6 +1599,7 @@ void ins_compl_clear(void)
   XFREE_CLEAR(compl_pattern);
   XFREE_CLEAR(compl_leader);
   edit_submode_extra = NULL;
+  kv_destroy(compl_orig_extmarks);
   XFREE_CLEAR(compl_orig_text);
   compl_enter_selects = false;
   // clear v:completed_item
@@ -2018,6 +2050,7 @@ static bool ins_compl_stop(const int c, const int prev_mode, bool retval)
         ins_bytes_len(p + compl_len, (size_t)(len - compl_len));
       }
     }
+    restore_orig_extmarks();
     retval = true;
   }
 
@@ -2453,9 +2486,7 @@ static int ins_compl_add_tv(typval_T *const tv, const Direction dir, bool fast)
     CLEAR_FIELD(cptext);
   }
   if (word == NULL || (!empty && *word == NUL)) {
-    for (size_t i = 0; i < CPT_COUNT; i++) {
-      xfree(cptext[i]);
-    }
+    free_cptext(cptext);
     tv_clear(&user_data);
     return FAIL;
   }
@@ -2504,6 +2535,22 @@ static void ins_compl_add_dict(dict_T *dict)
   }
 }
 
+/// Save extmarks in "compl_orig_text" so that they may be restored when the
+/// completion is cancelled, or the original text is completed.
+static void save_orig_extmarks(void)
+{
+  extmark_splice_delete(curbuf, curwin->w_cursor.lnum - 1, compl_col, curwin->w_cursor.lnum - 1,
+                        compl_col + compl_length, &compl_orig_extmarks, true, kExtmarkUndo);
+}
+
+static void restore_orig_extmarks(void)
+{
+  for (long i = (int)kv_size(compl_orig_extmarks) - 1; i > -1; i--) {
+    ExtmarkUndoObject undo_info = kv_A(compl_orig_extmarks, i);
+    extmark_apply_undo(undo_info, true);
+  }
+}
+
 /// Start completion for the complete() function.
 ///
 /// @param startcol  where the matched text starts (1 is first column).
@@ -2525,10 +2572,10 @@ static void set_completion(colnr_T startcol, list_T *list)
     startcol = curwin->w_cursor.col;
   }
   compl_col = startcol;
-  compl_length = (int)curwin->w_cursor.col - (int)startcol;
+  compl_length = curwin->w_cursor.col - startcol;
   // compl_pattern doesn't need to be set
-  compl_orig_text = xstrnsave(get_cursor_line_ptr() + compl_col,
-                              (size_t)compl_length);
+  compl_orig_text = xstrnsave(get_cursor_line_ptr() + compl_col, (size_t)compl_length);
+  save_orig_extmarks();
   if (p_ic) {
     flags |= CP_ICASE;
   }
@@ -2789,6 +2836,11 @@ static void get_complete_info(list_T *what_list, dict_T *retdict)
     ret = tv_dict_add_nr(retdict, S_LEN("selected"),
                          (compl_curr_match != NULL)
                          ? compl_curr_match->cp_number - 1 : -1);
+    win_T *wp = win_float_find_preview();
+    if (wp != NULL) {
+      tv_dict_add_nr(retdict, S_LEN("preview_winid"), wp->handle);
+      tv_dict_add_nr(retdict, S_LEN("preview_bufnr"), wp->w_buffer->handle);
+    }
   }
 
   (void)ret;
@@ -3688,11 +3740,15 @@ static int ins_compl_next(bool allow_get_expansion, int count, bool insert_match
   if (compl_no_insert && !started) {
     ins_bytes(compl_orig_text + get_compl_len());
     compl_used_match = false;
+    restore_orig_extmarks();
   } else if (insert_match) {
     if (!compl_get_longest || compl_used_match) {
       ins_compl_insert(in_compl_func);
     } else {
       ins_bytes(compl_leader + get_compl_len());
+    }
+    if (!strcmp(compl_curr_match->cp_str, compl_orig_text)) {
+      restore_orig_extmarks();
     }
   } else {
     compl_used_match = false;
@@ -4266,7 +4322,9 @@ static int ins_compl_start(void)
 
   // Always add completion for the original text.
   xfree(compl_orig_text);
+  kv_destroy(compl_orig_extmarks);
   compl_orig_text = xstrnsave(line + compl_col, (size_t)compl_length);
+  save_orig_extmarks();
   int flags = CP_ORIGINAL_TEXT;
   if (p_ic) {
     flags |= CP_ICASE;
@@ -4275,6 +4333,7 @@ static int ins_compl_start(void)
                     flags, false) != OK) {
     XFREE_CLEAR(compl_pattern);
     XFREE_CLEAR(compl_orig_text);
+    kv_destroy(compl_orig_extmarks);
     return FAIL;
   }
 
@@ -4507,6 +4566,7 @@ static unsigned quote_meta(char *dest, char *src, int len)
 void free_insexpand_stuff(void)
 {
   XFREE_CLEAR(compl_orig_text);
+  kv_destroy(compl_orig_extmarks);
   callback_free(&cfu_cb);
   callback_free(&ofu_cb);
   callback_free(&tsrfu_cb);

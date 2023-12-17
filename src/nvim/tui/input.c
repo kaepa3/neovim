@@ -7,12 +7,13 @@
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/event/defs.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/os.h"
+#include "nvim/rbuffer.h"
 #include "nvim/strings.h"
 #include "nvim/tui/input.h"
 #include "nvim/tui/input_defs.h"
@@ -26,6 +27,11 @@
 
 #define READ_STREAM_SIZE 0xfff
 #define KEY_BUFFER_SIZE 0xfff
+
+/// Size of libtermkey's internal input buffer. The buffer may grow larger than
+/// this when processing very long escape sequences, but will shrink back to
+/// this size afterward
+#define INPUT_BUFFER_SIZE 256
 
 static const struct kitty_key_map_entry {
   int key;
@@ -139,6 +145,7 @@ void tinput_init(TermInput *input, Loop *loop)
 
   input->tk = termkey_new_abstract(term,
                                    TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_NOSTART);
+  termkey_set_buffer_size(input->tk, INPUT_BUFFER_SIZE);
   termkey_hook_terminfo_getstr(input->tk, input->tk_ti_hook_fn, input);
   termkey_start(input->tk);
 
@@ -147,17 +154,17 @@ void tinput_init(TermInput *input, Loop *loop)
 
   // setup input handle
   rstream_init_fd(loop, &input->read_stream, input->in_fd, READ_STREAM_SIZE);
-  termkey_set_buffer_size(input->tk, rbuffer_capacity(input->read_stream.buffer));
 
   // initialize a timer handle for handling ESC with libtermkey
-  time_watcher_init(loop, &input->timer_handle, input);
+  uv_timer_init(&loop->uv, &input->timer_handle);
+  input->timer_handle.data = input;
 }
 
 void tinput_destroy(TermInput *input)
 {
   map_destroy(int, &kitty_key_map);
   rbuffer_free(input->key_buffer);
-  time_watcher_close(&input->timer_handle, NULL);
+  uv_close((uv_handle_t *)&input->timer_handle, NULL);
   stream_close(&input->read_stream, NULL, NULL);
   termkey_destroy(input->tk);
 }
@@ -170,7 +177,7 @@ void tinput_start(TermInput *input)
 void tinput_stop(TermInput *input)
 {
   rstream_stop(&input->read_stream);
-  time_watcher_stop(&input->timer_handle);
+  uv_timer_stop(&input->timer_handle);
 }
 
 static void tinput_done_event(void **argv)
@@ -460,17 +467,16 @@ static void tk_getkeys(TermInput *input, bool force)
 
   if (input->ttimeout && input->ttimeoutlen >= 0) {
     // Stop the current timer if already running
-    time_watcher_stop(&input->timer_handle);
-    time_watcher_start(&input->timer_handle, tinput_timer_cb,
-                       (uint64_t)input->ttimeoutlen, 0);
+    uv_timer_stop(&input->timer_handle);
+    uv_timer_start(&input->timer_handle, tinput_timer_cb, (uint64_t)input->ttimeoutlen, 0);
   } else {
     tk_getkeys(input, true);
   }
 }
 
-static void tinput_timer_cb(TimeWatcher *watcher, void *data)
+static void tinput_timer_cb(uv_timer_t *handle)
 {
-  TermInput *input = (TermInput *)data;
+  TermInput *input = handle->data;
   // If the raw buffer is not empty, process the raw buffer first because it is
   // processing an incomplete bracketed paster sequence.
   if (rbuffer_size(input->read_stream.buffer)) {
@@ -483,8 +489,8 @@ static void tinput_timer_cb(TimeWatcher *watcher, void *data)
 /// Handle focus events.
 ///
 /// If the upcoming sequence of bytes in the input stream matches the termcode
-/// for "focus gained" or "focus lost", consume that sequence and schedule an
-/// event on the main loop.
+/// for "focus gained" or "focus lost", consume that sequence and send an event
+/// to Nvim server.
 ///
 /// @param input the input stream
 /// @return true iff handle_focus_event consumed some input
@@ -691,20 +697,44 @@ static void handle_raw_buffer(TermInput *input, bool force)
     }
     // Push through libtermkey (translates to "<keycode>" strings, etc.).
     RBUFFER_UNTIL_EMPTY(input->read_stream.buffer, ptr, len) {
-      size_t consumed = termkey_push_bytes(input->tk, ptr, MIN(count, len));
-      // termkey_push_bytes can return (size_t)-1, so it is possible that
-      // `consumed > rbuffer_size(input->read_stream.buffer)`, but since tk_getkeys is
-      // called soon, it shouldn't happen.
+      const size_t size = MIN(count, len);
+      if (size > termkey_get_buffer_remaining(input->tk)) {
+        // We are processing a very long escape sequence. Increase termkey's
+        // internal buffer size. We don't handle out of memory situations so
+        // abort if it fails
+        const size_t delta = size - termkey_get_buffer_remaining(input->tk);
+        const size_t bufsize = termkey_get_buffer_size(input->tk);
+        if (!termkey_set_buffer_size(input->tk, MAX(bufsize + delta, bufsize * 2))) {
+          abort();
+        }
+      }
+
+      size_t consumed = termkey_push_bytes(input->tk, ptr, size);
+
+      // We resize termkey's buffer when it runs out of space, so this should
+      // never happen
       assert(consumed <= rbuffer_size(input->read_stream.buffer));
       rbuffer_consumed(input->read_stream.buffer, consumed);
-      // Process the keys now: there is no guarantee `count` will
-      // fit into libtermkey's input buffer.
+
+      // Process the input buffer now for any keys
       tk_getkeys(input, false);
+
       if (!(count -= consumed)) {
         break;
       }
     }
   } while (rbuffer_size(input->read_stream.buffer));
+
+  const size_t tk_size = termkey_get_buffer_size(input->tk);
+  const size_t tk_remaining = termkey_get_buffer_remaining(input->tk);
+  const size_t tk_count = tk_size - tk_remaining;
+  if (tk_count < INPUT_BUFFER_SIZE && tk_size > INPUT_BUFFER_SIZE) {
+    // If the termkey buffer was resized to handle a large input sequence then
+    // shrink it back down to its original size.
+    if (!termkey_set_buffer_size(input->tk, INPUT_BUFFER_SIZE)) {
+      abort();
+    }
+  }
 }
 
 static void tinput_read_cb(Stream *stream, RBuffer *buf, size_t count_, void *data, bool eof)
@@ -712,7 +742,7 @@ static void tinput_read_cb(Stream *stream, RBuffer *buf, size_t count_, void *da
   TermInput *input = data;
 
   if (eof) {
-    loop_schedule_fast(&main_loop, event_create(tinput_done_event, 0));
+    loop_schedule_fast(&main_loop, event_create(tinput_done_event, NULL));
     return;
   }
 
@@ -727,8 +757,8 @@ static void tinput_read_cb(Stream *stream, RBuffer *buf, size_t count_, void *da
     int64_t ms = input->ttimeout
                  ? (input->ttimeoutlen >= 0 ? input->ttimeoutlen : 0) : 0;
     // Stop the current timer if already running
-    time_watcher_stop(&input->timer_handle);
-    time_watcher_start(&input->timer_handle, tinput_timer_cb, (uint32_t)ms, 0);
+    uv_timer_stop(&input->timer_handle);
+    uv_timer_start(&input->timer_handle, tinput_timer_cb, (uint32_t)ms, 0);
     return;
   }
 

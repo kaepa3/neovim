@@ -4,17 +4,17 @@
 #include <lauxlib.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
@@ -28,25 +28,26 @@
 #include "nvim/getchar.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/highlight_defs.h"
+#include "nvim/highlight.h"
 #include "nvim/keycodes.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 /// List used for abbreviations.
 static mapblock_T *first_abbr = NULL;  // first entry in abbrlist
@@ -141,7 +142,7 @@ mapblock_T *get_buf_maphash_list(int state, int c)
 /// @param  index  The index in the maphash[]
 /// @param  buf  The buffer to get the maphash from. NULL for global
 mapblock_T *get_maphash(int index, buf_T *buf)
-    FUNC_ATTR_PURE
+  FUNC_ATTR_PURE
 {
   if (index >= MAX_MAPHASH) {
     return NULL;
@@ -2198,7 +2199,7 @@ static void get_maparg(typval_T *argvars, typval_T *rettv, int exact)
       Dictionary dict = mapblock_fill_dict(mp,
                                            did_simplify ? keys_simplified : NULL,
                                            buffer_local, abbr, true);
-      (void)object_to_vim(DICTIONARY_OBJ(dict), rettv, NULL);
+      object_to_vim(DICTIONARY_OBJ(dict), rettv, NULL);
       api_free_dictionary(dict);
     } else {
       // Return an empty dictionary.
@@ -2406,7 +2407,7 @@ void f_maplist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
                                              did_simplify ? keys_buf : NULL,
                                              buffer_local, abbr, true);
         typval_T d = TV_INITIAL_VALUE;
-        (void)object_to_vim(DICTIONARY_OBJ(dict), &d, NULL);
+        object_to_vim(DICTIONARY_OBJ(dict), &d, NULL);
         assert(d.v_type == VAR_DICT);
         tv_list_append_dict(rettv->vval.v_list, d.vval.v_dict);
         api_free_dictionary(dict);

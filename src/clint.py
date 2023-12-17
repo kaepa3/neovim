@@ -151,6 +151,7 @@ Syntax: clint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
 _ERROR_CATEGORIES = [
     'build/endif_comment',
     'build/header_guard',
+    'build/include_defs',
     'build/printf_format',
     'build/storage_class',
     'readability/bool',
@@ -878,6 +879,114 @@ def CheckForHeaderGuard(filename, lines, error):
     if "#pragma once" not in lines:
         error(filename, 0, 'build/header_guard', 5,
               'No "#pragma once" found in header')
+
+
+def CheckIncludes(filename, lines, error):
+    """Checks that headers only include _defs headers.
+
+    Args:
+      filename: The name of the C++ header file.
+      lines: An array of strings, each representing a line of the file.
+      error: The function to call with any errors found.
+    """
+    if (filename.endswith('.c.h')
+            or filename.endswith('.in.h')
+            or FileInfo(filename).RelativePath() in {
+        'func_attr.h',
+        'os/pty_process.h',
+    }):
+        return
+
+    # These should be synced with the ignored headers in the `iwyu` target in
+    # the Makefile.
+    check_includes_ignore = [
+            "src/nvim/api/private/helpers.h",
+            "src/nvim/api/private/validate.h",
+            "src/nvim/assert_defs.h",
+            "src/nvim/buffer.h",
+            "src/nvim/buffer_defs.h",
+            "src/nvim/channel.h",
+            "src/nvim/charset.h",
+            "src/nvim/drawline.h",
+            "src/nvim/eval.h",
+            "src/nvim/eval/encode.h",
+            "src/nvim/eval/typval.h",
+            "src/nvim/eval/typval_defs.h",
+            "src/nvim/eval/userfunc.h",
+            "src/nvim/eval/window.h",
+            "src/nvim/event/libuv_process.h",
+            "src/nvim/event/loop.h",
+            "src/nvim/event/multiqueue.h",
+            "src/nvim/event/process.h",
+            "src/nvim/event/rstream.h",
+            "src/nvim/event/signal.h",
+            "src/nvim/event/socket.h",
+            "src/nvim/event/stream.h",
+            "src/nvim/event/time.h",
+            "src/nvim/event/wstream.h",
+            "src/nvim/garray.h",
+            "src/nvim/globals.h",
+            "src/nvim/grid.h",
+            "src/nvim/highlight.h",
+            "src/nvim/input.h",
+            "src/nvim/keycodes.h",
+            "src/nvim/lua/executor.h",
+            "src/nvim/main.h",
+            "src/nvim/mark.h",
+            "src/nvim/msgpack_rpc/channel.h",
+            "src/nvim/msgpack_rpc/channel_defs.h",
+            "src/nvim/msgpack_rpc/helpers.h",
+            "src/nvim/msgpack_rpc/unpacker.h",
+            "src/nvim/option.h",
+            "src/nvim/os/input.h",
+            "src/nvim/os/pty_conpty_win.h",
+            "src/nvim/os/pty_process_unix.h",
+            "src/nvim/os/pty_process_win.h",
+            "src/nvim/tui/input.h",
+            "src/nvim/ui.h",
+            "src/nvim/viml/parser/expressions.h",
+            "src/nvim/viml/parser/parser.h",
+                             ]
+
+    skip_headers = [
+            "klib/kvec.h",
+            "klib/klist.h",
+            "auto/config.h",
+            "nvim/func_attr.h"
+            ]
+
+    for i in check_includes_ignore:
+        if filename.endswith(i):
+            return
+
+    for i, line in enumerate(lines):
+        matched = Match(r'#\s*include\s*"([^"]*)"', line)
+        if matched:
+            name = matched.group(1)
+            if name in skip_headers:
+                continue
+            if (not name.endswith('.h.generated.h') and
+                    not name.endswith('/defs.h') and
+                    not name.endswith('_defs.h') and
+                    not name.endswith('_defs.generated.h') and
+                    not name.endswith('_enum.generated.h')):
+                error(filename, i, 'build/include_defs', 5,
+                      'Headers should not include non-"_defs" headers')
+
+
+def CheckNonSymbols(filename, lines, error):
+    """Checks that a _defs.h header only contains non-symbols.
+
+    Args:
+      filename: The name of the C++ header file.
+      lines: An array of strings, each representing a line of the file.
+      error: The function to call with any errors found.
+    """
+    for i, line in enumerate(lines):
+        # Only a check against extern variables for now.
+        if line.startswith('EXTERN ') or line.startswith('extern '):
+            error(filename, i, 'build/defs_header', 5,
+                  '"_defs" headers should not contain extern variables')
 
 
 def CheckForBadCharacters(filename, lines, error):
@@ -1973,7 +2082,7 @@ def CheckLanguage(filename, clean_lines, linenum, error):
         if match:
             error(filename, linenum, 'runtime/deprecated', 4,
                   'Accessing list_T internals directly is prohibited; '
-                  'see https://github.com/neovim/neovim/wiki/List-management-in-Neovim')
+                  'see https://neovim.io/doc/user/dev_vimpatch.html#dev-vimpatch-list-management')
 
     # Check for suspicious usage of "if" like
     # } if (a == b) {
@@ -2166,6 +2275,9 @@ def ProcessFileData(filename, file_extension, lines, error,
 
     if file_extension == 'h':
         CheckForHeaderGuard(filename, lines, error)
+        CheckIncludes(filename, lines, error)
+        if filename.endswith('/defs.h') or filename.endswith('_defs.h'):
+            CheckNonSymbols(filename, lines, error)
 
     RemoveMultiLineComments(filename, lines, error)
     clean_lines = CleansedLines(lines, init_lines)

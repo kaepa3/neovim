@@ -1373,6 +1373,8 @@ M.funcs = {
       		no item is selected when using the <Up> or
       		<Down> keys)
          inserted	Inserted string. [NOT IMPLEMENTED YET]
+         preview_winid     Info floating preview window id.
+         preview_bufnr     Info floating preview buffer id.
 
       					*complete_info_mode*
       mode values are:
@@ -2114,7 +2116,7 @@ M.funcs = {
     name = 'execute',
     params = {
       { 'command', 'string|string[]' },
-      { 'silent', "''|'silent'|'silent!'" }
+      { 'silent', "''|'silent'|'silent!'" },
     },
     returns = 'string',
     signature = 'execute({command} [, {silent}])',
@@ -4519,7 +4521,7 @@ M.funcs = {
     name = 'getwininfo',
     params = { { 'winid', 'integer' } },
     signature = 'getwininfo([{winid}])',
-    returns = 'vim.fn.getwininfo.ret.item[]'
+    returns = 'vim.fn.getwininfo.ret.item[]',
   },
   getwinpos = {
     args = { 0, 1 },
@@ -5735,8 +5737,7 @@ M.funcs = {
       Vim value. In the following cases it will output
       |msgpack-special-dict|:
       1. Dictionary contains duplicate key.
-      2. Dictionary contains empty key.
-      3. String contains NUL byte.  Two special dictionaries: for
+      2. String contains NUL byte.  Two special dictionaries: for
          dictionary and for string will be emitted in case string
          with NUL byte was a dictionary key.
 
@@ -6198,8 +6199,8 @@ M.funcs = {
         "mode_bits" Nvim's internal binary representation of "mode".
       	     |mapset()| ignores this; only "mode" is used.
       	     See |maplist()| for usage examples. The values
-      	     are from src/nvim/vim.h and may change in the
-      	     future.
+      	     are from src/nvim/state_defs.h and may change in
+      	     the future.
 
       The dictionary can be used to restore a mapping with
       |mapset()|.
@@ -6287,8 +6288,8 @@ M.funcs = {
       	endfor
       	echo saved_maps->mapnew({_, m -> m.lhs})
       <The values of the mode_bits are defined in Nvim's
-      src/nvim/vim.h file and they can be discovered at runtime
-      using |:map-commands| and "maplist()". Example: >vim
+      src/nvim/state_defs.h file and they can be discovered at
+      runtime using |:map-commands| and "maplist()". Example: >vim
       	omap xyzzy <Nop>
       	let op_bit = maplist()->filter(
       	    \ {_, m -> m.lhs == 'xyzzy'})[0].mode_bits
@@ -6297,7 +6298,7 @@ M.funcs = {
     ]],
     name = 'maplist',
     params = {},
-    signature = 'maplist([{abbr}])'
+    signature = 'maplist([{abbr}])',
   },
   mapnew = {
     args = 2,
@@ -7038,7 +7039,9 @@ M.funcs = {
          Rvc	    Virtual Replace mode completion |compl-generic|
          Rvx	    Virtual Replace mode |i_CTRL-X| completion
          c	    Command-line editing
+         cr	    Command-line editing overstrike mode |c_<Insert>|
          cv	    Vim Ex mode |gQ|
+         cvr	    Vim Ex mode while in overstrike mode |c_<Insert>|
          r	    Hit-enter prompt
          rm	    The -- more -- prompt
          r?	    A |:confirm| query of some sort
@@ -7153,7 +7156,6 @@ M.funcs = {
       	   are binary strings).
       	2. String with NUL byte inside.
       	3. Duplicate key.
-      	4. Empty key.
       ext	|List| with two values: first is a signed integer
       	representing extension type. Second is
       	|readfile()|-style list of strings.
@@ -7443,9 +7445,9 @@ M.funcs = {
       <This limits the length of the text used from "line" to
       "width" bytes.
 
-      If the argument to be formatted is specified using a posional
-      argument specifier, and a '*' is used to indicate that a
-      number argument is to be used to specify the width or
+      If the argument to be formatted is specified using a
+      positional argument specifier, and a '*' is used to indicate
+      that a number argument is to be used to specify the width or
       precision, the argument(s) to be used must also be specified
       using a {n$} positional argument specifier. See |printf-$|.
 
@@ -9903,7 +9905,7 @@ M.funcs = {
     name = 'sign_jump',
     params = { { 'id', 'integer' }, { 'group', 'string' }, { 'buf', 'integer|string' } },
     signature = 'sign_jump({id}, {group}, {buf})',
-    returns = 'integer'
+    returns = 'integer',
   },
   sign_place = {
     args = { 4, 5 },
@@ -9966,7 +9968,7 @@ M.funcs = {
       { 'dict', 'vim.fn.sign_place.dict' },
     },
     signature = 'sign_place({id}, {group}, {name}, {buf} [, {dict}])',
-    returns = 'integer'
+    returns = 'integer',
   },
   sign_placelist = {
     args = 1,
@@ -10033,7 +10035,7 @@ M.funcs = {
     name = 'sign_placelist',
     params = { { 'list', 'vim.fn.sign_placelist.list.item[]' } },
     signature = 'sign_placelist({list})',
-    returns = 'integer[]'
+    returns = 'integer[]',
   },
   sign_undefine = {
     args = { 0, 1 },
@@ -10568,7 +10570,7 @@ M.funcs = {
     signature = 'stdpath({what})',
   },
   state = {
-    args = {0, 1},
+    args = { 0, 1 },
     base = 1,
     desc = [=[
       Return a string which contains characters indicating the
@@ -12696,7 +12698,7 @@ M.funcs = {
     name = 'winsaveview',
     params = {},
     signature = 'winsaveview()',
-    returns = 'vim.fn.winsaveview.ret'
+    returns = 'vim.fn.winsaveview.ret',
   },
   winwidth = {
     args = 1,

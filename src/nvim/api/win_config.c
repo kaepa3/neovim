@@ -3,24 +3,25 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/extmark.h"
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/defs.h"
+#include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/win_config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
 #include "nvim/decoration.h"
-#include "nvim/decoration_defs.h"
 #include "nvim/drawscreen.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
 #include "nvim/highlight_group.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/option.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
+#include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/ui.h"
 #include "nvim/window.h"
@@ -256,8 +257,8 @@ void nvim_win_set_config(Window window, Dict(float_config) *config, Error *err)
   }
 }
 
-Dictionary config_put_bordertext(Dictionary config, FloatConfig *fconfig,
-                                 BorderTextType bordertext_type)
+static Dictionary config_put_bordertext(Dictionary config, FloatConfig *fconfig,
+                                        BorderTextType bordertext_type)
 {
   VirtText vt;
   AlignTextPos align;
@@ -310,6 +311,9 @@ Dictionary config_put_bordertext(Dictionary config, FloatConfig *fconfig,
 Dictionary nvim_win_get_config(Window window, Error *err)
   FUNC_API_SINCE(6)
 {
+  /// Keep in sync with FloatRelative in buffer_defs.h
+  static const char *const float_relative_str[] = { "editor", "win", "cursor", "mouse" };
+
   Dictionary rv = ARRAY_DICT_INIT;
 
   win_T *wp = find_window_by_handle(window, err);
@@ -427,18 +431,36 @@ static bool parse_float_bufpos(Array bufpos, lpos_T *out)
 static void parse_bordertext(Object bordertext, BorderTextType bordertext_type,
                              FloatConfig *fconfig, Error *err)
 {
+  if (bordertext.type != kObjectTypeString && bordertext.type != kObjectTypeArray) {
+    api_set_error(err, kErrorTypeValidation, "title/footer must be string or array");
+    return;
+  }
+
+  if (bordertext.type == kObjectTypeArray && bordertext.data.array.size == 0) {
+    api_set_error(err, kErrorTypeValidation, "title/footer cannot be an empty array");
+    return;
+  }
+
   bool *is_present;
   VirtText *chunks;
   int *width;
   int default_hl_id;
   switch (bordertext_type) {
   case kBorderTextTitle:
+    if (fconfig->title) {
+      clear_virttext(&fconfig->title_chunks);
+    }
+
     is_present = &fconfig->title;
     chunks = &fconfig->title_chunks;
     width = &fconfig->title_width;
     default_hl_id = syn_check_group(S_LEN("FloatTitle"));
     break;
   case kBorderTextFooter:
+    if (fconfig->footer) {
+      clear_virttext(&fconfig->footer_chunks);
+    }
+
     is_present = &fconfig->footer;
     chunks = &fconfig->footer_chunks;
     width = &fconfig->footer_width;
@@ -455,16 +477,6 @@ static void parse_bordertext(Object bordertext, BorderTextType bordertext_type,
                                        .hl_id = default_hl_id }));
     *width = (int)mb_string2cells(bordertext.data.string.data);
     *is_present = true;
-    return;
-  }
-
-  if (bordertext.type != kObjectTypeArray) {
-    api_set_error(err, kErrorTypeValidation, "title must be string or array");
-    return;
-  }
-
-  if (bordertext.data.array.size == 0) {
-    api_set_error(err, kErrorTypeValidation, "title cannot be an empty array");
     return;
   }
 
@@ -770,10 +782,6 @@ static bool parse_float_config(Dict(float_config) *config, FloatConfig *fconfig,
       return false;
     }
 
-    if (fconfig->title) {
-      clear_virttext(&fconfig->title_chunks);
-    }
-
     parse_bordertext(config->title, kBorderTextTitle, fconfig, err);
     if (ERROR_SET(err)) {
       return false;
@@ -795,10 +803,6 @@ static bool parse_float_config(Dict(float_config) *config, FloatConfig *fconfig,
     if (!HAS_KEY_X(config, border) && !fconfig->border) {
       api_set_error(err, kErrorTypeException, "footer requires border to be set");
       return false;
-    }
-
-    if (fconfig->footer) {
-      clear_virttext(&fconfig->footer_chunks);
     }
 
     parse_bordertext(config->footer, kBorderTextFooter, fconfig, err);

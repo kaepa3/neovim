@@ -1,60 +1,54 @@
 #pragma once
 
-#include "nvim/macros.h"
-#include "nvim/types.h"
+#include "nvim/macros_defs.h"
+#include "nvim/types_defs.h"
 
 // option_vars.h: definition of global variables for settable options
 
 // Option Flags
-#define P_BOOL         0x01U        ///< the option is boolean
-#define P_NUM          0x02U        ///< the option is numeric
-#define P_STRING       0x04U        ///< the option is a string
-#define P_ALLOCED      0x08U        ///< the string option is in allocated memory,
+#define P_ALLOCED      0x01U        ///< the option is in allocated memory,
                                     ///< must use free_string_option() when
                                     ///< assigning new value. Not set if default is
                                     ///< the same.
-#define P_EXPAND       0x10U        ///< environment expansion.  NOTE: P_EXPAND can
+#define P_EXPAND       0x02U        ///< environment expansion.  NOTE: P_EXPAND can
                                     ///< never be used for local or hidden options
-#define P_NO_DEF_EXP   0x20U        ///< do not expand default value
-#define P_NODEFAULT    0x40U        ///< don't set to default value
-#define P_DEF_ALLOCED  0x80U        ///< default value is in allocated memory, must
+#define P_NO_DEF_EXP   0x04U        ///< do not expand default value
+#define P_NODEFAULT    0x08U        ///< don't set to default value
+#define P_DEF_ALLOCED  0x10U        ///< default value is in allocated memory, must
                                     ///< use free() when assigning new value
-#define P_WAS_SET      0x100U       ///< option has been set/reset
-#define P_NO_MKRC      0x200U       ///< don't include in :mkvimrc output
+#define P_WAS_SET      0x20U        ///< option has been set/reset
+#define P_NO_MKRC      0x40U        ///< don't include in :mkvimrc output
 
 // when option changed, what to display:
-#define P_UI_OPTION    0x400U       ///< send option to remote UI
-#define P_RTABL        0x800U       ///< redraw tabline
-#define P_RSTAT        0x1000U      ///< redraw status lines
-#define P_RWIN         0x2000U      ///< redraw current window and recompute text
-#define P_RBUF         0x4000U      ///< redraw current buffer and recompute text
-#define P_RALL         0x6000U      ///< redraw all windows
-#define P_RCLR         0x7000U      ///< clear and redraw all
+#define P_UI_OPTION    0x80U        ///< send option to remote UI
+#define P_RTABL        0x100U       ///< redraw tabline
+#define P_RSTAT        0x200U       ///< redraw status lines
+#define P_RWIN         0x400U       ///< redraw current window and recompute text
+#define P_RBUF         0x800U       ///< redraw current buffer and recompute text
+#define P_RALL         0xC00U       ///< redraw all windows
+#define P_RCLR         0xE00U       ///< clear and redraw all
 
-#define P_COMMA        0x8000U      ///< comma separated list
-#define P_ONECOMMA     0x18000U     ///< P_COMMA and cannot have two consecutive
+#define P_COMMA        0x1000U      ///< comma separated list
+#define P_ONECOMMA     0x3000U      ///< P_COMMA and cannot have two consecutive
                                     ///< commas
-#define P_NODUP        0x20000U     ///< don't allow duplicate strings
-#define P_FLAGLIST     0x40000U     ///< list of single-char flags
+#define P_NODUP        0x4000U      ///< don't allow duplicate strings
+#define P_FLAGLIST     0x8000U      ///< list of single-char flags
 
-#define P_SECURE       0x80000U     ///< cannot change in modeline or secure mode
-#define P_GETTEXT      0x100000U    ///< expand default value with _()
-#define P_NOGLOB       0x200000U    ///< do not use local value for global vimrc
-#define P_NFNAME       0x400000U    ///< only normal file name chars allowed
-#define P_INSECURE     0x800000U    ///< option was set from a modeline
-#define P_PRI_MKRC     0x1000000U   ///< priority for :mkvimrc (setting option
+#define P_SECURE       0x10000U     ///< cannot change in modeline or secure mode
+#define P_GETTEXT      0x20000U     ///< expand default value with _()
+#define P_NOGLOB       0x40000U     ///< do not use local value for global vimrc
+#define P_NFNAME       0x80000U     ///< only normal file name chars allowed
+#define P_INSECURE     0x100000U    ///< option was set from a modeline
+#define P_PRI_MKRC     0x200000U    ///< priority for :mkvimrc (setting option
                                     ///< has side effects)
-#define P_NO_ML        0x2000000U   ///< not allowed in modeline
-#define P_CURSWANT     0x4000000U   ///< update curswant required; not needed
+#define P_NO_ML        0x400000U    ///< not allowed in modeline
+#define P_CURSWANT     0x800000U    ///< update curswant required; not needed
                                     ///< when there is a redraw flag
-#define P_NDNAME       0x8000000U   ///< only normal dir name chars allowed
-#define P_RWINONLY     0x10000000U  ///< only redraw current window
-#define P_MLE          0x20000000U  ///< under control of 'modelineexpr'
-#define P_FUNC         0x40000000U  ///< accept a function reference or a lambda
-#define P_COLON        0x80000000U  ///< values use colons to create sublists
-// Warning: Currently we have used all 32 bits for option flags, and adding more
-//          flags will overflow it. Adding another flag will need to change how
-//          it's stored first.
+#define P_NDNAME       0x1000000U   ///< only normal dir name chars allowed
+#define P_RWINONLY     0x2000000U   ///< only redraw current window
+#define P_MLE          0x4000000U   ///< under control of 'modelineexpr'
+#define P_FUNC         0x8000000U   ///< accept a function reference or a lambda
+#define P_COLON        0x10000000U  ///< values use colons to create sublists
 
 #define HIGHLIGHT_INIT \
   "8:SpecialKey,~:EndOfBuffer,z:TermCursor,Z:TermCursorNC,@:NonText,d:Directory,e:ErrorMsg," \
@@ -72,7 +66,7 @@
 // written to a file.
 #ifdef MSWIN
 # define DFLT_EFM \
-  "%f(%l) \\=: %t%*\\D%n: %m,%*[^\"]\"%f\"%*\\D%l: %m,%f(%l) \\=: %m,%*[^ ] %f %l: %m,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,%f|%l| %m"
+  "%f(%l): %t%*\\D%n: %m,%f(%l\\,%c): %t%*\\D%n: %m,%f(%l) \\=: %t%*\\D%n: %m,%*[^\"]\"%f\"%*\\D%l: %m,%f(%l) \\=: %m,%*[^ ] %f %l: %m,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,%f|%l| %m"
 #else
 # define DFLT_EFM \
   "%*[^\"]\"%f\"%*\\D%l: %m,\"%f\"%*\\D%l: %m,%-Gg%\\?make[%*\\d]: *** [%f:%l:%m,%-Gg%\\?make: *** [%f:%l:%m,%-G%f:%l: (Each undeclared identifier is reported only once,%-G%f:%l: for each function it appears in.),%-GIn file included from %f:%l:%c:,%-GIn file included from %f:%l:%c\\,,%-GIn file included from %f:%l:%c,%-GIn file included from %f:%l,%-G%*[ ]from %f:%l:%c,%-G%*[ ]from %f:%l:,%-G%*[ ]from %f:%l\\,,%-G%*[ ]from %f:%l,%f:%l:%c:%m,%f(%l):%m,%f:%l:%m,\"%f\"\\, line %l%*\\D%c%*[^ ] %m,%D%*\\a[%*\\d]: Entering directory %*[`']%f',%X%*\\a[%*\\d]: Leaving directory %*[`']%f',%D%*\\a: Entering directory %*[`']%f',%X%*\\a: Leaving directory %*[`']%f',%DMaking %*\\a in %f,%f|%l| %m"
@@ -456,7 +450,6 @@ EXTERN unsigned dy_flags;
 #define DY_UHEX                 0x004
 // legacy flag, not used
 #define DY_MSGSEP               0x008
-EXTERN int p_ed;                ///< 'edcompatible'
 EXTERN char *p_ead;             ///< 'eadirection'
 EXTERN int p_emoji;             ///< 'emoji'
 EXTERN int p_ea;                ///< 'equalalways'
@@ -786,9 +779,6 @@ EXTERN int p_wb;                ///< 'writebackup'
 EXTERN OptInt p_wd;             ///< 'writedelay'
 EXTERN int p_cdh;               ///< 'cdhome'
 
-EXTERN int p_force_on;          ///< options that cannot be turned off.
-EXTERN int p_force_off;         ///< options that cannot be turned on.
-
 /// "indir" values for buffer-local options.
 /// These need to be defined globally, so that the BV_COUNT can be used with
 /// b_p_script_stx[].
@@ -941,6 +931,8 @@ enum {
 
 // Value for b_p_ul indicating the global value must be used.
 #define NO_LOCAL_UNDOLEVEL (-123456)
+
+#define ERR_BUFLEN 80
 
 #define SB_MAX 100000  // Maximum 'scrollback' value.
 

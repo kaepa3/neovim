@@ -124,7 +124,8 @@ vim.log = {
 --- @return vim.SystemObj Object with the fields:
 ---   - pid (integer) Process ID
 ---   - wait (fun(timeout: integer|nil): SystemCompleted) Wait for the process to complete. Upon
----     timeout the process is sent the KILL signal (9) and the exit code is set to 124.
+---     timeout the process is sent the KILL signal (9) and the exit code is set to 124. Cannot
+---     be called in |api-fast|.
 ---     - SystemCompleted is an object with the fields:
 ---      - code: (integer)
 ---      - signal: (integer)
@@ -477,7 +478,7 @@ do
   end
 
   vim.g = make_dict_accessor('g', false)
-  vim.v = make_dict_accessor('v', false)
+  vim.v = make_dict_accessor('v', false) --[[@as vim.v]]
   vim.b = make_dict_accessor('b')
   vim.w = make_dict_accessor('w')
   vim.t = make_dict_accessor('t')

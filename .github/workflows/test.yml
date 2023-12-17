@@ -35,15 +35,12 @@ jobs:
       CC: clang
     steps:
       - uses: actions/checkout@v4
-      - run: ./.github/scripts/install_deps.sh
-      - uses: ./.github/actions/cache
+      - uses: ./.github/actions/setup
 
       - name: Install stylua
         run: |
-          URL=$(curl -L https://api.github.com/repos/JohnnyMorganz/StyLua/releases/latest | jq -r '.assets[] | select(.name == "stylua-linux-x86_64.zip") | .browser_download_url')
-          wget --directory-prefix="$BIN_DIR" "$URL"
+          wget --directory-prefix="$BIN_DIR" https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip
           (cd "$BIN_DIR"; unzip stylua*.zip)
-          echo "$BIN_DIR" >> $GITHUB_PATH
 
       - name: Build third-party deps
         run: |
@@ -88,8 +85,7 @@ jobs:
       CC: clang
     steps:
       - uses: actions/checkout@v4
-      - run: ./.github/scripts/install_deps.sh
-      - uses: ./.github/actions/cache
+      - uses: ./.github/actions/setup
       - name: Build third-party deps
         run: |
           cmake -S cmake.deps --preset ci
@@ -108,14 +104,14 @@ jobs:
             { runner: ubuntu-22.04, flavor: tsan, cc: clang, flags: -D ENABLE_TSAN=ON },
             { runner: ubuntu-22.04, cc: gcc },
             { runner: macos-12, cc: clang, flags: -D CMAKE_FIND_FRAMEWORK=NEVER, deps_flags: -D CMAKE_FIND_FRAMEWORK=NEVER },
-            { runner: ubuntu-22.04, flavor: functionaltest-lua, cc: gcc, deps_flags: -D USE_BUNDLED_LUAJIT=OFF -D USE_BUNDLED_LUA=ON, flags: -D PREFER_LUA=ON },
+            { runner: ubuntu-22.04, flavor: puc-lua, cc: gcc, deps_flags: -D USE_BUNDLED_LUAJIT=OFF -D USE_BUNDLED_LUA=ON, flags: -D PREFER_LUA=ON },
           ]
         test: [unittest, functionaltest, oldtest]
         exclude:
           - test: unittest
             build: { flavor: tsan }
           - test: unittest
-            build: { flavor: functionaltest-lua }
+            build: { flavor: puc-lua }
           - test: oldtest
             build: { flavor: tsan }
     runs-on: ${{ matrix.build.runner }}
@@ -124,23 +120,12 @@ jobs:
       CC: ${{ matrix.build.cc }}
     steps:
       - uses: actions/checkout@v4
-      - run: ./.github/scripts/install_deps.sh --test
-      - uses: ./.github/actions/cache
-
-      - name: Set up environment
-        run: |
-          ulimit -c unlimited
-          echo "$BIN_DIR" >> $GITHUB_PATH
+      - uses: ./.github/actions/setup
+        with:
+          install_flags: "--test"
 
       - name: Create log dir
         run: mkdir -p "$LOG_DIR"
-
-      # FIXME(dundargoc): this workaround is needed for macos as the python3
-      # provider tests suddenly started to become extremely flaky, and this
-      # removes the flakiness for some reason.
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
 
       - if: ${{ matrix.test != 'unittest' }}
         name: Set up interpreter packages
@@ -213,8 +198,7 @@ jobs:
         test: [functional, old]
     steps:
       - uses: actions/checkout@v4
-      - uses: ./.github/actions/cache
-      - run: .github/scripts/env.ps1
+      - uses: ./.github/actions/setup
 
       - name: Build deps
         run: |
@@ -281,8 +265,7 @@ jobs:
       CC: gcc
     steps:
       - uses: actions/checkout@v4
-      - run: ./.github/scripts/install_deps.sh
-      - uses: ./.github/actions/cache
+      - uses: ./.github/actions/setup
 
       - name: Build third-party deps
         run: |
@@ -308,11 +291,11 @@ jobs:
       CC: gcc
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
 
       - name: Install dependencies
         run: |
           sudo add-apt-repository ppa:neovim-ppa/stable
-          ./.github/scripts/install_deps.sh
           sudo apt-get install -y \
             libluajit-5.1-dev \
             libmsgpack-dev \
@@ -328,8 +311,6 @@ jobs:
 
             # Remove comments from packages once we start using these external
             # dependencies.
-
-      - uses: ./.github/actions/cache
 
       - name: Build third-party deps
         run: |

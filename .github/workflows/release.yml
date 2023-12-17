@@ -1,4 +1,4 @@
-name: Release
+name: release
 on:
   schedule:
     - cron: '5 5 * * *'
@@ -23,6 +23,9 @@ jobs:
       version: ${{ steps.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Perform a full checkout #13471
+          fetch-depth: 0
       - run: ./.github/scripts/install_deps.sh
       - if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != 'nightly')
         run: |
@@ -36,14 +39,14 @@ jobs:
         run: ./scripts/genappimage.sh ${APPIMAGE_TAG}
       - name: tar.gz
         run: cpack --config build/CPackConfig.cmake -G TGZ
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: appimage
           path: |
             build/bin/nvim.appimage
             build/bin/nvim.appimage.zsync
           retention-days: 1
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: nvim-linux64
           path: |
@@ -60,6 +63,9 @@ jobs:
     runs-on: macos-11
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Perform a full checkout #13471
+          fetch-depth: 0
       - name: Install dependencies
         run: ./.github/scripts/install_deps.sh
       - if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name != 'nightly')
@@ -68,7 +74,7 @@ jobs:
         run: printf 'NVIM_BUILD_TYPE=RelWithDebInfo\n' >> $GITHUB_ENV
       - name: Build universal binary
         run: ./.github/scripts/build_universal_macos.sh
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: nvim-macos
           path: build/nvim-macos.tar.gz
@@ -79,6 +85,9 @@ jobs:
     name: windows (MSVC_64)
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Perform a full checkout #13471
+          fetch-depth: 0
       - run: .github/scripts/env.ps1
       - name: Build deps
         run: |
@@ -88,7 +97,7 @@ jobs:
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE='RelWithDebInfo'
           cmake --build build --target package
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: nvim-win64
           path: |
@@ -109,7 +118,7 @@ jobs:
       # before running, and would therefore delete the downloaded artifacts
       - uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y gettext-base
@@ -187,7 +196,7 @@ jobs:
           token: ${{ secrets.WINGET_TOKEN }}
       - name: Fetch nightly build msi from previous job
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name == 'nightly')
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
       - if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.event.inputs.tag_name == 'nightly')
         name: Get version from nightly build msi
         id: get-version

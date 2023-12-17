@@ -9,7 +9,7 @@
 #include <string.h>
 
 #include "auto/config.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/memory.h"
 
 #define equal_simple(x, y) ((x) == (y))
@@ -109,6 +109,9 @@ void mh_clear(MapHash *h)
 #include "nvim/map_value_impl.c.h"
 #undef VAL_NAME
 #define VAL_NAME(x) quasiquote(x, String)
+#include "nvim/map_value_impl.c.h"
+#undef VAL_NAME
+#define VAL_NAME(x) quasiquote(x, SignRange)
 #include "nvim/map_value_impl.c.h"
 #undef VAL_NAME
 #undef KEY_NAME

@@ -1,5 +1,5 @@
 add_library(main_lib INTERFACE)
-add_executable(nvim main.c)
+add_executable(nvim)
 
 set_target_properties(nvim
   PROPERTIES
@@ -10,55 +10,40 @@ set_target_properties(nvim
 # Dependencies
 #-------------------------------------------------------------------------------
 
-add_library(libuv INTERFACE)
-find_package(libuv CONFIG QUIET)
-if(TARGET libuv::uv_a)
-  target_link_libraries(libuv INTERFACE libuv::uv_a)
-  mark_as_advanced(libuv_DIR)
-else()
-  # Fall back to find module for libuv versions older than v1.45.0 which don't
-  # provide a config file
-  find_package(Libuv 1.28.0 REQUIRED MODULE)
-  target_include_directories(libuv SYSTEM BEFORE INTERFACE ${LIBUV_INCLUDE_DIR})
-  target_link_libraries(libuv INTERFACE ${LIBUV_LIBRARIES})
-endif()
-
 add_library(nlua0 MODULE)
 if(WIN32)
   target_compile_definitions(nlua0 PUBLIC LUA_BUILD_AS_DLL LUA_LIB)
   set_target_properties(nlua0 PROPERTIES ENABLE_EXPORTS TRUE)
 elseif(APPLE)
-  set_target_properties(nlua0 PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+  target_link_options(nlua0 PRIVATE -undefined dynamic_lookup)
 endif()
 
+# TODO(dundargoc): unittest stops working if I create an pseudo-imported
+# library "luv" as with the other dependencies. Figure out why and fix.
 find_package(Luv 1.43.0 REQUIRED)
 target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LUV_INCLUDE_DIR})
 target_link_libraries(main_lib INTERFACE ${LUV_LIBRARY})
 
 find_package(Iconv REQUIRED)
-find_package(Lpeg REQUIRED)
-find_package(Libtermkey 0.22 REQUIRED)
+find_package(Libintl REQUIRED) # Libintl (not Intl) selects our FindLibintl.cmake script. #8464
+find_package(Libuv 1.28.0 REQUIRED)
 find_package(Libvterm 0.3.3 REQUIRED)
+find_package(Lpeg REQUIRED)
 find_package(Msgpack 1.0.0 REQUIRED)
 find_package(Treesitter 0.20.8 REQUIRED)
 find_package(Unibilium 2.0 REQUIRED)
 
 target_link_libraries(main_lib INTERFACE
   iconv
-  libtermkey
+  libintl
   libvterm
+  lpeg
   msgpack
   treesitter
-  unibilium
-  lpeg)
+  unibilium)
 target_link_libraries(nlua0 PUBLIC lpeg)
 
-# Libintl (not Intl) selects our FindLibintl.cmake script. #8464
-find_package(Libintl REQUIRED)
-target_include_directories(main_lib SYSTEM BEFORE INTERFACE ${LIBINTL_INCLUDE_DIR})
-if (LIBINTL_LIBRARY)
-  target_link_libraries(main_lib INTERFACE ${LIBINTL_LIBRARY})
-endif()
+target_compile_definitions(main_lib INTERFACE HAVE_UNIBILIUM)
 
 # The unit test lib requires LuaJIT; it will be skipped if LuaJIT is missing.
 option(PREFER_LUA "Prefer Lua over LuaJIT in the nvim executable." OFF)
@@ -163,7 +148,7 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
   # Actually export symbols - symbols may not be visible even though
   # ENABLE_EXPORTS is set to true. See
   # https://github.com/neovim/neovim/issues/25295
-  set_target_properties(nvim PROPERTIES LINK_FLAGS "-Wl,-export_dynamic")
+  target_link_options(nvim PRIVATE "-Wl,-export_dynamic")
 elseif(CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
   target_link_libraries(main_lib INTERFACE pthread c++abi)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
@@ -226,7 +211,9 @@ if(ENABLE_ASAN_UBSAN)
   target_compile_options(nvim PRIVATE -fsanitize=address)
   target_link_libraries(nvim PRIVATE -fsanitize=address -fsanitize=undefined)
   target_compile_definitions(nvim PRIVATE ENABLE_ASAN_UBSAN)
-elseif(ENABLE_MSAN)
+endif()
+
+if(ENABLE_MSAN)
   message(STATUS "Enabling memory sanitizer for nvim.")
   target_compile_options(nvim PRIVATE
     -fsanitize=memory
@@ -234,7 +221,9 @@ elseif(ENABLE_MSAN)
     -fno-omit-frame-pointer
     -fno-optimize-sibling-calls)
   target_link_libraries(nvim PRIVATE -fsanitize=memory -fsanitize-memory-track-origins)
-elseif(ENABLE_TSAN)
+endif()
+
+if(ENABLE_TSAN)
   message(STATUS "Enabling thread sanitizer for nvim.")
   target_compile_options(nvim PRIVATE -fsanitize=thread -fPIE)
   target_link_libraries(nvim PRIVATE -fsanitize=thread)
@@ -252,13 +241,10 @@ endif()
 
 option(ENABLE_IWYU "Run include-what-you-use with the compiler." OFF)
 if(ENABLE_IWYU)
-  find_program(IWYU_PRG NAMES include-what-you-use iwyu)
-  if(NOT IWYU_PRG)
-    message(FATAL_ERROR "ENABLE_IWYU is ON but include-what-you-use is not found!")
-  endif()
-
+  find_program(IWYU_PRG NAMES include-what-you-use iwyu REQUIRED)
   set(iwyu_flags "${IWYU_PRG};")
   string(APPEND iwyu_flags "-Xiwyu;--no_default_mappings;")
+  string(APPEND iwyu_flags "-Xiwyu;--no_fwd_decls;")
   string(APPEND iwyu_flags "-Xiwyu;--mapping_file=${PROJECT_SOURCE_DIR}/cmake.config/iwyu/mapping.imp")
 
   set_target_properties(nvim PROPERTIES C_INCLUDE_WHAT_YOU_USE "${iwyu_flags}")
@@ -267,26 +253,11 @@ endif()
 
 option(ENABLE_COMPILER_SUGGESTIONS "Enable -Wsuggest compiler warnings" OFF)
 if(ENABLE_COMPILER_SUGGESTIONS)
-  # Clang doesn't have -Wsuggest-attribute so check for each one.
-  check_c_compiler_flag(-Wsuggest-attribute=pure HAVE_WSUGGEST_ATTRIBUTE_PURE)
-  if(HAVE_WSUGGEST_ATTRIBUTE_PURE)
-    target_compile_options(main_lib INTERFACE -Wsuggest-attribute=pure)
-  endif()
-
-  check_c_compiler_flag(-Wsuggest-attribute=const HAVE_WSUGGEST_ATTRIBUTE_CONST)
-  if(HAVE_WSUGGEST_ATTRIBUTE_CONST)
-    target_compile_options(main_lib INTERFACE -Wsuggest-attribute=const)
-  endif()
-
-  check_c_compiler_flag(-Wsuggest-attribute=malloc HAVE_WSUGGEST_ATTRIBUTE_MALLOC)
-  if(HAVE_WSUGGEST_ATTRIBUTE_MALLOC)
-    target_compile_options(main_lib INTERFACE -Wsuggest-attribute=malloc)
-  endif()
-
-  check_c_compiler_flag(-Wsuggest-attribute=cold HAVE_WSUGGEST_ATTRIBUTE_COLD)
-  if(HAVE_WSUGGEST_ATTRIBUTE_COLD)
-    target_compile_options(main_lib INTERFACE -Wsuggest-attribute=cold)
-  endif()
+  target_compile_options(main_lib INTERFACE
+    -Wsuggest-attribute=cold
+    -Wsuggest-attribute=const
+    -Wsuggest-attribute=malloc
+    -Wsuggest-attribute=pure)
 endif()
 
 option(ENABLE_GCOV "Enable gcov support" OFF)
@@ -331,10 +302,13 @@ set(GENERATED_KEYSETS_DEFS ${GENERATED_DIR}/keysets_defs.generated.h)
 set(GENERATED_EVENTS_ENUM ${GENERATED_INCLUDES_DIR}/auevents_enum.generated.h)
 set(GENERATED_EVENTS_NAMES_MAP ${GENERATED_DIR}/auevents_name_map.generated.h)
 set(GENERATED_OPTIONS ${GENERATED_DIR}/options.generated.h)
+set(GENERATED_OPTIONS_ENUM ${GENERATED_DIR}/options_enum.generated.h)
+set(GENERATED_OPTIONS_MAP ${GENERATED_DIR}/options_map.generated.h)
 set(EX_CMDS_GENERATOR ${GENERATOR_DIR}/gen_ex_cmds.lua)
 set(FUNCS_GENERATOR ${GENERATOR_DIR}/gen_eval.lua)
 set(EVENTS_GENERATOR ${GENERATOR_DIR}/gen_events.lua)
 set(OPTIONS_GENERATOR ${GENERATOR_DIR}/gen_options.lua)
+set(OPTIONS_ENUM_GENERATOR ${GENERATOR_DIR}/gen_options_enum.lua)
 set(UNICODE_TABLES_GENERATOR ${GENERATOR_DIR}/gen_unicode_tables.lua)
 set(UNICODE_DIR ${PROJECT_SOURCE_DIR}/src/unicode)
 set(GENERATED_UNICODE_TABLES ${GENERATED_DIR}/unicode_tables.generated.h)
@@ -354,31 +328,31 @@ set(LUA_KEYMAP_MODULE_SOURCE ${NVIM_RUNTIME_DIR}/lua/vim/keymap.lua)
 set(CHAR_BLOB_GENERATOR ${GENERATOR_DIR}/gen_char_blob.lua)
 set(LUAJIT_RUNTIME_DIR ${DEPS_PREFIX}/share/luajit-2.1/jit)
 
-glob_wrapper(UNICODE_FILES ${UNICODE_DIR}/*.txt)
-glob_wrapper(API_HEADERS api/*.h)
+file(GLOB UNICODE_FILES CONFIGURE_DEPENDS ${UNICODE_DIR}/*.txt)
+file(GLOB API_HEADERS CONFIGURE_DEPENDS api/*.h)
 list(REMOVE_ITEM API_HEADERS ${CMAKE_CURRENT_LIST_DIR}/api/ui_events.in.h)
-glob_wrapper(MSGPACK_RPC_HEADERS msgpack_rpc/*.h)
+file(GLOB MSGPACK_RPC_HEADERS CONFIGURE_DEPENDS msgpack_rpc/*.h)
 
-target_include_directories(main_lib INTERFACE ${GENERATED_DIR})
-target_include_directories(main_lib INTERFACE ${CACHED_GENERATED_DIR})
-target_include_directories(main_lib INTERFACE ${GENERATED_INCLUDES_DIR})
-target_include_directories(main_lib INTERFACE "${PROJECT_BINARY_DIR}/cmake.config")
-target_include_directories(main_lib INTERFACE "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(main_lib INTERFACE
+  ${GENERATED_DIR}
+  ${CACHED_GENERATED_DIR}
+  ${GENERATED_INCLUDES_DIR}
+  "${PROJECT_BINARY_DIR}/cmake.config"
+  "${PROJECT_SOURCE_DIR}/src")
 
-target_include_directories(nlua0 PUBLIC "${PROJECT_SOURCE_DIR}/src")
-target_include_directories(nlua0 PUBLIC "${PROJECT_BINARY_DIR}/cmake.config")
-target_include_directories(nlua0 PUBLIC ${GENERATED_INCLUDES_DIR})
+target_include_directories(nlua0 PUBLIC
+  "${PROJECT_SOURCE_DIR}/src"
+  "${PROJECT_BINARY_DIR}/cmake.config"
+  ${GENERATED_INCLUDES_DIR})
 
-file(MAKE_DIRECTORY ${TOUCHES_DIR})
-file(MAKE_DIRECTORY ${GENERATED_DIR})
-file(MAKE_DIRECTORY ${GENERATED_INCLUDES_DIR})
+file(MAKE_DIRECTORY ${TOUCHES_DIR} ${GENERATED_DIR} ${GENERATED_INCLUDES_DIR})
 
-glob_wrapper(NVIM_SOURCES *.c)
-glob_wrapper(NVIM_HEADERS *.h)
-glob_wrapper(EXTERNAL_SOURCES ../xdiff/*.c ../mpack/*.c ../cjson/*.c ../klib/*.c)
-glob_wrapper(EXTERNAL_HEADERS ../xdiff/*.h ../mpack/*.h ../cjson/*.h ../klib/*.h)
+file(GLOB NVIM_SOURCES CONFIGURE_DEPENDS *.c)
+file(GLOB NVIM_HEADERS CONFIGURE_DEPENDS *.h)
+file(GLOB EXTERNAL_SOURCES CONFIGURE_DEPENDS ../xdiff/*.c ../mpack/*.c ../cjson/*.c ../klib/*.c ../termkey/*.c)
+file(GLOB EXTERNAL_HEADERS CONFIGURE_DEPENDS ../xdiff/*.h ../mpack/*.h ../cjson/*.h ../klib/*.h ../termkey/*.h)
 
-glob_wrapper(NLUA0_SOURCES ../mpack/*.c)
+file(GLOB NLUA0_SOURCES CONFIGURE_DEPENDS ../mpack/*.c)
 
 if(PREFER_LUA)
   # luajit not used, use a vendored copy of the bit module
@@ -404,8 +378,8 @@ foreach(subdir
 
   file(MAKE_DIRECTORY ${GENERATED_DIR}/${subdir})
   file(MAKE_DIRECTORY ${GENERATED_INCLUDES_DIR}/${subdir})
-  glob_wrapper(sources ${subdir}/*.c)
-  glob_wrapper(headers ${subdir}/*.h)
+  file(GLOB sources CONFIGURE_DEPENDS ${subdir}/*.c)
+  file(GLOB headers CONFIGURE_DEPENDS ${subdir}/*.h)
   list(APPEND NVIM_SOURCES ${sources})
   list(APPEND NVIM_HEADERS ${headers})
 endforeach()
@@ -435,13 +409,13 @@ endforeach()
 
 list(REMOVE_ITEM NVIM_SOURCES ${to_remove})
 
-# xdiff, mpack, lua-cjson: inlined external project, we don't maintain it. #9306
+# xdiff, mpack, lua-cjson, termkey: inlined external project, we don't maintain it. #9306
 if(MSVC)
   set_source_files_properties(
-    ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -wd4090 -wd4244 -wd4267")
+    ${EXTERNAL_SOURCES} PROPERTIES COMPILE_OPTIONS "-wd4090;-wd4244;-wd4267")
 else()
   set_source_files_properties(
-    ${EXTERNAL_SOURCES} PROPERTIES COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-conversion -Wno-missing-noreturn -Wno-missing-format-attribute -Wno-double-promotion -Wno-strict-prototypes -Wno-misleading-indentation")
+    ${EXTERNAL_SOURCES} PROPERTIES COMPILE_OPTIONS "-Wno-conversion;-Wno-missing-noreturn;-Wno-missing-format-attribute;-Wno-double-promotion;-Wno-strict-prototypes;-Wno-misleading-indentation;-Wno-sign-compare;-Wno-implicit-fallthrough;-Wno-missing-prototypes;-Wno-missing-field-initializers")
 endif()
 
 # Log level (NVIM_LOG_DEBUG in log.h)
@@ -462,7 +436,7 @@ endif()
 #-------------------------------------------------------------------------------
 
 get_target_property(prop main_lib INTERFACE_COMPILE_DEFINITIONS)
-foreach(gen_cdef DO_NOT_DEFINE_EMPTY_ATTRIBUTES ${prop})
+foreach(gen_cdef ${prop})
   if(NOT ${gen_cdef} MATCHES "INCLUDE_GENERATED_DECLARATIONS")
     list(APPEND gen_cflags "-D${gen_cdef}")
   endif()
@@ -643,6 +617,7 @@ list(APPEND NVIM_GENERATED_FOR_HEADERS
   "${GENERATED_EX_CMDS_ENUM}"
   "${GENERATED_EVENTS_ENUM}"
   "${GENERATED_KEYSETS_DEFS}"
+  "${GENERATED_OPTIONS_ENUM}"
 )
 
 list(APPEND NVIM_GENERATED_FOR_SOURCES
@@ -650,6 +625,7 @@ list(APPEND NVIM_GENERATED_FOR_SOURCES
   "${GENERATED_EX_CMDS_DEFS}"
   "${GENERATED_EVENTS_NAMES_MAP}"
   "${GENERATED_OPTIONS}"
+  "${GENERATED_OPTIONS_MAP}"
   "${GENERATED_UNICODE_TABLES}"
   "${VIM_MODULE_FILE}"
 )
@@ -680,6 +656,11 @@ add_custom_command(OUTPUT ${GENERATED_OPTIONS}
   DEPENDS ${LUA_GEN_DEPS} ${OPTIONS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/options.lua
 )
 
+add_custom_command(OUTPUT ${GENERATED_OPTIONS_ENUM} ${GENERATED_OPTIONS_MAP}
+  COMMAND ${LUA_GEN} ${OPTIONS_ENUM_GENERATOR} ${GENERATED_OPTIONS_ENUM} ${GENERATED_OPTIONS_MAP}
+  DEPENDS ${LUA_GEN_DEPS} ${OPTIONS_ENUM_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/options.lua
+)
+
 # NVIM_GENERATED_FOR_SOURCES and NVIM_GENERATED_FOR_HEADERS must be mutually exclusive.
 foreach(hfile ${NVIM_GENERATED_FOR_HEADERS})
   list(FIND NVIM_GENERATED_FOR_SOURCES ${hfile} hfile_idx)
@@ -691,7 +672,7 @@ endforeach()
 if(PREFER_LUA)
   message(STATUS "luajit not used, skipping unit tests")
 else()
-  glob_wrapper(UNIT_TEST_FIXTURES ${PROJECT_SOURCE_DIR}/test/unit/fixtures/*.c)
+  file(GLOB UNIT_TEST_FIXTURES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/test/unit/fixtures/*.c)
   target_sources(nvim PRIVATE ${UNIT_TEST_FIXTURES})
   target_compile_definitions(nvim PRIVATE UNIT_TESTING)
 endif()
@@ -770,7 +751,7 @@ file(MAKE_DIRECTORY ${BINARY_LIB_DIR})
 
 # install treesitter parser if bundled
 if(EXISTS ${DEPS_PREFIX}/lib/nvim/parser)
-  glob_wrapper(TREESITTER_PARSERS ${DEPS_PREFIX}/lib/nvim/parser/*)
+  file(GLOB TREESITTER_PARSERS CONFIGURE_DEPENDS ${DEPS_PREFIX}/lib/nvim/parser/*)
   foreach(parser_lib ${TREESITTER_PARSERS})
     file(COPY ${parser_lib} DESTINATION ${BINARY_LIB_DIR}/parser)
   endforeach()
@@ -878,12 +859,11 @@ add_glob_target(
   FLAGS -c ${UNCRUSTIFY_CONFIG} -q --check
   FILES ${LINT_NVIM_SOURCES})
 
-add_custom_target(formatc
-  COMMAND ${CMAKE_COMMAND}
-    -D FORMAT_PRG=${UNCRUSTIFY_PRG}
-    -D LANG=c
-    -P ${PROJECT_SOURCE_DIR}/cmake/Format.cmake
-  WORKING_DIRECTORY ${PROJECT_SOURCE_DIR})
+add_glob_target(
+  TARGET formatc
+  COMMAND ${UNCRUSTIFY_PRG}
+  FLAGS -c ${UNCRUSTIFY_CONFIG} --replace --no-backup
+  FILES ${LINT_NVIM_SOURCES})
 
 add_dependencies(lintc-uncrustify uncrustify_update_config)
 add_dependencies(formatc uncrustify_update_config)
@@ -892,6 +872,10 @@ add_dependencies(uncrustify_update_config uncrustify)
 add_custom_target(lintc)
 add_dependencies(lintc lintc-clint lintc-uncrustify lintc-clang-tidy)
 
+#-------------------------------------------------------------------------------
+# Docs
+#-------------------------------------------------------------------------------
+
 add_custom_target(generated-sources DEPENDS
   ${NVIM_GENERATED_FOR_SOURCES}
   ${NVIM_GENERATED_FOR_HEADERS}
@@ -899,10 +883,6 @@ add_custom_target(generated-sources DEPENDS
 )
 
 add_subdirectory(po)
-
-#-------------------------------------------------------------------------------
-# Docs
-#-------------------------------------------------------------------------------
 
 set(VIMDOC_FILES
   ${NVIM_RUNTIME_DIR}/doc/api.mpack
@@ -917,9 +897,9 @@ set(VIMDOC_FILES
   ${NVIM_RUNTIME_DIR}/doc/treesitter.txt
 )
 
-glob_wrapper(API_SOURCES ${PROJECT_SOURCE_DIR}/src/nvim/api/*.c)
+file(GLOB API_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/src/nvim/api/*.c)
 
-glob_wrapper(LUA_SOURCES
+file(GLOB LUA_SOURCES CONFIGURE_DEPENDS
   ${NVIM_RUNTIME_DIR}/lua/vim/*.lua
   ${NVIM_RUNTIME_DIR}/lua/vim/filetype/*.lua
   ${NVIM_RUNTIME_DIR}/lua/vim/lsp/*.lua

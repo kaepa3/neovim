@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-typedef struct file_buffer buf_T;  // Forward declaration
+typedef struct file_buffer buf_T;
 
 /// Reference to a buffer that stores the value of buf_free_count.
 /// bufref_valid() only needs to check "buf" when the count differs.
@@ -19,16 +19,16 @@ typedef struct {
 #include "nvim/arglist_defs.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/extmark_defs.h"
-#include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 #include "nvim/grid_defs.h"
-#include "nvim/hashtab.h"
+#include "nvim/hashtab_defs.h"
 #include "nvim/highlight_defs.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mapping_defs.h"
 #include "nvim/mark_defs.h"
-#include "nvim/marktree.h"
+#include "nvim/marktree_defs.h"
 #include "nvim/option_vars.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/statusline_defs.h"
 #include "nvim/undo_defs.h"
 
@@ -356,8 +356,6 @@ typedef struct {
 } BufUpdateCallbacks;
 #define BUF_UPDATE_CALLBACKS_INIT { LUA_NOREF, LUA_NOREF, LUA_NOREF, \
                                     LUA_NOREF, LUA_NOREF, false, false }
-
-EXTERN int curbuf_splice_pending INIT( = 0);
 
 #define BUF_HAS_QF_ENTRY 1
 #define BUF_HAS_LL_ENTRY 2
@@ -705,10 +703,10 @@ struct file_buffer {
                                 // may use a different synblock_T.
 
   struct {
-    int size;                   // last calculated number of sign columns
-    bool valid;                 // calculated sign columns is valid
-    linenr_T sentinel;          // a line number which is holding up the signcolumn
-    int max;                    // Maximum value size is valid for.
+    int max;                         // maximum number of signs on a single line
+    int max_count;                   // number of lines with max number of signs
+    bool resized;                    // whether max changed at start of redraw
+    Map(int, SignRange) invalid[1];  // map of invalid ranges to be checked
   } b_signcols;
 
   Terminal *terminal;           // Terminal instance associated with the buffer
@@ -903,21 +901,13 @@ enum {
   kFloatAnchorSouth = 2,
 };
 
-// NW -> 0
-// NE -> kFloatAnchorEast
-// SW -> kFloatAnchorSouth
-// SE -> kFloatAnchorSouth | kFloatAnchorEast
-EXTERN const char *const float_anchor_str[] INIT( = { "NW", "NE", "SW", "SE" });
-
+/// Keep in sync with float_relative_str[] in nvim_win_get_config()
 typedef enum {
   kFloatRelativeEditor = 0,
   kFloatRelativeWindow = 1,
   kFloatRelativeCursor = 2,
   kFloatRelativeMouse = 3,
 } FloatRelative;
-
-EXTERN const char *const float_relative_str[] INIT( = { "editor", "win",
-                                                        "cursor", "mouse" });
 
 typedef enum {
   kWinStyleUnused = 0,
@@ -1296,7 +1286,8 @@ struct window_S {
   ScreenGrid w_grid;                    // the grid specific to the window
   ScreenGrid w_grid_alloc;              // the grid specific to the window
   bool w_pos_changed;                   // true if window position changed
-  bool w_floating;                       ///< whether the window is floating
+  bool w_floating;                      ///< whether the window is floating
+  bool w_float_is_info;                 // the floating window is info float
   FloatConfig w_float_config;
 
   // w_fraction is the fractional row of the cursor within the window, from

@@ -61,7 +61,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
@@ -80,7 +80,7 @@
 #include "nvim/highlight_defs.h"
 #include "nvim/insexpand.h"
 #include "nvim/log.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
@@ -90,9 +90,8 @@
 #include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
-#include "nvim/os/os_defs.h"
 #include "nvim/path.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
@@ -102,9 +101,9 @@
 #include "nvim/spellsuggest.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 // Result values.  Lower number is accepted over higher one.
@@ -3219,14 +3218,14 @@ void ex_spelldump(exarg_T *eap)
   if (no_spell_checking(curwin)) {
     return;
   }
-  OptVal spl = get_option_value("spl", NULL, OPT_LOCAL, NULL);
+  OptVal spl = get_option_value(kOptSpelllang, OPT_LOCAL);
 
   // Create a new empty buffer in a new window.
   do_cmdline_cmd("new");
 
   // enable spelling locally in the new window
-  set_option_value_give_err("spell", BOOLEAN_OPTVAL(true), OPT_LOCAL);
-  set_option_value_give_err("spl", spl, OPT_LOCAL);
+  set_option_value_give_err(kOptSpell, BOOLEAN_OPTVAL(true), OPT_LOCAL);
+  set_option_value_give_err(kOptSpelllang, spl, OPT_LOCAL);
   optval_free(spl);
 
   if (!buf_is_empty(curbuf)) {

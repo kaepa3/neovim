@@ -17,12 +17,13 @@
 #include <uv.h>
 
 #include "auto/config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/eval.h"
 #include "nvim/globals.h"
 #include "nvim/log.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/os.h"
 #include "nvim/os/stdpaths_defs.h"
 #include "nvim/os/time.h"
@@ -294,7 +295,7 @@ static bool v_do_log_to_file(FILE *log_file, int log_level, const char *context,
   FUNC_ATTR_PRINTF(7, 0)
 {
   // Name of the Nvim instance that produced the log.
-  static char name[16] = { 0 };
+  static char name[32] = { 0 };
 
   static const char *log_levels[] = {
     [LOGLVL_DBG] = "DBG",

@@ -93,7 +93,7 @@ Example:
                      ┆                 ┆                 ┆
                      ┆      Soft       ┆      Hard       ┆
                      ┆   Deprecation   ┆   Deprecation   ┆
-                     ┆     Period      ┆     Preiod      ┆
+                     ┆     Period      ┆     Period      ┆
          ────────────────────────────────────────────────────────────
 Version:            0.10              0.11              0.12
          ────────────────────────────────────────────────────────────
@@ -113,7 +113,12 @@ should be stated explicitly and publicly.
 Third-party dependencies
 ------------------------
 
-These "bundled" dependencies can be updated by bumping their versions in `cmake.deps/CMakeLists.txt`.
+For some dependencies we maintain temporary "forks", which are simply private
+branches with a few extra patches, while we wait for the upstream project to
+merge the patches. This is done instead of maintaining the patches as (fragile)
+CMake `PATCH_COMMAND` steps.
+
+These "bundled" dependencies can be updated by bumping their versions in `cmake.deps/deps.txt`.
 Some can be auto-bumped by `scripts/bump_deps.lua`.
 
 * [LuaJIT](https://github.com/LuaJIT/LuaJIT)
@@ -122,12 +127,13 @@ Some can be auto-bumped by `scripts/bump_deps.lua`.
     * When bumping, also sync [our bundled documentation](https://github.com/neovim/neovim/blob/master/runtime/doc/luvref.txt) with [the upstream documentation](https://github.com/luvit/luv/blob/master/docs.md).
 * [gettext](https://ftp.gnu.org/pub/gnu/gettext/)
 * [libiconv](https://ftp.gnu.org/pub/gnu/libiconv)
-* [libtermkey](https://github.com/neovim/libtermkey)
 * [libuv](https://github.com/libuv/libuv)
 * [libvterm](http://www.leonerd.org.uk/code/libvterm/)
+  * Downloading from the original source is unreliable, so we use our [mirror](https://github.com/neovim/libvterm) instead.
 * [lua-compat](https://github.com/keplerproject/lua-compat-5.3)
 * [tree-sitter](https://github.com/tree-sitter/tree-sitter)
 * [unibilium](https://github.com/neovim/unibilium)
+  * The original project [was abandoned](https://github.com/neovim/neovim/issues/10302), so the [neovim/unibilium](https://github.com/neovim/unibilium) fork is considered "upstream" and is maintained on the `master` branch.
 * [treesitter parsers](https://github.com/neovim/neovim/blob/7e97c773e3ba78fcddbb2a0b9b0d572c8210c83e/cmake.deps/deps.txt#L47-L62)
 
 ### Vendored dependencies
@@ -150,10 +156,7 @@ These dependencies are "vendored" (inlined), we must update the sources manually
     * Vendored from LPeg. Needs to be updated when LPeg is updated.
 * `src/bit.c`: only for PUC lua: port of `require'bit'` from luajit https://bitop.luajit.org/
 * `runtime/lua/coxpcall.lua`: coxpcall (only needed for PUC lua, builtin to luajit)
-
-### Forks
-
-We may maintain forks, if we are waiting on upstream changes: https://github.com/neovim/neovim/wiki/Deps
+* `src/termkey`: [libtermkey](https://github.com/neovim/libtermkey)
 
 Non-technical dependencies
 --------------------------
@@ -167,6 +170,22 @@ Non-technical dependencies
     * packspec.org
     * pkgjson.org
 * DNS for the above domains is managed in https://cloudflare.com (not the domain registrar)
+
+
+Refactoring
+-----------
+
+### Frozen legacy modules
+
+Refactoring Vim structurally and aesthetically is an important goal of Neovim.
+But there are some modules that should not be changed significantly, because
+they are maintained Vim, at present. Until someone takes "ownership" of these
+modules, the cost of any significant changes (including style or structural
+changes that re-arrange the code) to these modules outweighs the benefit. The
+modules are:
+
+- `regexp.c`
+- `indent_c.c`
 
 Automation (CI)
 ---------------

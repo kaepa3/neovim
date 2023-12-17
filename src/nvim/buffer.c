@@ -29,8 +29,8 @@
 #include "klib/kvec.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/arglist.h"
-#include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_updates.h"
@@ -65,7 +65,7 @@
 #include "nvim/indent.h"
 #include "nvim/indent_c.h"
 #include "nvim/main.h"
-#include "nvim/map.h"
+#include "nvim/map_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -78,29 +78,29 @@
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/time.h"
 #include "nvim/path.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/quickfix.h"
 #include "nvim/regexp.h"
 #include "nvim/runtime.h"
 #include "nvim/search.h"
-#include "nvim/sign.h"
 #include "nvim/spell.h"
+#include "nvim/state_defs.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/usercmd.h"
 #include "nvim/version.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 #include "nvim/winfloat.h"
 
@@ -750,6 +750,8 @@ void buf_clear(void)
 {
   linenr_T line_count = curbuf->b_ml.ml_line_count;
   extmark_free_all(curbuf);   // delete any extmarks
+  map_destroy(int, curbuf->b_signcols.invalid);
+  *curbuf->b_signcols.invalid = (Map(int, SignRange)) MAP_INIT;
   while (!(curbuf->b_ml.ml_flags & ML_EMPTY)) {
     ml_delete(1, false);
   }
@@ -920,6 +922,8 @@ static void free_buffer_stuff(buf_T *buf, int free_flags)
   }
   uc_clear(&buf->b_ucmds);               // clear local user commands
   extmark_free_all(buf);                 // delete any extmarks
+  map_destroy(int, buf->b_signcols.invalid);
+  *buf->b_signcols.invalid = (Map(int, SignRange)) MAP_INIT;
   map_clear_mode(buf, MAP_ALL_MODES, true, false);  // clear local mappings
   map_clear_mode(buf, MAP_ALL_MODES, true, true);   // clear local abbrevs
   XFREE_CLEAR(buf->b_start_fenc);
@@ -1844,7 +1848,6 @@ buf_T *buflist_new(char *ffname_arg, char *sfname_arg, linenr_T lnum, int flags)
     buf = xcalloc(1, sizeof(buf_T));
     // init b: variables
     buf->b_vars = tv_dict_alloc();
-    buf->b_signcols.valid = false;
     init_var_dict(buf->b_vars, &buf->b_bufvar, VAR_SCOPE);
     buf_init_changedtick(buf);
   }
@@ -3278,7 +3281,7 @@ void maketitle(void)
     if (*p_titlestring != NUL) {
       if (stl_syntax & STL_IN_TITLE) {
         build_stl_str_hl(curwin, buf, sizeof(buf), p_titlestring,
-                         "titlestring", 0, 0, maxlen, NULL, NULL, NULL);
+                         kOptTitlestring, 0, 0, maxlen, NULL, NULL, NULL);
         title_str = buf;
       } else {
         title_str = p_titlestring;
@@ -3383,7 +3386,7 @@ void maketitle(void)
     if (*p_iconstring != NUL) {
       if (stl_syntax & STL_IN_ICON) {
         build_stl_str_hl(curwin, icon_str, sizeof(buf), p_iconstring,
-                         "iconstring", 0, 0, 0, NULL, NULL, NULL);
+                         kOptIconstring, 0, 0, 0, NULL, NULL, NULL);
       } else {
         icon_str = p_iconstring;
       }
@@ -4026,90 +4029,6 @@ char *buf_spname(buf_T *buf)
   return NULL;
 }
 
-/// Invalidate the signcolumn if needed after deleting
-/// signs between line1 and line2 (inclusive).
-///
-/// @param buf   buffer to check
-/// @param line1 start of region being deleted
-/// @param line2 end of region being deleted
-void buf_signcols_del_check(buf_T *buf, linenr_T line1, linenr_T line2)
-{
-  if (!buf->b_signcols.valid) {
-    return;
-  }
-
-  if (!buf->b_signcols.sentinel) {
-    buf->b_signcols.valid = false;
-    return;
-  }
-
-  linenr_T sent = buf->b_signcols.sentinel;
-
-  if (sent >= line1 && sent <= line2) {
-    // Only invalidate when removing signs at the sentinel line.
-    buf->b_signcols.valid = false;
-  }
-}
-
-/// Re-calculate the signcolumn after adding a sign.
-///
-/// @param buf   buffer to check
-/// @param added sign being added
-void buf_signcols_add_check(buf_T *buf, linenr_T lnum)
-{
-  if (!buf->b_signcols.valid) {
-    return;
-  }
-
-  if (!buf->b_signcols.sentinel) {
-    buf->b_signcols.valid = false;
-    return;
-  }
-
-  if (lnum == buf->b_signcols.sentinel) {
-    if (buf->b_signcols.size == buf->b_signcols.max) {
-      buf->b_signcols.max++;
-    }
-    buf->b_signcols.size++;
-    redraw_buf_later(buf, UPD_NOT_VALID);
-    return;
-  }
-
-  int signcols = decor_signcols(buf, lnum - 1, lnum - 1, SIGN_SHOW_MAX);
-
-  if (signcols > buf->b_signcols.size) {
-    buf->b_signcols.size = signcols;
-    buf->b_signcols.max = signcols;
-    buf->b_signcols.sentinel = lnum;
-    redraw_buf_later(buf, UPD_NOT_VALID);
-  }
-}
-
-int buf_signcols(buf_T *buf, int max)
-{
-  // The maximum can be determined from 'signcolumn' which is window scoped so
-  // need to invalidate signcols if the maximum is greater than the previous
-  // (valid) maximum.
-  if (buf->b_signcols.max && max > buf->b_signcols.max) {
-    buf->b_signcols.valid = false;
-  }
-
-  if (!buf->b_signcols.valid) {
-    buf->b_signcols.sentinel = 0;
-    int signcols = decor_signcols(buf, 0, (int)buf->b_ml.ml_line_count - 1, max);
-    // Check if we need to redraw
-    if (signcols != buf->b_signcols.size) {
-      buf->b_signcols.size = signcols;
-      redraw_buf_later(buf, UPD_NOT_VALID);
-    }
-
-    buf->b_signcols.max = max;
-    buf->b_signcols.valid = true;
-  }
-
-  return buf->b_signcols.size;
-}
-
 /// Get "buf->b_fname", use "[No Name]" if it is NULL.
 char *buf_get_fname(const buf_T *buf)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_NONNULL_ALL
@@ -4228,9 +4147,9 @@ int buf_open_scratch(handle_T bufnr, char *bufname)
   apply_autocmds(EVENT_BUFFILEPRE, NULL, NULL, false, curbuf);
   (void)setfname(curbuf, bufname, NULL, true);
   apply_autocmds(EVENT_BUFFILEPOST, NULL, NULL, false, curbuf);
-  set_option_value_give_err("bh", STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL);
-  set_option_value_give_err("bt", STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL);
-  set_option_value_give_err("swf", BOOLEAN_OPTVAL(false), OPT_LOCAL);
+  set_option_value_give_err(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL);
+  set_option_value_give_err(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL);
+  set_option_value_give_err(kOptSwapfile, BOOLEAN_OPTVAL(false), OPT_LOCAL);
   RESET_BINDING(curwin);
   return OK;
 }

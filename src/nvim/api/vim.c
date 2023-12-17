@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <inttypes.h>
+#include <lauxlib.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -8,17 +9,16 @@
 #include <string.h>
 
 #include "klib/kvec.h"
-#include "lauxlib.h"
 #include "nvim/api/buffer.h"
 #include "nvim/api/deprecated.h"
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/private/validate.h"
 #include "nvim/api/vim.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/channel.h"
@@ -39,7 +39,7 @@
 #include "nvim/keycodes.h"
 #include "nvim/log.h"
 #include "nvim/lua/executor.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mapping.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
@@ -48,26 +48,24 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
-#include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/unpacker.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
-#include "nvim/os/os_defs.h"
 #include "nvim/os/process.h"
 #include "nvim/popupmenu.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/sign.h"
 #include "nvim/state.h"
 #include "nvim/statusline.h"
 #include "nvim/strings.h"
 #include "nvim/terminal.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 #define LINE_BUFFER_MIN_SIZE 4096
@@ -950,8 +948,8 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
   buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
 
   if (scratch) {
-    set_string_option_direct_in_buf(buf, "bufhidden", -1, "hide", OPT_LOCAL, 0);
-    set_string_option_direct_in_buf(buf, "buftype", -1, "nofile", OPT_LOCAL, 0);
+    set_string_option_direct_in_buf(buf, kOptBufhidden, "hide", OPT_LOCAL, 0);
+    set_string_option_direct_in_buf(buf, kOptBuftype, "nofile", OPT_LOCAL, 0);
     assert(buf->b_ml.ml_mfp->mf_fd < 0);  // ml_open() should not have opened swapfile already
     buf->b_p_swf = false;
     buf->b_p_ml = false;
@@ -987,9 +985,10 @@ fail:
 ///            as a "\r", not as a "\n". |textlock| applies. It is possible
 ///            to call |nvim_chan_send()| directly in the callback however.
 ///                 ["input", term, bufnr, data]
+///          - force_crlf: (boolean, default true) Convert "\n" to "\r\n".
 /// @param[out] err Error details, if any
 /// @return Channel id, or 0 on error
-Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
+Integer nvim_open_term(Buffer buffer, Dict(open_term) *opts, Error *err)
   FUNC_API_SINCE(7)
   FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
@@ -1004,33 +1003,25 @@ Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   }
 
   LuaRef cb = LUA_NOREF;
-  for (size_t i = 0; i < opts.size; i++) {
-    String k = opts.items[i].key;
-    Object *v = &opts.items[i].value;
-    if (strequal("on_input", k.data)) {
-      VALIDATE_T("on_input", kObjectTypeLuaRef, v->type, {
-        return 0;
-      });
-      cb = v->data.luaref;
-      v->data.luaref = LUA_NOREF;
-      break;
-    } else {
-      VALIDATE_S(false, "'opts' key", k.data, {});
-    }
+  if (HAS_KEY(opts, open_term, on_input)) {
+    cb = opts->on_input;
+    opts->on_input = LUA_NOREF;
   }
 
-  TerminalOptions topts;
   Channel *chan = channel_alloc(kChannelStreamInternal);
   chan->stream.internal.cb = cb;
   chan->stream.internal.closed = false;
-  topts.data = chan;
-  // NB: overridden in terminal_check_size if a window is already
-  // displaying the buffer
-  topts.width = (uint16_t)MAX(curwin->w_width_inner - win_col_off(curwin), 0);
-  topts.height = (uint16_t)curwin->w_height_inner;
-  topts.write_cb = term_write;
-  topts.resize_cb = term_resize;
-  topts.close_cb = term_close;
+  TerminalOptions topts = {
+    .data = chan,
+    // NB: overridden in terminal_check_size if a window is already
+    // displaying the buffer
+    .width = (uint16_t)MAX(curwin->w_width_inner - win_col_off(curwin), 0),
+    .height = (uint16_t)curwin->w_height_inner,
+    .write_cb = term_write,
+    .resize_cb = term_resize,
+    .close_cb = term_close,
+    .force_crlf = GET_BOOL_OR_TRUE(opts, open_term, force_crlf),
+  };
   channel_incref(chan);
   terminal_open(&chan->term, buf, topts);
   if (chan->term != NULL) {
@@ -1040,7 +1031,7 @@ Integer nvim_open_term(Buffer buffer, DictionaryOf(LuaRef) opts, Error *err)
   return (Integer)chan->id;
 }
 
-static void term_write(char *buf, size_t size, void *data)  // NOLINT(readability-non-const-parameter)
+static void term_write(const char *buf, size_t size, void *data)
 {
   Channel *chan = data;
   LuaRef cb = chan->stream.internal.cb;
@@ -1050,7 +1041,7 @@ static void term_write(char *buf, size_t size, void *data)  // NOLINT(readabilit
   MAXSIZE_TEMP_ARRAY(args, 3);
   ADD_C(args, INTEGER_OBJ((Integer)chan->id));
   ADD_C(args, BUFFER_OBJ(terminal_buf(chan->term)));
-  ADD_C(args, STRING_OBJ(((String){ .data = buf, .size = size })));
+  ADD_C(args, STRING_OBJ(((String){ .data = (char *)buf, .size = size })));
   textlock++;
   nlua_call_ref(cb, "input", args, false, NULL);
   textlock--;
@@ -1942,14 +1933,10 @@ Object nvim_get_proc(Integer pid, Error *err)
 /// @param finish  Finish the completion and dismiss the popup menu. Implies {insert}.
 /// @param opts    Optional parameters. Reserved for future use.
 /// @param[out] err Error details, if any
-void nvim_select_popupmenu_item(Integer item, Boolean insert, Boolean finish, Dictionary opts,
+void nvim_select_popupmenu_item(Integer item, Boolean insert, Boolean finish, Dict(empty) *opts,
                                 Error *err)
   FUNC_API_SINCE(6)
 {
-  VALIDATE((opts.size == 0), "%s", "opts dict isn't empty", {
-    return;
-  });
-
   if (finish) {
     insert = true;
   }
@@ -1999,9 +1986,12 @@ void nvim__screenshot(String path)
   ui_call_screenshot(path);
 }
 
+/// For testing. The condition in schar_cache_clear_if_full is hard to
+/// reach, so this function can be used to force a cache clear in a test.
 void nvim__invalidate_glyph_cache(void)
 {
-  schar_cache_clear_force();
+  schar_cache_clear();
+  must_redraw = UPD_CLEAR;
 }
 
 Object nvim__unpack(String str, Error *err)
@@ -2047,7 +2037,7 @@ Boolean nvim_del_mark(String name, Error *err)
 /// not set.
 /// @see |nvim_buf_set_mark()|
 /// @see |nvim_del_mark()|
-Array nvim_get_mark(String name, Dictionary opts, Error *err)
+Array nvim_get_mark(String name, Dict(empty) *opts, Error *err)
   FUNC_API_SINCE(8)
 {
   Array rv = ARRAY_DICT_INIT;
@@ -2200,7 +2190,6 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
       int cul_id = 0;
       int num_id = 0;
       linenr_T lnum = statuscol_lnum;
-      wp->w_scwidth = win_signcol_count(wp);
       decor_redraw_signs(wp, wp->w_buffer, lnum - 1, sattrs, &line_id, &cul_id, &num_id);
 
       statuscol.sattrs = sattrs;
@@ -2251,7 +2240,7 @@ Dictionary nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Error *
                                buf,
                                sizeof(buf),
                                str.data,
-                               NULL,
+                               -1,
                                0,
                                fillchar,
                                maxwidth,
@@ -2310,4 +2299,30 @@ void nvim_error_event(uint64_t channel_id, Integer lvl, String data)
   // TODO(bfredl): consider printing message to user, as will be relevant
   // if we fork nvim processes as async workers
   ELOG("async error on channel %" PRId64 ": %s", channel_id, data.size ? data.data : "");
+}
+
+/// Set info for the completion candidate index.
+/// if the info was shown in a window, then the
+/// window and buffer ids are returned for further
+/// customization. If the text was not shown, an
+/// empty dict is returned.
+///
+/// @param index  the completion candidate index
+/// @param opts   Optional parameters.
+///       - info: (string) info text.
+/// @return Dictionary containing these keys:
+///       - winid: (number) floating window id
+///       - bufnr: (number) buffer id in floating window
+Dictionary nvim_complete_set(Integer index, Dict(complete_set) *opts)
+  FUNC_API_SINCE(12)
+{
+  Dictionary rv = ARRAY_DICT_INIT;
+  if (HAS_KEY(opts, complete_set, info)) {
+    win_T *wp = pum_set_info((int)index, opts->info.data);
+    if (wp) {
+      PUT(rv, "winid", WINDOW_OBJ(wp->handle));
+      PUT(rv, "bufnr", BUFFER_OBJ(wp->w_buffer->handle));
+    }
+  }
+  return rv;
 }

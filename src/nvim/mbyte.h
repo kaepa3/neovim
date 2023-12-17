@@ -4,13 +4,12 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "nvim/cmdexpand_defs.h"
-#include "nvim/eval/typval_defs.h"
+#include "nvim/cmdexpand_defs.h"  // IWYU pragma: keep
+#include "nvim/eval/typval_defs.h"  // IWYU pragma: keep
 #include "nvim/func_attr.h"
-#include "nvim/grid_defs.h"
-#include "nvim/mbyte_defs.h"
-#include "nvim/os/os_defs.h"
-#include "nvim/types.h"
+#include "nvim/mbyte_defs.h"  // IWYU pragma: export
+#include "nvim/os/os_defs.h"  // IWYU pragma: export
+#include "nvim/types_defs.h"  // IWYU pragma: keep
 
 // Return byte length of character that starts with byte "b".
 // Returns 1 for a single-byte character.

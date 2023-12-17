@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "nvim/ascii.h"
-#include "nvim/assert.h"
+#include "nvim/ascii_defs.h"
+#include "nvim/assert_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/change.h"
 #include "nvim/charset.h"
@@ -32,14 +32,15 @@
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
 #include "nvim/plines.h"
-#include "nvim/pos.h"
+#include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/search.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/textformat.h"
-#include "nvim/types.h"
+#include "nvim/types_defs.h"
 #include "nvim/undo.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "indent.c.generated.h"
@@ -1090,7 +1091,7 @@ void ex_retab(exarg_T *eap)
     colnr_T *old_vts_ary = curbuf->b_p_vts_array;
 
     if (tabstop_count(old_vts_ary) > 0 || tabstop_count(new_vts_array) > 1) {
-      set_string_option_direct("vts", -1, new_ts_str, OPT_FREE | OPT_LOCAL, 0);
+      set_string_option_direct(kOptVartabstop, new_ts_str, OPT_FREE | OPT_LOCAL, 0);
       curbuf->b_p_vts_array = new_vts_array;
       xfree(old_vts_ary);
     } else {
@@ -1114,7 +1115,7 @@ int get_expr_indent(void)
   colnr_T save_curswant;
   int save_set_curswant;
   int save_State;
-  int use_sandbox = was_set_insecurely(curwin, "indentexpr", OPT_LOCAL);
+  int use_sandbox = was_set_insecurely(curwin, kOptIndentexpr, OPT_LOCAL);
   const sctx_T save_sctx = current_sctx;
 
   // Save and restore cursor position and curswant, in case it was changed
@@ -1368,11 +1369,11 @@ int get_lisp_indent(void)
 
 static int lisp_match(char *p)
 {
-  char buf[LSIZE];
+  char buf[512];
   char *word = *curbuf->b_p_lw != NUL ? curbuf->b_p_lw : p_lispwords;
 
   while (*word != NUL) {
-    (void)copy_option_part(&word, buf, LSIZE, ",");
+    (void)copy_option_part(&word, buf, sizeof(buf), ",");
     int len = (int)strlen(buf);
 
     if ((strncmp(buf, p, (size_t)len) == 0) && ascii_iswhite_or_nul(p[len])) {

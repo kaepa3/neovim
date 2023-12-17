@@ -7,7 +7,7 @@
 #include <string.h>
 
 #include "auto/config.h"
-#include "nvim/ascii.h"
+#include "nvim/ascii_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/eval.h"
@@ -18,20 +18,20 @@
 #include "nvim/garray.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
-#include "nvim/macros.h"
+#include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
-#include "nvim/os/fs_defs.h"
+#include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
 #include "nvim/os/shell.h"
 #include "nvim/path.h"
 #include "nvim/regexp.h"
 #include "nvim/strings.h"
-#include "nvim/vim.h"
+#include "nvim/vim_defs.h"
 #include "nvim/window.h"
 
 enum {
@@ -151,7 +151,7 @@ char *path_tail_with_sep(char *fname)
 ///
 /// @return The position of the last path separator + 1.
 const char *invocation_path_tail(const char *invocation, size_t *len)
-    FUNC_ATTR_NONNULL_RET FUNC_ATTR_NONNULL_ARG(1)
+  FUNC_ATTR_NONNULL_RET FUNC_ATTR_NONNULL_ARG(1)
 {
   const char *tail = get_past_head(invocation);
   const char *p = tail;
@@ -1666,7 +1666,7 @@ static char *eval_includeexpr(const char *const ptr, const size_t len)
   current_sctx = curbuf->b_p_script_ctx[BV_INEX].script_ctx;
 
   char *res = eval_to_string_safe(curbuf->b_p_inex,
-                                  was_set_insecurely(curwin, "includeexpr", OPT_LOCAL));
+                                  was_set_insecurely(curwin, kOptIncludeexpr, OPT_LOCAL));
 
   set_vim_var_string(VV_FNAME, NULL, 0);
   current_sctx = save_sctx;

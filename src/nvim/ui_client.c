@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "nvim/api/keysets.h"
+#include "nvim/api/keysets_defs.h"
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/channel.h"
@@ -17,7 +17,6 @@
 #include "nvim/main.h"
 #include "nvim/memory.h"
 #include "nvim/msgpack_rpc/channel.h"
-#include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/os/os_defs.h"
 #include "nvim/tui/tui.h"
 #include "nvim/ui.h"
@@ -71,14 +70,14 @@ uint64_t ui_client_start_server(int argc, char **argv)
   return channel->id;
 }
 
-void ui_client_attach(int width, int height, char *term)
+void ui_client_attach(int width, int height, char *term, bool rgb)
 {
   MAXSIZE_TEMP_ARRAY(args, 3);
   ADD_C(args, INTEGER_OBJ(width));
   ADD_C(args, INTEGER_OBJ(height));
 
   MAXSIZE_TEMP_DICT(opts, 9);
-  PUT_C(opts, "rgb", BOOLEAN_OBJ(true));
+  PUT_C(opts, "rgb", BOOLEAN_OBJ(rgb));
   PUT_C(opts, "ext_linegrid", BOOLEAN_OBJ(true));
   PUT_C(opts, "ext_termcolors", BOOLEAN_OBJ(true));
   if (term) {
@@ -112,9 +111,10 @@ void ui_client_run(bool remote_ui)
   ui_client_is_remote = remote_ui;
   int width, height;
   char *term;
-  tui_start(&tui, &width, &height, &term);
+  bool rgb;
+  tui_start(&tui, &width, &height, &term, &rgb);
 
-  ui_client_attach(width, height, term);
+  ui_client_attach(width, height, term, rgb);
 
   // os_exit() will be invoked when the client channel detaches
   while (true) {
@@ -211,3 +211,12 @@ void ui_client_event_raw_line(GridLineEvent *g)
   tui_raw_line(tui, grid, row, startcol, endcol, clearcol, g->cur_attr, lineflags,
                (const schar_T *)grid_line_buf_char, grid_line_buf_attr);
 }
+
+#ifdef EXITFREE
+void ui_client_free_all_mem(void)
+{
+  tui_free_all_mem(tui);
+  xfree(grid_line_buf_char);
+  xfree(grid_line_buf_attr);
+}
+#endif
