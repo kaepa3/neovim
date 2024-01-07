@@ -11,7 +11,6 @@
 
 #include "klib/kvec.h"
 #include "nvim/api/extmark.h"
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
 #include "nvim/arabic.h"
@@ -109,7 +108,7 @@ typedef struct command_line_state {
   int count;
   int indent;
   int c;
-  int gotesc;                           // true when <ESC> just typed
+  bool gotesc;                          // true when <ESC> just typed
   int do_abbr;                          // when true check for abbr.
   char *lookfor;                        // string to match
   int hiscnt;                           // current history line in use
@@ -468,7 +467,7 @@ static void may_do_incsearch_highlighting(int firstc, int count, incsearch_state
 
     // if interrupted while searching, behave like it failed
     if (got_int) {
-      (void)vpeekc();               // remove <C-C> from input stream
+      vpeekc();               // remove <C-C> from input stream
       got_int = false;              // don't abandon the command line
       found = 0;
     } else if (char_avail()) {
@@ -584,7 +583,8 @@ static int may_add_char_to_search(int firstc, int *c, incsearch_state_T *s)
   return OK;
 }
 
-static void finish_incsearch_highlighting(int gotesc, incsearch_state_T *s, bool call_update_screen)
+static void finish_incsearch_highlighting(bool gotesc, incsearch_state_T *s,
+                                          bool call_update_screen)
 {
   if (!s->did_incsearch) {
     return;
@@ -840,7 +840,7 @@ static uint8_t *command_line_enter(int firstc, int count, int indent, bool clear
     // error printed below, to avoid redraw issues
     tl_ret = try_leave(&tstate, &err);
     if (tv_dict_get_number(dict, "abort") != 0) {
-      s->gotesc = 1;
+      s->gotesc = true;
     }
     restore_v_event(dict, &save_v_event);
   }
@@ -1052,7 +1052,7 @@ static int command_line_wildchar_complete(CommandLineState *s)
         && !s->did_wild_list
         && ((wim_flags[s->wim_index] & WIM_LIST)
             || (p_wmnu && (wim_flags[s->wim_index] & WIM_FULL) != 0))) {
-      (void)showmatches(&s->xpc, p_wmnu && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
+      showmatches(&s->xpc, p_wmnu && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
       redrawcmd();
       s->did_wild_list = true;
     }
@@ -1078,9 +1078,9 @@ static int command_line_wildchar_complete(CommandLineState *s)
 
     // if interrupted while completing, behave like it failed
     if (got_int) {
-      (void)vpeekc();               // remove <C-C> from input stream
+      vpeekc();               // remove <C-C> from input stream
       got_int = false;              // don't abandon the command line
-      (void)ExpandOne(&s->xpc, NULL, NULL, 0, WILD_FREE);
+      ExpandOne(&s->xpc, NULL, NULL, 0, WILD_FREE);
       s->xpc.xp_context = EXPAND_NOTHING;
       return CMDLINE_CHANGED;
     }
@@ -1104,7 +1104,7 @@ static int command_line_wildchar_complete(CommandLineState *s)
           p_wmnu = p_wmnu_save;
         }
 
-        (void)showmatches(&s->xpc, p_wmnu && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
+        showmatches(&s->xpc, p_wmnu && ((wim_flags[s->wim_index] & WIM_LIST) == 0));
         redrawcmd();
         s->did_wild_list = true;
 
@@ -1138,7 +1138,7 @@ static void command_line_end_wildmenu(CommandLineState *s)
     cmdline_pum_remove();
   }
   if (s->xpc.xp_numfiles != -1) {
-    (void)ExpandOne(&s->xpc, NULL, NULL, 0, WILD_FREE);
+    ExpandOne(&s->xpc, NULL, NULL, 0, WILD_FREE);
   }
   s->did_wild_list = false;
   if (!p_wmnu || (s->c != K_UP && s->c != K_DOWN)) {
@@ -1250,7 +1250,7 @@ static int command_line_execute(VimState *state, int key)
     // Ctrl-E: cancel the cmdline popup menu and return the original text.
     if (s->c == Ctrl_E || s->c == Ctrl_Y) {
       wild_type = (s->c == Ctrl_E) ? WILD_CANCEL : WILD_APPLY;
-      (void)nextwild(&s->xpc, wild_type, WILD_NO_BEEP, s->firstc != '@');
+      nextwild(&s->xpc, wild_type, WILD_NO_BEEP, s->firstc != '@');
     }
   }
 
@@ -1419,7 +1419,7 @@ static int may_do_command_line_next_incsearch(int firstc, int count, incsearch_s
     if (lt(s->match_start, s->match_end)) {
       // start searching at the end of the match
       // not at the beginning of the next column
-      (void)decl(&t);
+      decl(&t);
     }
     search_flags += SEARCH_COL;
   } else {
@@ -1447,21 +1447,21 @@ static int may_do_command_line_next_incsearch(int firstc, int count, incsearch_s
       // when nv_search finishes the cursor will be
       // put back on the match
       s->search_start = t;
-      (void)decl(&s->search_start);
+      decl(&s->search_start);
     } else if (next_match && firstc == '?') {
       // move just after the current match, so that
       // when nv_search finishes the cursor will be
       // put back on the match
       s->search_start = t;
-      (void)incl(&s->search_start);
+      incl(&s->search_start);
     }
     if (lt(t, s->search_start) && next_match) {
       // wrap around
       s->search_start = t;
       if (firstc == '?') {
-        (void)incl(&s->search_start);
+        incl(&s->search_start);
       } else {
-        (void)decl(&s->search_start);
+        decl(&s->search_start);
       }
     }
 
@@ -2176,7 +2176,7 @@ static bool empty_pattern(char *p, int delim)
   magic_T magic_val = MAGIC_ON;
 
   if (n > 0) {
-    (void)skip_regexp_ex(p, delim, magic_isset(), NULL, NULL, &magic_val);
+    skip_regexp_ex(p, delim, magic_isset(), NULL, NULL, &magic_val);
   } else {
     return true;
   }
@@ -2633,6 +2633,7 @@ static int command_line_changed(CommandLineState *s)
   if (s->firstc == ':'
       && current_sctx.sc_sid == 0    // only if interactive
       && *p_icm != NUL       // 'inccommand' is set
+      && !exmode_active      // not in ex mode
       && curbuf->b_p_ma      // buffer is modifiable
       && cmdline_star == 0   // not typing a password
       && !vpeekc_any()
@@ -2938,7 +2939,7 @@ char *getexline(int c, void *cookie, int indent, bool do_concat)
 {
   // When executing a register, remove ':' that's in front of each line.
   if (exec_from_reg && vpeekc() == ':') {
-    (void)vgetc();
+    vgetc();
   }
 
   return getcmdline(c, 1, indent, do_concat);
@@ -3453,7 +3454,7 @@ void cmdline_ui_flush(void)
 // Put a character on the command line.  Shifts the following text to the
 // right when "shift" is true.  Used for CTRL-V, CTRL-K, etc.
 // "c" must be printable (fit in one display cell)!
-void putcmdline(char c, int shift)
+void putcmdline(char c, bool shift)
 {
   if (cmd_silent) {
     return;
@@ -3500,7 +3501,7 @@ void unputcmdline(void)
 // part will be redrawn, otherwise it will not.  If this function is called
 // twice in a row, then 'redraw' should be false and redrawcmd() should be
 // called afterwards.
-void put_on_cmdline(const char *str, int len, int redraw)
+void put_on_cmdline(const char *str, int len, bool redraw)
 {
   int i;
   int m;
@@ -3710,7 +3711,7 @@ static bool cmdline_paste(int regname, bool literally, bool remcr)
 // When "literally" is true, insert literally.
 // When "literally" is false, insert as typed, but don't leave the command
 // line.
-void cmdline_paste_str(const char *s, int literally)
+void cmdline_paste_str(const char *s, bool literally)
 {
   if (literally) {
     put_on_cmdline(s, -1, true);
@@ -4206,7 +4207,7 @@ int get_cmdline_firstc(void)
 int get_list_range(char **str, int *num1, int *num2)
 {
   int len;
-  int first = false;
+  bool first = false;
   varnumber_T num;
 
   *str = skipwhite((*str));
@@ -4280,7 +4281,7 @@ static int open_cmdwin(void)
   int save_restart_edit = restart_edit;
   int save_State = State;
   bool save_exmode = exmode_active;
-  int save_cmdmsg_rl = cmdmsg_rl;
+  bool save_cmdmsg_rl = cmdmsg_rl;
 
   // Can't do this when text or buffer is locked.
   // Can't do this recursively.  Can't do it when typing a password.

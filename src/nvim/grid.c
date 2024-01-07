@@ -263,13 +263,13 @@ void grid_clear_line(ScreenGrid *grid, size_t off, int width, bool valid)
     grid->chars[off + (size_t)col] = schar_from_ascii(' ');
   }
   int fill = valid ? 0 : -1;
-  (void)memset(grid->attrs + off, fill, (size_t)width * sizeof(sattr_T));
-  (void)memset(grid->vcols + off, -1, (size_t)width * sizeof(colnr_T));
+  memset(grid->attrs + off, fill, (size_t)width * sizeof(sattr_T));
+  memset(grid->vcols + off, -1, (size_t)width * sizeof(colnr_T));
 }
 
 void grid_invalidate(ScreenGrid *grid)
 {
-  (void)memset(grid->attrs, -1, sizeof(sattr_T) * (size_t)grid->rows * (size_t)grid->cols);
+  memset(grid->attrs, -1, sizeof(sattr_T) * (size_t)grid->rows * (size_t)grid->cols);
 }
 
 static bool grid_invalid_row(ScreenGrid *grid, int row)
@@ -538,7 +538,8 @@ void grid_line_flush_if_valid_row(void)
 void grid_fill(ScreenGrid *grid, int start_row, int end_row, int start_col, int end_col, int c1,
                int c2, int attr)
 {
-  int row_off = 0, col_off = 0;
+  int row_off = 0;
+  int col_off = 0;
   grid_adjust(&grid, &row_off, &col_off);
   start_row += row_off;
   end_row += row_off;
@@ -650,8 +651,6 @@ void grid_put_linebuf(ScreenGrid *grid, int row, int coloff, int col, int endcol
 {
   bool redraw_next;                         // redraw_this for next character
   bool clear_next = false;
-  int char_cells;                           // 1: normal char
-                                            // 2: occupies two display cells
   assert(0 <= row && row < grid->rows);
   // TODO(bfredl): check all callsites and eliminate
   // Check for illegal col, just in case
@@ -703,10 +702,12 @@ void grid_put_linebuf(ScreenGrid *grid, int row, int coloff, int col, int endcol
 
   redraw_next = grid_char_needs_redraw(grid, col, (size_t)col + off_to, endcol - col);
 
-  int start_dirty = -1, end_dirty = 0;
+  int start_dirty = -1;
+  int end_dirty = 0;
 
   while (col < endcol) {
-    char_cells = 1;
+    int char_cells = 1;  // 1: normal char
+                         // 2: occupies two display cells
     if (col + 1 < endcol && linebuf_char[col + 1] == 0) {
       char_cells = 2;
     }
@@ -918,7 +919,7 @@ void win_grid_alloc(win_T *wp)
     wp->w_lines = xcalloc((size_t)rows + 1, sizeof(wline_T));
   }
 
-  int was_resized = false;
+  bool was_resized = false;
   if (want_allocation && (!has_allocation
                           || grid_allocated->rows != total_rows
                           || grid_allocated->cols != total_cols)) {

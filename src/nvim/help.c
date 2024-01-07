@@ -36,7 +36,6 @@
 #include "nvim/pos_defs.h"
 #include "nvim/runtime.h"
 #include "nvim/strings.h"
-#include "nvim/syntax.h"
 #include "nvim/tag.h"
 #include "nvim/types_defs.h"
 #include "nvim/vim_defs.h"
@@ -172,9 +171,9 @@ void ex_help(exarg_T *eap)
       // set b_p_ro flag).
       // Set the alternate file to the previously edited file.
       alt_fnum = curbuf->b_fnum;
-      (void)do_ecmd(0, NULL, NULL, NULL, ECMD_LASTL,
-                    ECMD_HIDE + ECMD_SET_HELP,
-                    NULL);  // buffer is still open, don't store info
+      do_ecmd(0, NULL, NULL, NULL, ECMD_LASTL,
+              ECMD_HIDE + ECMD_SET_HELP,
+              NULL);  // buffer is still open, don't store info
 
       if ((cmdmod.cmod_flags & CMOD_KEEPALT) == 0) {
         curwin->w_alt_fnum = alt_fnum;
@@ -252,7 +251,7 @@ char *check_help_lang(char *arg)
 /// @param wrong_case  no matching case
 ///
 /// @return  a heuristic indicating how well the given string matches.
-int help_heuristic(char *matched_string, int offset, int wrong_case)
+int help_heuristic(char *matched_string, int offset, bool wrong_case)
   FUNC_ATTR_PURE
 {
   int num_letters = 0;
@@ -619,7 +618,7 @@ void prepare_help_buffer(void)
   if (strcmp(curbuf->b_p_isk, p) != 0) {
     set_string_option_direct(kOptIskeyword, p, OPT_FREE|OPT_LOCAL, 0);
     check_buf_options(curbuf);
-    (void)buf_init_chartab(curbuf, false);
+    buf_init_chartab(curbuf, false);
   }
 
   // Don't use the global foldmethod.
@@ -642,46 +641,9 @@ void prepare_help_buffer(void)
   set_buflisted(false);
 }
 
-/// After reading a help file: May cleanup a help buffer when syntax
-/// highlighting is not used.
-void fix_help_buffer(void)
+/// After reading a help file: if help.txt, populate *local-additions*
+void get_local_additions(void)
 {
-  // Set filetype to "help".
-  if (strcmp(curbuf->b_p_ft, "help") != 0) {
-    curbuf->b_ro_locked++;
-    set_option_value_give_err(kOptFiletype, STATIC_CSTR_AS_OPTVAL("help"), OPT_LOCAL);
-    curbuf->b_ro_locked--;
-  }
-
-  if (!syntax_present(curwin)) {
-    bool in_example = false;
-    for (linenr_T lnum = 1; lnum <= curbuf->b_ml.ml_line_count; lnum++) {
-      char *line = ml_get_buf(curbuf, lnum);
-      const size_t len = strlen(line);
-      if (in_example && len > 0 && !ascii_iswhite(line[0])) {
-        // End of example: non-white or '<' in first column.
-        if (line[0] == '<') {
-          // blank-out a '<' in the first column
-          line = ml_get_buf_mut(curbuf, lnum);
-          line[0] = ' ';
-        }
-        in_example = false;
-      }
-      if (!in_example && len > 0) {
-        if (line[len - 1] == '>' && (len == 1 || line[len - 2] == ' ')) {
-          // blank-out a '>' in the last column (start of example)
-          line = ml_get_buf_mut(curbuf, lnum);
-          line[len - 1] = ' ';
-          in_example = true;
-        } else if (line[len - 1] == '~') {
-          // blank-out a '~' at the end of line (header marker)
-          line = ml_get_buf_mut(curbuf, lnum);
-          line[len - 1] = ' ';
-        }
-      }
-    }
-  }
-
   // In the "help.txt" and "help.abx" file, add the locally added help
   // files.  This uses the very first line in the help file.
   char *const fname = path_tail(curbuf->b_fname);

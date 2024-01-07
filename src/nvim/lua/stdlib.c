@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/types.h>
+#include <uv.h>
 
 #ifdef NVIM_VENDOR_BIT
 # include "bit.h"
@@ -14,7 +14,6 @@
 
 #include "cjson/lua_cjson.h"
 #include "mpack/lmpack.h"
-#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
@@ -82,7 +81,8 @@ static int regex_match_line(lua_State *lstate)
 
   handle_T bufnr = (handle_T)luaL_checkinteger(lstate, 2);
   linenr_T rownr = (linenr_T)luaL_checkinteger(lstate, 3);
-  int start = 0, end = -1;
+  int start = 0;
+  int end = -1;
   if (narg >= 4) {
     start = (int)luaL_checkinteger(lstate, 4);
   }
@@ -177,7 +177,8 @@ int nlua_str_utfindex(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
     }
   }
 
-  size_t codepoints = 0, codeunits = 0;
+  size_t codepoints = 0;
+  size_t codeunits = 0;
   mb_utflen(s1, (size_t)idx, &codepoints, &codeunits);
 
   lua_pushinteger(lstate, (lua_Integer)codepoints);

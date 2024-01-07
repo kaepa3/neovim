@@ -54,6 +54,7 @@
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/input.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/os/process.h"
 #include "nvim/popupmenu.h"
 #include "nvim/pos_defs.h"
@@ -344,7 +345,8 @@ Integer nvim_input(String keys)
 ///       mouse input in a GUI. The deprecated pseudokey form
 ///       ("<LeftMouse><col,row>") of |nvim_input()| has the same limitation.
 ///
-/// @param button Mouse button: one of "left", "right", "middle", "wheel", "move".
+/// @param button Mouse button: one of "left", "right", "middle", "wheel", "move",
+///               "x1", "x2".
 /// @param action For ordinary buttons, one of "press", "drag", "release".
 ///               For the wheel, one of "up", "down", "left", "right". Ignored for "move".
 /// @param modifier String of modifiers each represented by a single char.
@@ -375,6 +377,10 @@ void nvim_input_mouse(String button, String action, String modifier, Integer gri
     code = KE_RIGHTMOUSE;
   } else if (strequal(button.data, "wheel")) {
     code = KE_MOUSEDOWN;
+  } else if (strequal(button.data, "x1")) {
+    code = KE_X1MOUSE;
+  } else if (strequal(button.data, "x2")) {
+    code = KE_X2MOUSE;
   } else if (strequal(button.data, "move")) {
     code = KE_MOUSEMOVE;
   } else {
@@ -455,7 +461,7 @@ String nvim_replace_termcodes(String str, Boolean from_part, Boolean do_lt, Bool
   }
 
   char *ptr = NULL;
-  replace_termcodes(str.data, str.size, &ptr, 0, flags, NULL, CPO_TO_CPO_FLAGS);
+  replace_termcodes(str.data, str.size, &ptr, 0, flags, NULL, p_cpo);
   return cstr_as_string(ptr);
 }
 
@@ -593,7 +599,7 @@ ArrayOf(String) nvim__get_runtime(Array pat, Boolean all, Dict(runtime) *opts, E
   if (opts->do_source) {
     for (size_t i = 0; i < res.size; i++) {
       String name = res.items[i].data.string;
-      (void)do_source(name.data, false, DOSO_NONE, NULL);
+      do_source(name.data, false, DOSO_NONE, NULL);
     }
   }
 

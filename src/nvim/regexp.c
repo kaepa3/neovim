@@ -13,7 +13,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
-#include <sys/types.h>
+#include <uv.h>
 
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer_defs.h"
@@ -5865,8 +5865,8 @@ static bool regmatch(uint8_t *scan, const proftime_T *tm, int *timed_out)
 
 #ifdef REGEXP_DEBUG
     if (scan != NULL && regnarrate) {
-      os_errmsg((char *)regprop(scan));
-      os_errmsg("(\n");
+      fprintf(stderr, "%s", (char *)regprop(scan));
+      fprintf(stderr, "%s", "(\n");
     }
 #endif
 
@@ -5892,18 +5892,18 @@ static bool regmatch(uint8_t *scan, const proftime_T *tm, int *timed_out)
 
 #ifdef REGEXP_DEBUG
       if (regnarrate) {
-        os_errmsg((char *)regprop(scan));
-        os_errmsg("...\n");
+        fprintf(stderr, "%s", (char *)regprop(scan));
+        fprintf(stderr, "%s", "...\n");
         if (re_extmatch_in != NULL) {
           int i;
 
-          os_errmsg(_("External submatches:\n"));
+          fprintf(stderr, _("External submatches:\n"));
           for (i = 0; i < NSUBEXP; i++) {
-            os_errmsg("    \"");
+            fprintf(stderr, "%s", "    \"");
             if (re_extmatch_in->matches[i] != NULL) {
-              os_errmsg((char *)re_extmatch_in->matches[i]);
+              fprintf(stderr, "%s", (char *)re_extmatch_in->matches[i]);
             }
-            os_errmsg("\"\n");
+            fprintf(stderr, "%s", "\"\n");
           }
         }
       }
@@ -6379,7 +6379,7 @@ static bool regmatch(uint8_t *scan, const proftime_T *tm, int *timed_out)
         case RE_COMPOSING:
           // Skip composing characters.
           while (utf_iscomposing(utf_ptr2char((char *)rex.input))) {
-            MB_CPTR_ADV(rex.input);
+            rex.input += utf_ptr2len((char *)rex.input);
           }
           break;
 
@@ -9840,7 +9840,7 @@ static int nfa_regatom(void)
       emsg(_(e_nopresub));
       return FAIL;
     }
-    for (lp = (uint8_t *)reg_prev_sub; *lp != NUL; MB_CPTR_ADV(lp)) {
+    for (lp = (uint8_t *)reg_prev_sub; *lp != NUL; lp += utf_ptr2len((char *)lp)) {
       EMIT(utf_ptr2char((char *)lp));
       if (lp != (uint8_t *)reg_prev_sub) {
         EMIT(NFA_CONCAT);

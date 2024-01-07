@@ -10,7 +10,7 @@
 #include "nvim/channel.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval_defs.h"
-#include "nvim/event/loop.h"
+#include "nvim/event/multiqueue.h"
 #include "nvim/globals.h"
 #include "nvim/highlight.h"
 #include "nvim/log.h"
@@ -203,7 +203,9 @@ void ui_client_event_grid_line(Array args)
 
 void ui_client_event_raw_line(GridLineEvent *g)
 {
-  int grid = g->args[0], row = g->args[1], startcol = g->args[2];
+  int grid = g->args[0];
+  int row = g->args[1];
+  int startcol = g->args[2];
   Integer endcol = startcol + g->coloff;
   Integer clearcol = endcol + g->clear_width;
   LineFlags lineflags = g->wrap ? kLineFlagWrap : 0;

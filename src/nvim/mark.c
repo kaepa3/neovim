@@ -2,13 +2,13 @@
 
 #include <assert.h>
 #include <limits.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "nvim/ascii_defs.h"
 #include "nvim/buffer.h"
-#include "nvim/buffer_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/diff.h"
@@ -32,10 +32,13 @@
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/os.h"
+#include "nvim/os/time.h"
 #include "nvim/path.h"
+#include "nvim/pos_defs.h"
 #include "nvim/quickfix.h"
 #include "nvim/strings.h"
 #include "nvim/textobject.h"
+#include "nvim/types_defs.h"
 #include "nvim/vim_defs.h"
 
 // This file contains routines to maintain and manipulate marks.
@@ -926,8 +929,8 @@ void ex_delmarks(exarg_T *eap)
     // clear specified marks only
     const Timestamp timestamp = os_time();
     for (char *p = eap->arg; *p != NUL; p++) {
-      int lower = ASCII_ISLOWER(*p);
-      int digit = ascii_isdigit(*p);
+      bool lower = ASCII_ISLOWER(*p);
+      bool digit = ascii_isdigit(*p);
       if (lower || digit || ASCII_ISUPPER(*p)) {
         if (p[1] == '-') {
           // clear range of marks

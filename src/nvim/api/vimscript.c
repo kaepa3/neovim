@@ -11,6 +11,7 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vimscript.h"
 #include "nvim/ascii_defs.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/userfunc.h"
@@ -230,8 +231,8 @@ static Object _call_function(String fn, Array args, dict_T *self, Error *err)
   TRY_WRAP(err, {
     // call_func() retval is deceptive, ignore it.  Instead we set `msg_list`
     // (see above) to capture abort-causing non-exception errors.
-    (void)call_func(fn.data, (int)fn.size, &rettv, (int)args.size,
-                    vim_args, &funcexe);
+    call_func(fn.data, (int)fn.size, &rettv, (int)args.size,
+              vim_args, &funcexe);
   });
 
   if (!ERROR_SET(err)) {

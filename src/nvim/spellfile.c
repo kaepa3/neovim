@@ -264,6 +264,7 @@
 #include "nvim/spell_defs.h"
 #include "nvim/spellfile.h"
 #include "nvim/strings.h"
+#include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/undo.h"
 #include "nvim/vim_defs.h"
@@ -1535,7 +1536,7 @@ static int set_sofo(slang_T *lp, const char *from, const char *to)
   // sl_sal_first[] for this.
   for (p = from, s = to; *p != NUL && *s != NUL;) {
     const int c = mb_cptr2char_adv(&p);
-    MB_CPTR_ADV(s);
+    s += utf_ptr2len(s);
     if (c >= 256) {
       lp->sl_sal_first[c & 0xff]++;
     }
@@ -2014,16 +2015,16 @@ static afffile_T *spell_read_aff(spellinfo_T *spin, char *fname)
   spell_message(spin, IObuff);
 
   // Only do REP lines when not done in another .aff file already.
-  int do_rep = GA_EMPTY(&spin->si_rep);
+  bool do_rep = GA_EMPTY(&spin->si_rep);
 
   // Only do REPSAL lines when not done in another .aff file already.
-  int do_repsal = GA_EMPTY(&spin->si_repsal);
+  bool do_repsal = GA_EMPTY(&spin->si_repsal);
 
   // Only do SAL lines when not done in another .aff file already.
-  int do_sal = GA_EMPTY(&spin->si_sal);
+  bool do_sal = GA_EMPTY(&spin->si_sal);
 
   // Only do MAP lines when not done in another .aff file already.
-  int do_mapline = GA_EMPTY(&spin->si_map);
+  bool do_mapline = GA_EMPTY(&spin->si_map);
 
   // Allocate and init the afffile_T structure.
   afffile_T *aff = getroom(spin, sizeof(*aff), true);
@@ -2966,9 +2967,9 @@ static void add_fromto(spellinfo_T *spin, garray_T *gap, char *from, char *to)
   char word[MAXWLEN];
 
   fromto_T *ftp = GA_APPEND_VIA_PTR(fromto_T, gap);
-  (void)spell_casefold(curwin, from, (int)strlen(from), word, MAXWLEN);
+  spell_casefold(curwin, from, (int)strlen(from), word, MAXWLEN);
   ftp->ft_from = getroom_save(spin, word);
-  (void)spell_casefold(curwin, to, (int)strlen(to), word, MAXWLEN);
+  spell_casefold(curwin, to, (int)strlen(to), word, MAXWLEN);
   ftp->ft_to = getroom_save(spin, word);
 }
 
@@ -3613,11 +3614,9 @@ static int spell_read_wordfile(spellinfo_T *spin, char *fname)
           smsg(0, _("/encoding= line after word ignored in %s line %" PRIdLINENR ": %s"),
                fname, lnum, line - 1);
         } else {
-          char *enc;
-
           // Setup for conversion to 'encoding'.
           line += 9;
-          enc = enc_canonize(line);
+          char *enc = enc_canonize(line);
           if (!spin->si_ascii
               && convert_setup(&spin->si_conv, enc, p_enc) == FAIL) {
             smsg(0, _("Conversion in %s not supported: from %s to %s"),
@@ -3819,7 +3818,7 @@ static int store_word(spellinfo_T *spin, char *word, int flags, int region, cons
     return FAIL;
   }
 
-  (void)spell_casefold(curwin, word, len, foldword, MAXWLEN);
+  spell_casefold(curwin, word, len, foldword, MAXWLEN);
   for (const char *p = pfxlist; res == OK; p++) {
     if (!need_affix || (p != NULL && *p != NUL)) {
       res = tree_add_word(spin, foldword, spin->si_foldroot, ct | flags,
@@ -4592,7 +4591,7 @@ static int write_vim_spell(spellinfo_T *spin, char *fname)
     spin->si_memtot += (int)(nodecount + nodecount * sizeof(int));
 
     // Write the nodes.
-    (void)put_node(fd, tree, 0, regionmask, round == 3);
+    put_node(fd, tree, 0, regionmask, round == 3);
   }
 
   // Write another byte to check for errors (file system full).
@@ -5097,7 +5096,7 @@ static void sug_write(spellinfo_T *spin, char *fname)
   spin->si_memtot += (int)(nodecount + nodecount * sizeof(int));
 
   // Write the nodes.
-  (void)put_node(fd, tree, 0, 0, false);
+  put_node(fd, tree, 0, 0, false);
 
   // <SUGTABLE>: <sugwcount> <sugline> ...
   linenr_T wcount = spin->si_spellbuf->b_ml.ml_line_count;
@@ -5637,7 +5636,7 @@ static void set_spell_charflags(const char *flags_in, int cnt, const char *fol)
     }
   }
 
-  (void)set_spell_finish(&new_st);
+  set_spell_finish(&new_st);
 }
 
 static int set_spell_finish(spelltab_T *new_st)

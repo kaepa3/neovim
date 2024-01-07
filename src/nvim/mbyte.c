@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
+#include <uv.h>
 #include <wctype.h>
 
 #include "auto/config.h"
@@ -1422,7 +1422,8 @@ int utf16_to_utf8(const wchar_t *utf16, int utf16len, char **utf8)
 void mb_utflen(const char *s, size_t len, size_t *codepoints, size_t *codeunits)
   FUNC_ATTR_NONNULL_ALL
 {
-  size_t count = 0, extra = 0;
+  size_t count = 0;
+  size_t extra = 0;
   size_t clen;
   for (size_t i = 0; i < len; i += clen) {
     clen = (size_t)utf_ptr2len_len(s + i, (int)(len - i));
@@ -2250,7 +2251,7 @@ void *my_iconv_open(char *to, char *from)
     // stops for no apparent reason after about 8160 characters.
     char *p = tobuf;
     size_t tolen = ICONV_TESTLEN;
-    (void)iconv(fd, NULL, NULL, &p, &tolen);
+    iconv(fd, NULL, NULL, &p, &tolen);
     if (p == NULL) {
       iconv_working = kBroken;
       iconv_close(fd);

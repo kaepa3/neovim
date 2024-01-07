@@ -8,6 +8,7 @@
 
 #include "auto/config.h"
 #include "nvim/event/loop.h"
+#include "nvim/event/multiqueue.h"
 #include "nvim/gettext.h"
 #include "nvim/globals.h"
 #include "nvim/log.h"

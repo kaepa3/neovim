@@ -4,6 +4,8 @@
 
 #include "nvim/ascii_defs.h"
 #include "nvim/eval/typval.h"
+#include "nvim/event/loop.h"
+#include "nvim/log.h"
 #include "nvim/mbyte.h"
 #include "nvim/memory.h"
 #include "nvim/os/os.h"

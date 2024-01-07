@@ -519,6 +519,8 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---                 text is selected or hidden because of scrolling with
 ---                 'nowrap' or 'smoothscroll'. Currently only affects
 ---                 "overlay" virt_text.
+---               • virt_text_repeat_linebreak : repeat the virtual text on
+---                 wrapped lines.
 ---               • hl_mode : control how highlights are combined with the
 ---                 highlights of the text. Currently only affects virt_text
 ---                 highlights, but might affect `hl_group` in later versions.
@@ -1375,7 +1377,7 @@ function vim.api.nvim_input(keys) end
 --- processed soon by the event loop.
 ---
 --- @param button string Mouse button: one of "left", "right", "middle", "wheel",
----                 "move".
+---                 "move", "x1", "x2".
 --- @param action string For ordinary buttons, one of "press", "drag", "release".
 ---                 For the wheel, one of "up", "down", "left", "right".
 ---                 Ignored for "move".
@@ -1491,7 +1493,6 @@ function vim.api.nvim_open_term(buffer, opts) end
 --- ```lua
 ---     vim.api.nvim_open_win(0, false,
 ---       {relative='win', width=12, height=3, bufpos={100,10}})
----     })
 --- ```
 ---
 --- @param buffer integer Buffer to display, or 0 for current buffer

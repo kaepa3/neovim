@@ -77,7 +77,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <time.h>
 #include <uv.h>
 
@@ -106,6 +105,7 @@
 #include "nvim/highlight.h"
 #include "nvim/macros_defs.h"
 #include "nvim/mark.h"
+#include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
@@ -344,7 +344,7 @@ static inline void zero_fmark_additional_data(fmark_T *fmarks)
 /// "reload" is true when saving for a buffer reload.
 /// Careful: may trigger autocommands that reload the buffer.
 /// Returns FAIL when lines could not be saved, OK otherwise.
-int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, int reload)
+int u_savecommon(buf_T *buf, linenr_T top, linenr_T bot, linenr_T newbot, bool reload)
 {
   if (!reload) {
     // When making changes is not allowed return FAIL.  It's a crude way
@@ -934,7 +934,7 @@ static u_header_T *unserialize_uhp(bufinfo_T *bi, const char *file_name)
     default:
       // Field not supported, skip it.
       while (--len >= 0) {
-        (void)undo_read_byte(bi);
+        undo_read_byte(bi);
       }
     }
   }
@@ -963,12 +963,11 @@ static u_header_T *unserialize_uhp(bufinfo_T *bi, const char *file_name)
   }
 
   // Unserialize all extmark undo information
-  ExtmarkUndoObject *extup;
   kv_init(uhp->uh_extmark);
 
   while ((c = undo_read_2c(bi)) == UF_ENTRY_MAGIC) {
     bool error = false;
-    extup = unserialize_extmark(bi, &error, file_name);
+    ExtmarkUndoObject *extup = unserialize_extmark(bi, &error, file_name);
     if (error) {
       kv_destroy(uhp->uh_extmark);
       xfree(extup);
@@ -1256,7 +1255,7 @@ void u_write_undo(const char *const name, const bool forceit, buf_T *const buf, 
     semsg(_(e_not_open), file_name);
     goto theend;
   }
-  (void)os_setperm(file_name, perm);
+  os_setperm(file_name, perm);
   if (p_verbose > 0) {
     verbose_enter();
     smsg(0, _("Writing undo file: %s"), file_name);
@@ -1501,7 +1500,7 @@ void u_read_undo(char *name, const uint8_t *hash, const char *orig_name FUNC_ATT
     default:
       // field not supported, skip
       while (--len >= 0) {
-        (void)undo_read_byte(&bi);
+        undo_read_byte(&bi);
       }
     }
   }
@@ -1553,7 +1552,9 @@ void u_read_undo(char *name, const uint8_t *hash, const char *orig_name FUNC_ATT
   // We have put all of the headers into a table. Now we iterate through the
   // table and swizzle each sequence number we have stored in uh_*_seq into
   // a pointer corresponding to the header with that sequence number.
-  int16_t old_idx = -1, new_idx = -1, cur_idx = -1;
+  int16_t old_idx = -1;
+  int16_t new_idx = -1;
+  int16_t cur_idx = -1;
   for (int i = 0; i < num_head; i++) {
     u_header_T *uhp = uhp_table[i];
     if (uhp == NULL) {
@@ -2249,7 +2250,7 @@ target_zero:
 ///
 /// @param undo If `true`, go up the tree. Down if `false`.
 /// @param do_buf_event If `true`, send buffer updates.
-static void u_undoredo(int undo, bool do_buf_event)
+static void u_undoredo(bool undo, bool do_buf_event)
 {
   char **newarray = NULL;
   linenr_T newlnum = MAXLNUM;

@@ -16,6 +16,7 @@
 #include "nvim/channel.h"
 #include "nvim/eval.h"
 #include "nvim/event/loop.h"
+#include "nvim/event/multiqueue.h"
 #include "nvim/event/wstream.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
