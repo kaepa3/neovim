@@ -73,6 +73,9 @@ function vim.api.nvim__id_dictionary(dct) end
 function vim.api.nvim__id_float(flt) end
 
 --- @private
+--- NB: if your UI doesn't use hlstate, this will not return hlstate first
+--- time.
+---
 --- @param grid integer
 --- @param row integer
 --- @param col integer
@@ -173,11 +176,15 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 ---                      • start column of the changed text
 ---                      • byte offset of the changed text (from the start of
 ---                        the buffer)
----                      • old end row of the changed text
----                      • old end column of the changed text
+---                      • old end row of the changed text (offset from start
+---                        row)
+---                      • old end column of the changed text (if old end row
+---                        = 0, offset from start column)
 ---                      • old end byte length of the changed text
----                      • new end row of the changed text
----                      • new end column of the changed text
+---                      • new end row of the changed text (offset from start
+---                        row)
+---                      • new end column of the changed text (if new end row
+---                        = 0, offset from start column)
 ---                      • new end byte length of the changed text
 ---
 ---                    • on_changedtick: Lua callback invoked on changedtick
@@ -1757,9 +1764,7 @@ function vim.api.nvim_set_current_win(window) end
 ---              • on_buf: called for each buffer being redrawn (before window
 ---                callbacks) ["buf", bufnr, tick]
 ---              • on_win: called when starting to redraw a specific window.
----                botline_guess is an approximation that does not exceed the
----                last line number. ["win", winid, bufnr, topline,
----                botline_guess]
+---                ["win", winid, bufnr, topline, botline]
 ---              • on_line: called for each buffer line being redrawn. (The
 ---                interaction with fold lines is subject to change) ["win",
 ---                winid, bufnr, row]

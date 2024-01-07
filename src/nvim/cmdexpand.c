@@ -99,6 +99,7 @@ static bool cmdline_fuzzy_completion_supported(const expand_T *const xp)
          && xp->xp_context != EXPAND_FILES_IN_PATH
          && xp->xp_context != EXPAND_FILETYPE
          && xp->xp_context != EXPAND_HELP
+         && xp->xp_context != EXPAND_KEYMAP
          && xp->xp_context != EXPAND_LUA
          && xp->xp_context != EXPAND_OLD_SETTING
          && xp->xp_context != EXPAND_STRING_SETTING
@@ -1215,6 +1216,7 @@ char *addstar(char *fname, size_t len, int context)
         || context == EXPAND_COMPILER
         || context == EXPAND_OWNSYNTAX
         || context == EXPAND_FILETYPE
+        || context == EXPAND_KEYMAP
         || context == EXPAND_PACKADD
         || context == EXPAND_RUNTIME
         || ((context == EXPAND_TAGS_LISTFILES || context == EXPAND_TAGS)
@@ -2741,6 +2743,10 @@ static int ExpandFromContext(expand_T *xp, char *pat, char ***matches, int *numM
     char *directories[] = { "syntax", "indent", "ftplugin", NULL };
     return ExpandRTDir(pat, 0, numMatches, matches, directories);
   }
+  if (xp->xp_context == EXPAND_KEYMAP) {
+    char *directories[] = { "keymap", NULL };
+    return ExpandRTDir(pat, 0, numMatches, matches, directories);
+  }
   if (xp->xp_context == EXPAND_USER_LIST) {
     return ExpandUserList(xp, matches, numMatches);
   }
@@ -3239,7 +3245,7 @@ void globpath(char *path, char *file, garray_T *ga, int expand_options, bool dir
     copy_option_part(&path, buf, MAXPATHL, ",");
     if (strlen(buf) + strlen(file) + 2 < MAXPATHL) {
       add_pathsep(buf);
-      STRCAT(buf, file);  // NOLINT
+      STRCAT(buf, file);
 
       char **p;
       int num_p = 0;

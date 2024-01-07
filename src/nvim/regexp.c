@@ -42,6 +42,104 @@
 #include "nvim/types_defs.h"
 #include "nvim/vim_defs.h"
 
+enum {
+  /// In the NFA engine: how many braces are allowed.
+  /// TODO(RE): Use dynamic memory allocation instead of static, like here
+  NFA_MAX_BRACES = 20,
+};
+
+enum {
+  /// In the NFA engine: how many states are allowed.
+  NFA_MAX_STATES = 100000,
+  NFA_TOO_EXPENSIVE = -1,
+};
+
+/// Which regexp engine to use? Needed for vim_regcomp().
+/// Must match with 'regexpengine'.
+enum {
+  AUTOMATIC_ENGINE    = 0,
+  BACKTRACKING_ENGINE = 1,
+  NFA_ENGINE          = 2,
+};
+
+/// Structure returned by vim_regcomp() to pass on to vim_regexec().
+/// This is the general structure. For the actual matcher, two specific
+/// structures are used. See code below.
+struct regprog {
+  regengine_T *engine;
+  unsigned regflags;
+  unsigned re_engine;  ///< Automatic, backtracking or NFA engine.
+  unsigned re_flags;   ///< Second argument for vim_regcomp().
+  bool re_in_use;      ///< prog is being executed
+};
+
+/// Structure used by the back track matcher.
+/// These fields are only to be used in regexp.c!
+/// See regexp.c for an explanation.
+typedef struct {
+  // These four members implement regprog_T.
+  regengine_T *engine;
+  unsigned regflags;
+  unsigned re_engine;
+  unsigned re_flags;
+  bool re_in_use;
+
+  int regstart;
+  uint8_t reganch;
+  uint8_t *regmust;
+  int regmlen;
+  uint8_t reghasz;
+  uint8_t program[];
+} bt_regprog_T;
+
+/// Structure representing a NFA state.
+/// An NFA state may have no outgoing edge, when it is a NFA_MATCH state.
+typedef struct nfa_state nfa_state_T;
+struct nfa_state {
+  int c;
+  nfa_state_T *out;
+  nfa_state_T *out1;
+  int id;
+  int lastlist[2];  ///< 0: normal, 1: recursive
+  int val;
+};
+
+/// Structure used by the NFA matcher.
+typedef struct {
+  // These four members implement regprog_T.
+  regengine_T *engine;
+  unsigned regflags;
+  unsigned re_engine;
+  unsigned re_flags;
+  bool re_in_use;
+
+  nfa_state_T *start;   ///< points into state[]
+
+  int reganch;          ///< pattern starts with ^
+  int regstart;         ///< char at start of pattern
+  uint8_t *match_text;  ///< plain text to match with
+
+  int has_zend;         ///< pattern contains \ze
+  int has_backref;      ///< pattern contains \1 .. \9
+  int reghasz;
+  char *pattern;
+  int nsubexp;          ///< number of ()
+  int nstate;
+  nfa_state_T state[];
+} nfa_regprog_T;
+
+struct regengine {
+  /// bt_regcomp or nfa_regcomp
+  regprog_T *(*regcomp)(uint8_t *, int);
+  /// bt_regfree or nfa_regfree
+  void (*regfree)(regprog_T *);
+  /// bt_regexec_nl or nfa_regexec_nl
+  int (*regexec_nl)(regmatch_T *, uint8_t *, colnr_T, bool);
+  /// bt_regexec_mult or nfa_regexec_mult
+  int (*regexec_multi)(regmmatch_T *, win_T *, buf_T *, linenr_T, colnr_T, proftime_T *, int *);
+  // uint8_t *expr;
+};
+
 // Structure used to save the current input state, when it needs to be
 // restored after trying a match.  Used by reg_save() and reg_restore().
 // Also stores the length of "backpos".
@@ -5362,9 +5460,9 @@ static bool reg_save_equal(const regsave_T *save)
 
 // After a failed match restore the sub-expressions.
 #define restore_se(savep, posp, pp) { \
-  if (REG_MULTI)  /* NOLINT(readability/braces) */ \
+  if (REG_MULTI) \
   *(posp) = (savep)->se_u.pos; \
-  else  /* NOLINT */ \
+  else \
   *(pp) = (savep)->se_u.ptr; }
 
 // Tentatively set the sub-expression start to the current position (after
@@ -8687,9 +8785,9 @@ static void nfa_emit_equi_class(int c)
     case 0x1eb2:
     case 0x1eb4:
     case 0x1eb6:
-      EMIT2('A') EMIT2(A_grave) EMIT2(A_acute)  // NOLINT(whitespace/cast)
-      EMIT2(A_circumflex) EMIT2(A_virguilla)    // NOLINT(whitespace/cast)
-      EMIT2(A_diaeresis) EMIT2(A_ring)          // NOLINT(whitespace/cast)
+      EMIT2('A') EMIT2(A_grave) EMIT2(A_acute)
+      EMIT2(A_circumflex) EMIT2(A_virguilla)
+      EMIT2(A_diaeresis) EMIT2(A_ring)
       EMIT2(0x100) EMIT2(0x102) EMIT2(0x104)
       EMIT2(0x1cd) EMIT2(0x1de) EMIT2(0x1e0)
       EMIT2(0x1fa) EMIT2(0x200) EMIT2(0x202)
@@ -8768,8 +8866,8 @@ static void nfa_emit_equi_class(int c)
     case 0x1ec2:
     case 0x1ec4:
     case 0x1ec6:
-      EMIT2('E') EMIT2(E_grave) EMIT2(E_acute)  // NOLINT(whitespace/cast)
-      EMIT2(E_circumflex) EMIT2(E_diaeresis)    // NOLINT(whitespace/cast)
+      EMIT2('E') EMIT2(E_grave) EMIT2(E_acute)
+      EMIT2(E_circumflex) EMIT2(E_diaeresis)
       EMIT2(0x112) EMIT2(0x114) EMIT2(0x116)
       EMIT2(0x118) EMIT2(0x11a) EMIT2(0x204)
       EMIT2(0x206) EMIT2(0x228) EMIT2(0x246)
@@ -8837,8 +8935,8 @@ static void nfa_emit_equi_class(int c)
     case 0x1e2e:
     case 0x1ec8:
     case 0x1eca:
-      EMIT2('I') EMIT2(I_grave) EMIT2(I_acute)  // NOLINT(whitespace/cast)
-      EMIT2(I_circumflex) EMIT2(I_diaeresis)    // NOLINT(whitespace/cast)
+      EMIT2('I') EMIT2(I_grave) EMIT2(I_acute)
+      EMIT2(I_circumflex) EMIT2(I_diaeresis)
       EMIT2(0x128) EMIT2(0x12a) EMIT2(0x12c)
       EMIT2(0x12e) EMIT2(0x130) EMIT2(0x197)
       EMIT2(0x1cf) EMIT2(0x208) EMIT2(0x20a)
@@ -8947,9 +9045,9 @@ static void nfa_emit_equi_class(int c)
     case 0x1ede:
     case 0x1ee0:
     case 0x1ee2:
-      EMIT2('O') EMIT2(O_grave) EMIT2(O_acute)  // NOLINT(whitespace/cast)
-      EMIT2(O_circumflex) EMIT2(O_virguilla)    // NOLINT(whitespace/cast)
-      EMIT2(O_diaeresis) EMIT2(O_slash)         // NOLINT(whitespace/cast)
+      EMIT2('O') EMIT2(O_grave) EMIT2(O_acute)
+      EMIT2(O_circumflex) EMIT2(O_virguilla)
+      EMIT2(O_diaeresis) EMIT2(O_slash)
       EMIT2(0x14c) EMIT2(0x14e) EMIT2(0x150)
       EMIT2(0x19f) EMIT2(0x1a0) EMIT2(0x1d1)
       EMIT2(0x1ea) EMIT2(0x1ec) EMIT2(0x1fe)
@@ -9064,8 +9162,8 @@ static void nfa_emit_equi_class(int c)
     case 0x1eec:
     case 0x1eee:
     case 0x1ef0:
-      EMIT2('U') EMIT2(U_grave) EMIT2(U_acute)  // NOLINT(whitespace/cast)
-      EMIT2(U_diaeresis) EMIT2(U_circumflex)    // NOLINT(whitespace/cast)
+      EMIT2('U') EMIT2(U_grave) EMIT2(U_acute)
+      EMIT2(U_diaeresis) EMIT2(U_circumflex)
       EMIT2(0x168) EMIT2(0x16a)
       EMIT2(0x16c) EMIT2(0x16e) EMIT2(0x170)
       EMIT2(0x172) EMIT2(0x1af) EMIT2(0x1d3)
@@ -9168,9 +9266,9 @@ static void nfa_emit_equi_class(int c)
     case 0x1eb5:
     case 0x1eb7:
     case 0x2c65:
-      EMIT2('a') EMIT2(a_grave) EMIT2(a_acute)  // NOLINT(whitespace/cast)
-      EMIT2(a_circumflex) EMIT2(a_virguilla)    // NOLINT(whitespace/cast)
-      EMIT2(a_diaeresis) EMIT2(a_ring)          // NOLINT(whitespace/cast)
+      EMIT2('a') EMIT2(a_grave) EMIT2(a_acute)
+      EMIT2(a_circumflex) EMIT2(a_virguilla)
+      EMIT2(a_diaeresis) EMIT2(a_ring)
       EMIT2(0x101) EMIT2(0x103) EMIT2(0x105)
       EMIT2(0x1ce) EMIT2(0x1df) EMIT2(0x1e1)
       EMIT2(0x1fb) EMIT2(0x201) EMIT2(0x203)
@@ -9257,8 +9355,8 @@ static void nfa_emit_equi_class(int c)
     case 0x1ec3:
     case 0x1ec5:
     case 0x1ec7:
-      EMIT2('e') EMIT2(e_grave) EMIT2(e_acute)  // NOLINT(whitespace/cast)
-      EMIT2(e_circumflex) EMIT2(e_diaeresis)    // NOLINT(whitespace/cast)
+      EMIT2('e') EMIT2(e_grave) EMIT2(e_acute)
+      EMIT2(e_circumflex) EMIT2(e_diaeresis)
       EMIT2(0x113) EMIT2(0x115)
       EMIT2(0x117) EMIT2(0x119) EMIT2(0x11b)
       EMIT2(0x205) EMIT2(0x207) EMIT2(0x229)
@@ -9333,8 +9431,8 @@ static void nfa_emit_equi_class(int c)
     case 0x1e2f:
     case 0x1ec9:
     case 0x1ecb:
-      EMIT2('i') EMIT2(i_grave) EMIT2(i_acute)  // NOLINT(whitespace/cast)
-      EMIT2(i_circumflex) EMIT2(i_diaeresis)    // NOLINT(whitespace/cast)
+      EMIT2('i') EMIT2(i_grave) EMIT2(i_acute)
+      EMIT2(i_circumflex) EMIT2(i_diaeresis)
       EMIT2(0x129) EMIT2(0x12b) EMIT2(0x12d)
       EMIT2(0x12f) EMIT2(0x1d0) EMIT2(0x209)
       EMIT2(0x20b) EMIT2(0x268) EMIT2(0x1d96)
@@ -9450,9 +9548,9 @@ static void nfa_emit_equi_class(int c)
     case 0x1edf:
     case 0x1ee1:
     case 0x1ee3:
-      EMIT2('o') EMIT2(o_grave) EMIT2(o_acute)  // NOLINT(whitespace/cast)
-      EMIT2(o_circumflex) EMIT2(o_virguilla)    // NOLINT(whitespace/cast)
-      EMIT2(o_diaeresis) EMIT2(o_slash)         // NOLINT(whitespace/cast)
+      EMIT2('o') EMIT2(o_grave) EMIT2(o_acute)
+      EMIT2(o_circumflex) EMIT2(o_virguilla)
+      EMIT2(o_diaeresis) EMIT2(o_slash)
       EMIT2(0x14d) EMIT2(0x14f) EMIT2(0x151)
       EMIT2(0x1a1) EMIT2(0x1d2) EMIT2(0x1eb)
       EMIT2(0x1ed) EMIT2(0x1ff) EMIT2(0x20d)
@@ -9581,8 +9679,8 @@ static void nfa_emit_equi_class(int c)
     case 0x1eed:
     case 0x1eef:
     case 0x1ef1:
-      EMIT2('u') EMIT2(u_grave) EMIT2(u_acute)  // NOLINT(whitespace/cast)
-      EMIT2(u_circumflex) EMIT2(u_diaeresis)    // NOLINT(whitespace/cast)
+      EMIT2('u') EMIT2(u_grave) EMIT2(u_acute)
+      EMIT2(u_circumflex) EMIT2(u_diaeresis)
       EMIT2(0x169) EMIT2(0x16b)
       EMIT2(0x16d) EMIT2(0x16f) EMIT2(0x171)
       EMIT2(0x173) EMIT2(0x1d6) EMIT2(0x1d8)
@@ -9635,7 +9733,7 @@ static void nfa_emit_equi_class(int c)
     case 0x1ef5:
     case 0x1ef7:
     case 0x1ef9:
-      EMIT2('y') EMIT2(y_acute) EMIT2(y_diaeresis)  // NOLINT(whitespace/cast)
+      EMIT2('y') EMIT2(y_acute) EMIT2(y_diaeresis)
       EMIT2(0x177) EMIT2(0x1b4) EMIT2(0x233) EMIT2(0x24f)
       EMIT2(0x1e8f) EMIT2(0x1e99) EMIT2(0x1ef3)
       EMIT2(0x1ef5) EMIT2(0x1ef7) EMIT2(0x1ef9)

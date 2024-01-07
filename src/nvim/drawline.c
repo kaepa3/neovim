@@ -388,17 +388,16 @@ static void draw_foldcolumn(win_T *wp, winlinevars_T *wlv)
   int fdc = compute_foldcolumn(wp, 0);
   if (fdc > 0) {
     int attr = win_hl_attr(wp, use_cursor_line_highlight(wp, wlv->lnum) ? HLF_CLF : HLF_FC);
-    fill_foldcolumn(wp, wlv->foldinfo, wlv->lnum, attr, fdc, NULL);
-    assert(wlv->off == 0);
-    wlv->off = fdc;
+    fill_foldcolumn(wp, wlv->foldinfo, wlv->lnum, attr, fdc, &wlv->off, NULL);
   }
 }
 
 /// Draw the foldcolumn or fill "out_buffer". Assume monocell characters.
 ///
 /// @param fdc  Current width of the foldcolumn
-/// @param[out] out_buffer  Char array to write into, only used for 'statuscolumn'
-void fill_foldcolumn(win_T *wp, foldinfo_T foldinfo, linenr_T lnum, int attr, int fdc,
+/// @param[out] wlv_off  Pointer to linebuf offset, incremented for default column
+/// @param[out] out_buffer  Char array to fill, only used for 'statuscolumn'
+void fill_foldcolumn(win_T *wp, foldinfo_T foldinfo, linenr_T lnum, int attr, int fdc, int *wlv_off,
                      schar_T *out_buffer)
 {
   bool closed = foldinfo.fi_level != 0 && foldinfo.fi_lines > 0;
@@ -408,9 +407,8 @@ void fill_foldcolumn(win_T *wp, foldinfo_T foldinfo, linenr_T lnum, int attr, in
   // fits and use numbers to indicate the depth.
   int first_level = MAX(level - fdc - closed + 1, 1);
   int closedcol = MIN(fdc, level);
-  int i = 0;
 
-  for (i = 0; i < fdc; i++) {
+  for (int i = 0; i < fdc; i++) {
     int symbol = 0;
     if (i >= level) {
       symbol = ' ';
@@ -429,9 +427,9 @@ void fill_foldcolumn(win_T *wp, foldinfo_T foldinfo, linenr_T lnum, int attr, in
     if (out_buffer) {
       out_buffer[i] = schar_from_char(symbol);
     } else {
-      linebuf_vcol[i] = i >= level ? -1 : (i == closedcol - 1 && closed) ? -2 : -3;
-      linebuf_attr[i] = attr;
-      linebuf_char[i] = schar_from_char(symbol);
+      linebuf_vcol[*wlv_off] = i >= level ? -1 : (i == closedcol - 1 && closed) ? -2 : -3;
+      linebuf_attr[*wlv_off] = attr;
+      linebuf_char[(*wlv_off)++] = schar_from_char(symbol);
     }
   }
 }
@@ -565,9 +563,6 @@ static void draw_lnum_col(win_T *wp, winlinevars_T *wlv, int sign_num_attr, int 
 }
 
 /// Build and draw the 'statuscolumn' string for line "lnum" in window "wp".
-/// Fill "stcp" with the built status column string and attributes.
-///
-/// @param[out] stcp  Status column attributes
 static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int virtnum,
                            statuscol_T *stcp)
 {
@@ -581,11 +576,9 @@ static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int vir
   if (wp->w_statuscol_line_count != wp->w_nrwidth_line_count) {
     wp->w_statuscol_line_count = wp->w_nrwidth_line_count;
     set_vim_var_nr(VV_VIRTNUM, 0);
-    build_statuscol_str(wp, wp->w_nrwidth_line_count, 0, buf, stcp);
-    if (stcp->truncate > 0) {
-      // Add truncated width to avoid unnecessary redraws
-      int addwidth = MIN(stcp->truncate, MAX_NUMBERWIDTH - wp->w_nrwidth);
-      stcp->truncate = 0;
+    int width = build_statuscol_str(wp, wp->w_nrwidth_line_count, 0, buf, stcp);
+    if (width > stcp->width) {
+      int addwidth = MIN(width - stcp->width, MAX_STCWIDTH - stcp->width);
       stcp->width += addwidth;
       wp->w_nrwidth += addwidth;
       wp->w_nrwidth_width = wp->w_nrwidth;
@@ -596,13 +589,13 @@ static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int vir
 
   int width = build_statuscol_str(wp, lnum, relnum, buf, stcp);
   // Force a redraw in case of error or when truncated
-  if (*wp->w_p_stc == NUL || (stcp->truncate > 0 && wp->w_nrwidth < MAX_NUMBERWIDTH)) {
+  if (*wp->w_p_stc == NUL || (width > stcp->width && stcp->width < MAX_STCWIDTH)) {
     if (*wp->w_p_stc == NUL) {  // 'statuscolumn' reset due to error
       wp->w_nrwidth_line_count = 0;
       wp->w_nrwidth = (wp->w_p_nu || wp->w_p_rnu) * number_width(wp);
     } else {  // Avoid truncating 'statuscolumn'
+      wp->w_nrwidth += MIN(width - stcp->width, MAX_STCWIDTH - stcp->width);
       wp->w_nrwidth_width = wp->w_nrwidth;
-      wp->w_nrwidth = MIN(MAX_NUMBERWIDTH, wp->w_nrwidth + stcp->truncate);
     }
     wp->w_redr_statuscol = true;
     return;

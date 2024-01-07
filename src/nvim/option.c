@@ -209,7 +209,7 @@ static void set_init_default_backupskip(void)
       p = "/tmp";
 # endif
       mustfree = false;
-    } else  // NOLINT(readability/braces)
+    } else
 #endif
     {
       p = vim_getenv(names[n]);
@@ -5459,6 +5459,10 @@ void set_context_in_set_cmd(expand_T *xp, char *arg, int opt_flags)
   }
   if (options[opt_idx].var == &p_ft) {
     xp->xp_context = EXPAND_FILETYPE;
+    return;
+  }
+  if (options[opt_idx].var == &p_keymap) {
+    xp->xp_context = EXPAND_KEYMAP;
     return;
   }
 

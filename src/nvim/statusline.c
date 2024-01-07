@@ -884,9 +884,9 @@ int build_statuscol_str(win_T *wp, linenr_T lnum, linenr_T relnum, char *buf, st
 
   if (fillclick) {
     stl_clear_click_defs(wp->w_statuscol_click_defs, wp->w_statuscol_click_defs_size);
-    wp->w_statuscol_click_defs = stl_alloc_click_defs(wp->w_statuscol_click_defs, stcp->width,
+    wp->w_statuscol_click_defs = stl_alloc_click_defs(wp->w_statuscol_click_defs, width,
                                                       &wp->w_statuscol_click_defs_size);
-    stl_fill_click_defs(wp->w_statuscol_click_defs, clickrec, buf, stcp->width, false);
+    stl_fill_click_defs(wp->w_statuscol_click_defs, clickrec, buf, width, false);
   }
 
   return width;
@@ -1640,8 +1640,8 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
       char *p = NULL;
       if (fold) {
         schar_T fold_buf[10];
-        fill_foldcolumn(wp, stcp->foldinfo,
-                        (linenr_T)get_vim_var_nr(VV_LNUM), 0, fdc, fold_buf);
+        fill_foldcolumn(wp, stcp->foldinfo, (linenr_T)get_vim_var_nr(VV_LNUM),
+                        0, fdc, NULL, fold_buf);
         stl_items[curitem].minwid = -((stcp->use_cul ? HLF_CLF : HLF_FC) + 1);
         size_t buflen = 0;
         // TODO(bfredl): this is very backwards. we must support schar_T
@@ -1964,11 +1964,7 @@ int build_stl_str_hl(win_T *wp, char *out, size_t outlen, char *fmt, OptIndex op
   // What follows is post-processing to handle alignment and highlighting.
 
   int width = vim_strsize(out);
-  // Return truncated width for 'statuscolumn'
-  if (stcp != NULL && width > stcp->width) {
-    stcp->truncate = width - stcp->width;
-  }
-  if (maxwidth > 0 && width > maxwidth) {
+  if (maxwidth > 0 && width > maxwidth && (!stcp || width > MAX_STCWIDTH)) {
     // Result is too long, must truncate somewhere.
     int item_idx = 0;
     char *trunc_p;

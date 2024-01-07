@@ -425,6 +425,12 @@ end
 ---     Runs the on_attach function from the client's config if it was defined.
 ---     Useful for buffer-local setup.
 ---
+---  - supports_method(method, [opts]): boolean
+---     Checks if a client supports a given method.
+---     Always returns true for unknown off-spec methods.
+---     [opts] is a optional `{bufnr?: integer}` table.
+---     Some language server capabilities can be file specific.
+---
 --- - Members
 ---  - {id} (number): The id allocated to the client.
 ---
@@ -1347,7 +1353,7 @@ function lsp.start_client(config)
   ---@param context? {bufnr: integer}
   ---@param handler? lsp.Handler only called if a server command
   function client._exec_cmd(command, context, handler)
-    context = vim.deepcopy(context or {}) --[[@as lsp.HandlerContext]]
+    context = vim.deepcopy(context or {}, true) --[[@as lsp.HandlerContext]]
     context.bufnr = context.bufnr or api.nvim_get_current_buf()
     context.client_id = client.id
     local cmdname = command.command

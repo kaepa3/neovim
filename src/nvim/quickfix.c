@@ -107,7 +107,7 @@ typedef enum {
 /// Usually the list contains one or more entries. But an empty list can be
 /// created using setqflist()/setloclist() with a title and/or user context
 /// information and entries can be added later using setqflist()/setloclist().
-typedef struct qf_list_S {
+typedef struct {
   unsigned qf_id;         ///< Unique identifier for this list
   qfltype_T qfl_type;
   qfline_T *qf_start;     ///< pointer to the first error
@@ -232,7 +232,7 @@ typedef struct {
 } qffields_T;
 
 /// :vimgrep command arguments
-typedef struct vgr_args_S {
+typedef struct {
   int tomatch;          ///< maximum number of matches to find
   char *spat;          ///< search pattern
   int flags;             ///< search modifier
@@ -272,7 +272,7 @@ enum { QF_WINHEIGHT = 10, };  ///< default height for quickfix window
 // Macro to loop through all the items in a quickfix list
 // Quickfix item index starts from 1, so i below starts at 1
 #define FOR_ALL_QFL_ITEMS(qfl, qfp, i) \
-  for ((i) = 1, (qfp) = (qfl)->qf_start;  /* NOLINT(readability/braces) */ \
+  for ((i) = 1, (qfp) = (qfl)->qf_start; \
        !got_int && (i) <= (qfl)->qf_count && (qfp) != NULL; \
        (i)++, (qfp) = (qfp)->qf_next)
 
