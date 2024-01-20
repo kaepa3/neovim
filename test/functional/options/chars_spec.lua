@@ -1,11 +1,12 @@
 local helpers = require('test.functional.helpers')(after_each)
 local Screen = require('test.functional.ui.screen')
 local clear, command = helpers.clear, helpers.command
+local pcall_err = helpers.pcall_err
 local eval = helpers.eval
 local eq = helpers.eq
-local exc_exec = helpers.exc_exec
 local insert = helpers.insert
 local feed = helpers.feed
+local api = helpers.api
 
 describe("'fillchars'", function()
   local screen
@@ -15,11 +16,6 @@ describe("'fillchars'", function()
     screen = Screen.new(25, 5)
     screen:attach()
   end)
-
-  local function shouldfail(val, errval)
-    errval = errval or val
-    eq('Vim(set):E474: Invalid argument: fillchars=' .. errval, exc_exec('set fillchars=' .. val))
-  end
 
   describe('"eob" flag', function()
     it("uses '~' by default", function()
@@ -53,12 +49,32 @@ describe("'fillchars'", function()
       ]])
     end)
 
+    it('supports composing multibyte char', function()
+      command('set fillchars=eob:å̲')
+      screen:expect([[
+        ^                         |
+        å̲                        |*3
+                                 |
+      ]])
+    end)
+
     it('handles invalid values', function()
-      shouldfail('eob:') -- empty string
-      shouldfail('eob:馬') -- doublewidth char
-      shouldfail('eob:å̲') -- composing chars
-      shouldfail('eob:xy') -- two ascii chars
-      shouldfail('eob:\255', 'eob:<ff>') -- invalid UTF-8
+      eq(
+        'Vim(set):E1511: Wrong number of characters for field "eob": fillchars=eob:',
+        pcall_err(command, 'set fillchars=eob:') -- empty string
+      )
+      eq(
+        'Vim(set):E1512: Wrong character width for field "eob": fillchars=eob:馬',
+        pcall_err(command, 'set fillchars=eob:馬') -- doublewidth char
+      )
+      eq(
+        'Vim(set):E1511: Wrong number of characters for field "eob": fillchars=eob:xy',
+        pcall_err(command, 'set fillchars=eob:xy') -- two ascii chars
+      )
+      eq(
+        'Vim(set):E1512: Wrong character width for field "eob": fillchars=eob:<ff>',
+        pcall_err(command, 'set fillchars=eob:\255') -- invalid UTF-8
+      )
     end)
   end)
 
@@ -175,6 +191,30 @@ describe("'listchars'", function()
     screen:expect([[
       >------->-------^>-------$│<------><------><------>|
       ~                        │~                       |*3
+                                                        |
+    ]])
+  end)
+
+  it('supports composing chars', function()
+    screen:set_default_attr_ids {
+      [1] = { foreground = Screen.colors.Blue1, bold = true },
+    }
+    feed('i<tab><tab><tab>x<esc>')
+    command('set list laststatus=0')
+    -- tricky: the tab value forms three separate one-cell chars,
+    -- thus it should be accepted despite being a mess.
+    command('set listchars=tab:d̞̄̃̒̉̎ò́̌̌̂̐l̞̀̄̆̌̚,eol:å̲')
+    screen:expect([[
+      {1:d̞̄̃̒̉̎ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐l̞̀̄̆̌̚d̞̄̃̒̉̎ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐l̞̀̄̆̌̚d̞̄̃̒̉̎ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐l̞̀̄̆̌̚}^x{1:å̲}                        |
+      {1:~                                                 }|*3
+                                                        |
+    ]])
+
+    api.nvim__invalidate_glyph_cache()
+    screen:_reset()
+    screen:expect([[
+      {1:d̞̄̃̒̉̎ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐l̞̀̄̆̌̚d̞̄̃̒̉̎ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐l̞̀̄̆̌̚d̞̄̃̒̉̎ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐ò́̌̌̂̐l̞̀̄̆̌̚}^x{1:å̲}                        |
+      {1:~                                                 }|*3
                                                         |
     ]])
   end)

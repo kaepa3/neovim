@@ -20,6 +20,7 @@
 #include "nvim/grid.h"
 #include "nvim/highlight_group.h"
 #include "nvim/marktree.h"
+#include "nvim/marktree_defs.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -150,7 +151,7 @@ static Array extmark_to_array(MTPair extmark, bool id, bool add_dict, bool hl_na
 
     PUT(dict, "right_gravity", BOOLEAN_OBJ(mt_right(start)));
 
-    if (extmark.end_pos.row >= 0) {
+    if (mt_paired(start)) {
       PUT(dict, "end_row", INTEGER_OBJ(extmark.end_pos.row));
       PUT(dict, "end_col", INTEGER_OBJ(extmark.end_pos.col));
       PUT(dict, "end_right_gravity", BOOLEAN_OBJ(extmark.end_right_gravity));
@@ -214,8 +215,8 @@ ArrayOf(Integer) nvim_buf_get_extmark_by_id(Buffer buffer, Integer ns_id,
   return extmark_to_array(extmark, false, details, hl_name);
 }
 
-/// Gets |extmarks| (including |signs|) in "traversal order" from a |charwise|
-/// region defined by buffer positions (inclusive, 0-indexed |api-indexing|).
+/// Gets |extmarks| in "traversal order" from a |charwise| region defined by
+/// buffer positions (inclusive, 0-indexed |api-indexing|).
 ///
 /// Region can be given as (row,col) tuples, or valid extmark ids (whose
 /// positions define the bounds). 0 and -1 are understood as (0,0) and (-1,-1)
@@ -232,6 +233,10 @@ ArrayOf(Integer) nvim_buf_get_extmark_by_id(Buffer buffer, Integer ns_id,
 /// Note: when using extmark ranges (marks with a end_row/end_col position)
 /// the `overlap` option might be useful. Otherwise only the start position
 /// of an extmark will be considered.
+///
+/// Note: legacy signs placed through the |:sign| commands are implemented
+/// as extmarks and will show up here. Their details array will contain a
+/// `sign_name` field.
 ///
 /// Example:
 ///
@@ -433,7 +438,9 @@ Array nvim_buf_get_extmarks(Buffer buffer, Integer ns_id, Object start, Object e
 ///                   if text around the mark was deleted and then restored by undo.
 ///                   Defaults to true.
 ///               - invalidate : boolean that indicates whether to hide the
-///                   extmark if the entirety of its range is deleted. If
+///                   extmark if the entirety of its range is deleted. For
+///                   hidden marks, an "invalid" key is added to the "details"
+///                   array of |nvim_buf_get_extmarks()| and family. If
 ///                   "undo_restore" is false, the extmark is deleted instead.
 ///               - priority: a priority value for the highlight group or sign
 ///                   attribute. For example treesitter highlighting uses a

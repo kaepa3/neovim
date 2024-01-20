@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "klib/kvec.h"
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/stream.h"
@@ -13,6 +14,7 @@
 #include "nvim/memory.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/rbuffer.h"
 #include "nvim/strings.h"
 #include "nvim/tui/input.h"
@@ -237,13 +239,13 @@ static size_t handle_termkey_modifiers(TermKeyKey *key, char *buf, size_t buflen
 {
   size_t len = 0;
   if (key->modifiers & TERMKEY_KEYMOD_SHIFT) {  // Shift
-    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "S-");
+    len += (size_t)snprintf(buf + len, buflen - len, "S-");
   }
   if (key->modifiers & TERMKEY_KEYMOD_ALT) {  // Alt
-    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "A-");
+    len += (size_t)snprintf(buf + len, buflen - len, "A-");
   }
   if (key->modifiers & TERMKEY_KEYMOD_CTRL) {  // Ctrl
-    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "C-");
+    len += (size_t)snprintf(buf + len, buflen - len, "C-");
   }
   assert(len < buflen);
   return len;

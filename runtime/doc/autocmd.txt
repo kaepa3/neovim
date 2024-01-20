@@ -784,9 +784,6 @@ OptionSet			After setting an option (except during
 				are not global-local it is the old local
 				value.
 
-				OptionSet is not triggered on startup and for
-				the 'key' option for obvious reasons.
-
 				Usage example: Check for the existence of the
 				directory in the 'backupdir' and 'undodir'
 				options, create the directory if it doesn't
@@ -799,6 +796,8 @@ OptionSet			After setting an option (except during
 
 				Non-recursive: |:set| in the autocommand does
 				not trigger OptionSet again.
+
+				Not triggered on startup.
 
 							*QuickFixCmdPre*
 QuickFixCmdPre			Before a quickfix command is run (|:make|,
@@ -986,6 +985,11 @@ TermLeave			After leaving |Terminal-mode|.
 TermClose			When a |terminal| job ends.
 				Sets these |v:event| keys:
 				    status
+							*TermRequest*
+TermRequest			When a |terminal| job emits an OSC or DCS
+				sequence. Sets |v:termrequest|. When used from
+				Lua, the request string is included in the
+				"data" field of the autocommand callback.
 							*TermResponse*
 TermResponse			When Nvim receives an OSC or DCS response from
 				the terminal.  Sets |v:termresponse|. When used

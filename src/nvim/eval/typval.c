@@ -19,10 +19,12 @@
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
 #include "nvim/garray.h"
-#include "nvim/gettext.h"
+#include "nvim/garray_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/hashtab.h"
-#include "nvim/lib/queue.h"
+#include "nvim/hashtab_defs.h"
+#include "nvim/lib/queue_defs.h"
 #include "nvim/lua/executor.h"
 #include "nvim/macros_defs.h"
 #include "nvim/mbyte.h"
@@ -4342,6 +4344,22 @@ int tv_check_for_string_or_number_arg(const typval_T *const args, const int idx)
     return FAIL;
   }
   return OK;
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a buffer number.
+/// Buffer number can be a number or a string.
+int tv_check_for_buffer_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  return tv_check_for_string_or_number_arg(args, idx);
+}
+
+/// Give an error and return FAIL unless "args[idx]" is a line number.
+/// Line number can be a number or a string.
+int tv_check_for_lnum_arg(const typval_T *const args, const int idx)
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_WARN_UNUSED_RESULT FUNC_ATTR_PURE
+{
+  return tv_check_for_string_or_number_arg(args, idx);
 }
 
 /// Give an error and return FAIL unless "args[idx]" is a string or a list.

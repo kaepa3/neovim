@@ -2,7 +2,7 @@ local helpers = require('test.functional.helpers')(after_each)
 local Screen = require('test.functional.ui.screen')
 local clear, command, eq = helpers.clear, helpers.command, helpers.eq
 local insert = helpers.insert
-local meths = helpers.meths
+local api = helpers.api
 local assert_alive = helpers.assert_alive
 
 describe('ui/ext_tabline', function()
@@ -25,8 +25,8 @@ describe('ui/ext_tabline', function()
     command('tabedit another-tab')
 
     local expected_tabs = {
-      { tab = { id = 1 }, name = '[No Name]' },
-      { tab = { id = 2 }, name = 'another-tab' },
+      { tab = 1, name = '[No Name]' },
+      { tab = 2, name = 'another-tab' },
     }
     screen:expect {
       grid = [[
@@ -35,7 +35,7 @@ describe('ui/ext_tabline', function()
                                |
     ]],
       condition = function()
-        eq({ id = 2 }, event_curtab)
+        eq(2, event_curtab)
         eq(expected_tabs, event_tabs)
       end,
     }
@@ -48,7 +48,7 @@ describe('ui/ext_tabline', function()
                                |
     ]],
       condition = function()
-        eq({ id = 1 }, event_curtab)
+        eq(1, event_curtab)
         eq(expected_tabs, event_tabs)
       end,
     }
@@ -56,7 +56,7 @@ describe('ui/ext_tabline', function()
 
   it('buffer UI events', function()
     local expected_buffers_initial = {
-      { buffer = { id = 1 }, name = '[No Name]' },
+      { buffer = 1, name = '[No Name]' },
     }
 
     screen:expect {
@@ -66,7 +66,7 @@ describe('ui/ext_tabline', function()
                                |
     ]],
       condition = function()
-        eq({ id = 1 }, event_curbuf)
+        eq(1, event_curbuf)
         eq(expected_buffers_initial, event_buffers)
       end,
     }
@@ -75,8 +75,8 @@ describe('ui/ext_tabline', function()
     command('bnext')
 
     local expected_buffers = {
-      { buffer = { id = 1 }, name = '[No Name]' },
-      { buffer = { id = 2 }, name = 'another-buffer' },
+      { buffer = 1, name = '[No Name]' },
+      { buffer = 2, name = 'another-buffer' },
     }
     screen:expect {
       grid = [[
@@ -85,7 +85,7 @@ describe('ui/ext_tabline', function()
                                |
     ]],
       condition = function()
-        eq({ id = 2 }, event_curbuf)
+        eq(2, event_curbuf)
         eq(expected_buffers, event_buffers)
       end,
     }
@@ -138,7 +138,7 @@ describe('tabline', function()
     command('tabnew')
     insert('tab2')
     command('tabprev')
-    meths.set_option_value('tabline', '%1T口口%2Ta' .. ('b'):rep(38) .. '%999Xc', {})
+    api.nvim_set_option_value('tabline', '%1T口口%2Ta' .. ('b'):rep(38) .. '%999Xc', {})
     screen:expect {
       grid = [[
       {1:<abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc }|
@@ -148,7 +148,7 @@ describe('tabline', function()
     ]],
     }
     assert_alive()
-    meths.input_mouse('left', 'press', '', 0, 0, 1)
+    api.nvim_input_mouse('left', 'press', '', 0, 0, 1)
     screen:expect {
       grid = [[
       {1:<abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc }|
@@ -157,7 +157,7 @@ describe('tabline', function()
                                                 |
     ]],
     }
-    meths.input_mouse('left', 'press', '', 0, 0, 0)
+    api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
     screen:expect {
       grid = [[
       {1:<abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc }|
@@ -166,7 +166,7 @@ describe('tabline', function()
                                                 |
     ]],
     }
-    meths.input_mouse('left', 'press', '', 0, 0, 39)
+    api.nvim_input_mouse('left', 'press', '', 0, 0, 39)
     screen:expect {
       grid = [[
       {1:<abbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbc }|
@@ -175,7 +175,7 @@ describe('tabline', function()
                                                 |
     ]],
     }
-    meths.input_mouse('left', 'press', '', 0, 0, 40)
+    api.nvim_input_mouse('left', 'press', '', 0, 0, 40)
     screen:expect {
       grid = [[
       tab^1                                      |

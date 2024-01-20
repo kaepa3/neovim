@@ -1,10 +1,10 @@
 local helpers = require('test.functional.helpers')(after_each)
 local Screen = require('test.functional.ui.screen')
 local feed, eq, eval, ok = helpers.feed, helpers.eq, helpers.eval, helpers.ok
-local source, nvim_async, run = helpers.source, helpers.nvim_async, helpers.run
-local clear, command, funcs = helpers.clear, helpers.command, helpers.funcs
+local source, async_meths, run = helpers.source, helpers.async_meths, helpers.run
+local clear, command, fn = helpers.clear, helpers.command, helpers.fn
 local exc_exec = helpers.exc_exec
-local curbufmeths = helpers.curbufmeths
+local api = helpers.api
 local load_adjust = helpers.load_adjust
 local retry = helpers.retry
 
@@ -52,9 +52,9 @@ describe('timers', function()
       endfunc
     ]])
     eval("timer_start(10, 'MyHandler', {'repeat': -1})")
-    nvim_async('command', 'sleep 10')
+    async_meths.nvim_command('sleep 10')
     eq(-1, eval('g:val')) -- timer did nothing yet.
-    nvim_async('command', 'let g:val = 0')
+    async_meths.nvim_command('let g:val = 0')
     run(nil, nil, nil, load_adjust(20))
     retry(nil, nil, function()
       eq(2, eval('g:val'))
@@ -70,7 +70,7 @@ describe('timers', function()
   end)
 
   it('can be started during sleep', function()
-    nvim_async('command', 'sleep 10')
+    async_meths.nvim_command('sleep 10')
     -- this also tests that remote requests works during sleep
     eq(0, eval("[timer_start(10, 'MyHandler', {'repeat': 2}), g:val][1]"))
     run(nil, nil, nil, load_adjust(20))
@@ -94,7 +94,7 @@ describe('timers', function()
 
   it('are triggered in blocking getchar() call', function()
     command("call timer_start(5, 'MyHandler', {'repeat': -1})")
-    nvim_async('command', 'let g:val = 0 | let g:c = getchar()')
+    async_meths.nvim_command('let g:val = 0 | let g:c = getchar()')
     retry(nil, nil, function()
       local val = eval('g:val')
       ok(val >= 2, '>= 2', tostring(val))
@@ -111,7 +111,7 @@ describe('timers', function()
       [1] = { bold = true, foreground = Screen.colors.Blue },
     })
 
-    curbufmeths.set_lines(0, -1, true, { 'ITEM 1', 'ITEM 2' })
+    api.nvim_buf_set_lines(0, 0, -1, true, { 'ITEM 1', 'ITEM 2' })
     source([[
       let g:cont = 0
       func! AddItem(timer)
@@ -128,8 +128,10 @@ describe('timers', function()
         redraw
       endfunc
     ]])
-    nvim_async('command', 'let g:c2 = getchar()')
-    nvim_async('command', 'call timer_start(' .. load_adjust(100) .. ", 'AddItem', {'repeat': -1})")
+    async_meths.nvim_command('let g:c2 = getchar()')
+    async_meths.nvim_command(
+      'call timer_start(' .. load_adjust(100) .. ", 'AddItem', {'repeat': -1})"
+    )
 
     screen:expect([[
       ^ITEM 1                                  |
@@ -137,7 +139,7 @@ describe('timers', function()
       {1:~                                       }|*3
                                               |
     ]])
-    nvim_async('command', 'let g:cont = 1')
+    async_meths.nvim_command('let g:cont = 1')
 
     screen:expect([[
       ^ITEM 1                                  |
@@ -165,7 +167,7 @@ describe('timers', function()
     local t_init_val = eval("[timer_start(5, 'MyHandler', {'repeat': -1}), g:val]")
     eq(0, t_init_val[2])
     run(nil, nil, nil, load_adjust(30))
-    funcs.timer_stop(t_init_val[1])
+    fn.timer_stop(t_init_val[1])
     local count = eval('g:val')
     run(nil, load_adjust(300), nil, load_adjust(30))
     local count2 = eval('g:val')

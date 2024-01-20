@@ -790,7 +790,7 @@ end
 --- Note that if the input is of type `MarkupContent` and its kind is `plaintext`,
 --- then the corresponding value is returned without further modifications.
 ---
----@param input (`MarkedString` | `MarkedString[]` | `MarkupContent`)
+---@param input (lsp.MarkedString | lsp.MarkedString[] | lsp.MarkupContent)
 ---@param contents (table|nil) List of strings to extend with converted lines. Defaults to {}.
 ---@return string[] extended with lines of converted markdown.
 ---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_hover
@@ -2115,8 +2115,8 @@ end
 --- Returns the UTF-32 and UTF-16 offsets for a position in a certain buffer.
 ---
 ---@param buf integer buffer number (0 for current)
----@param row 0-indexed line
----@param col 0-indexed byte offset in line
+---@param row integer 0-indexed line
+---@param col integer 0-indexed byte offset in line
 ---@param offset_encoding string utf-8|utf-16|utf-32 defaults to `offset_encoding` of first client of `buf`
 ---@return integer `offset_encoding` index of the character in line {row} column {col} in buffer {buf}
 function M.character_offset(buf, row, col, offset_encoding)
@@ -2139,8 +2139,10 @@ end
 ---
 ---@param settings table language server settings
 ---@param section  string indicating the field of the settings table
----@return table|string The value of settings accessed via section
+---@return table|string|vim.NIL The value of settings accessed via section. `vim.NIL` if not found.
+---@deprecated
 function M.lookup_section(settings, section)
+  vim.deprecate('vim.lsp.util.lookup_section()', 'vim.tbl_get() with `vim.split`', '0.12')
   for part in vim.gsplit(section, '.', { plain = true }) do
     settings = settings[part]
     if settings == nil then

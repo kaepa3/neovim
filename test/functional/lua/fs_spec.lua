@@ -1,5 +1,4 @@
 local helpers = require('test.functional.helpers')(after_each)
-local uv = require('luv')
 
 local clear = helpers.clear
 local exec_lua = helpers.exec_lua
@@ -7,8 +6,8 @@ local eq = helpers.eq
 local mkdir_p = helpers.mkdir_p
 local rmdir = helpers.rmdir
 local nvim_dir = helpers.nvim_dir
-local test_build_dir = helpers.test_build_dir
-local test_source_path = helpers.test_source_path
+local test_build_dir = helpers.paths.test_build_dir
+local test_source_path = helpers.paths.test_source_path
 local nvim_prog = helpers.nvim_prog
 local is_os = helpers.is_os
 local mkdir = helpers.mkdir
@@ -293,7 +292,7 @@ describe('vim.fs', function()
       eq('/', vim.fs.normalize('/'))
     end)
     it('works with ~', function()
-      eq(vim.fs.normalize(uv.os_homedir()) .. '/src/foo', vim.fs.normalize('~/src/foo'))
+      eq(vim.fs.normalize(vim.uv.os_homedir()) .. '/src/foo', vim.fs.normalize('~/src/foo'))
     end)
     it('works with environment variables', function()
       local xdg_config_home = test_build_dir .. '/.config'

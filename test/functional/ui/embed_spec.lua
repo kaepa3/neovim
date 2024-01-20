@@ -1,4 +1,4 @@
-local uv = require 'luv'
+local uv = vim.uv
 
 local helpers = require('test.functional.helpers')(after_each)
 local Screen = require('test.functional.ui.screen')
@@ -8,7 +8,7 @@ local eq = helpers.eq
 local neq = helpers.neq
 local clear = helpers.clear
 local ok = helpers.ok
-local funcs = helpers.funcs
+local fn = helpers.fn
 local nvim_prog = helpers.nvim_prog
 local retry = helpers.retry
 
@@ -26,7 +26,7 @@ local function test_embed(ext_linegrid)
       [3] = { bold = true, foreground = Screen.colors.Blue1 },
       [4] = { bold = true, foreground = Screen.colors.Green },
       [5] = { bold = true, reverse = true },
-      [6] = { foreground = Screen.colors.NvimDarkGrey3, background = Screen.colors.NvimLightGrey1 },
+      [6] = { foreground = Screen.colors.NvimLightGrey3, background = Screen.colors.NvimDarkGrey3 },
       [7] = { foreground = Screen.colors.NvimDarkRed },
       [8] = { foreground = Screen.colors.NvimDarkCyan },
     })
@@ -171,6 +171,56 @@ describe('--embed UI', function()
     }
     eq({ [16711935] = true }, seen) -- we only saw the last one, despite 16777215 was set internally earlier
   end)
+
+  it('updates cwd of attached UI #21771', function()
+    clear { args_rm = { '--headless' } }
+
+    local screen = Screen.new(40, 8)
+    screen:attach()
+
+    screen:expect {
+      condition = function()
+        eq(helpers.paths.test_source_path, screen.pwd)
+      end,
+    }
+
+    -- Change global cwd
+    helpers.command(string.format('cd %s/src/nvim', helpers.paths.test_source_path))
+
+    screen:expect {
+      condition = function()
+        eq(string.format('%s/src/nvim', helpers.paths.test_source_path), screen.pwd)
+      end,
+    }
+
+    -- Split the window and change the cwd in the split
+    helpers.command('new')
+    helpers.command(string.format('lcd %s/test', helpers.paths.test_source_path))
+
+    screen:expect {
+      condition = function()
+        eq(string.format('%s/test', helpers.paths.test_source_path), screen.pwd)
+      end,
+    }
+
+    -- Move to the original window
+    helpers.command('wincmd p')
+
+    screen:expect {
+      condition = function()
+        eq(string.format('%s/src/nvim', helpers.paths.test_source_path), screen.pwd)
+      end,
+    }
+
+    -- Change global cwd again
+    helpers.command(string.format('cd %s', helpers.paths.test_source_path))
+
+    screen:expect {
+      condition = function()
+        eq(helpers.paths.test_source_path, screen.pwd)
+      end,
+    }
+  end)
 end)
 
 describe('--embed --listen UI', function()
@@ -178,7 +228,7 @@ describe('--embed --listen UI', function()
     helpers.skip(helpers.is_os('win'))
     clear()
     local child_server = assert(helpers.new_pipename())
-    funcs.jobstart({
+    fn.jobstart({
       nvim_prog,
       '--embed',
       '--listen',

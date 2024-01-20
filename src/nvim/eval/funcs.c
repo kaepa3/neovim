@@ -19,14 +19,18 @@
 
 #include "auto/config.h"
 #include "nvim/api/private/converter.h"
+#include "nvim/api/private/defs.h"
 #include "nvim/api/private/dispatch.h"
 #include "nvim/api/private/helpers.h"
 #include "nvim/api/vim.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/assert_defs.h"
 #include "nvim/autocmd.h"
+#include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
+#include "nvim/buffer_defs.h"
 #include "nvim/channel.h"
+#include "nvim/channel_defs.h"
 #include "nvim/charset.h"
 #include "nvim/cmdexpand.h"
 #include "nvim/cmdexpand_defs.h"
@@ -45,21 +49,26 @@
 #include "nvim/eval/userfunc.h"
 #include "nvim/eval/vars.h"
 #include "nvim/eval/window.h"
+#include "nvim/event/defs.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
 #include "nvim/event/process.h"
 #include "nvim/event/time.h"
 #include "nvim/ex_cmds.h"
+#include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_docmd.h"
 #include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/file_search.h"
 #include "nvim/fileio.h"
 #include "nvim/garray.h"
+#include "nvim/garray_defs.h"
 #include "nvim/getchar.h"
-#include "nvim/gettext.h"
+#include "nvim/getchar_defs.h"
+#include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
+#include "nvim/grid_defs.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
 #include "nvim/indent.h"
@@ -71,24 +80,34 @@
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/mark.h"
+#include "nvim/mark_defs.h"
 #include "nvim/math.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
+#include "nvim/memory_defs.h"
 #include "nvim/menu.h"
+#include "nvim/menu_defs.h"
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/msgpack_rpc/channel.h"
+#include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
+#include "nvim/normal_defs.h"
 #include "nvim/ops.h"
 #include "nvim/option.h"
+#include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/dl.h"
 #include "nvim/os/fileio.h"
+#include "nvim/os/fileio_defs.h"
 #include "nvim/os/fs.h"
+#include "nvim/os/fs_defs.h"
 #include "nvim/os/os.h"
+#include "nvim/os/os_defs.h"
 #include "nvim/os/pty_process.h"
 #include "nvim/os/shell.h"
 #include "nvim/os/stdpaths_defs.h"
@@ -99,12 +118,15 @@
 #include "nvim/pos_defs.h"
 #include "nvim/profile.h"
 #include "nvim/regexp.h"
+#include "nvim/regexp_defs.h"
 #include "nvim/runtime.h"
+#include "nvim/runtime_defs.h"
 #include "nvim/search.h"
 #include "nvim/sha256.h"
 #include "nvim/spell.h"
 #include "nvim/spellsuggest.h"
 #include "nvim/state.h"
+#include "nvim/state_defs.h"
 #include "nvim/strings.h"
 #include "nvim/syntax.h"
 #include "nvim/tag.h"
@@ -4709,6 +4731,151 @@ theend:
   p_cpo = save_cpo;
 }
 
+/// Return all the matches in string "str" for pattern "rmp".
+/// The matches are returned in the List "mlist".
+/// If "submatches" is true, then submatch information is also returned.
+/// "matchbuf" is true when called for matchbufline().
+static void get_matches_in_str(const char *str, regmatch_T *rmp, list_T *mlist, int idx,
+                               bool submatches, bool matchbuf)
+{
+  size_t len = strlen(str);
+  int match = 0;
+  colnr_T startidx = 0;
+
+  while (true) {
+    match = vim_regexec_nl(rmp, str, startidx);
+    if (!match) {
+      break;
+    }
+
+    dict_T *d = tv_dict_alloc();
+    tv_list_append_dict(mlist, d);
+
+    if (matchbuf) {
+      tv_dict_add_nr(d, S_LEN("lnum"), idx);
+    } else {
+      tv_dict_add_nr(d, S_LEN("idx"), idx);
+    }
+
+    tv_dict_add_nr(d, S_LEN("byteidx"),
+                   (colnr_T)(rmp->startp[0] - str));
+
+    tv_dict_add_str_len(d, S_LEN("text"), rmp->startp[0],
+                        (int)(rmp->endp[0] - rmp->startp[0]));
+
+    if (submatches) {
+      list_T *sml = tv_list_alloc(NSUBEXP - 1);
+
+      tv_dict_add_list(d, S_LEN("submatches"), sml);
+
+      // return a list with the submatches
+      for (int i = 1; i < NSUBEXP; i++) {
+        if (rmp->endp[i] == NULL) {
+          tv_list_append_string(sml, "", 0);
+        } else {
+          tv_list_append_string(sml, rmp->startp[i], rmp->endp[i] - rmp->startp[i]);
+        }
+      }
+    }
+    startidx = (colnr_T)(rmp->endp[0] - str);
+    if (startidx >= (colnr_T)len || str + startidx <= rmp->startp[0]) {
+      break;
+    }
+  }
+}
+
+/// "matchbufline()" function
+static void f_matchbufline(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  rettv->vval.v_number = -1;
+  tv_list_alloc_ret(rettv, kListLenUnknown);
+  list_T *retlist = rettv->vval.v_list;
+
+  if (tv_check_for_buffer_arg(argvars, 0) == FAIL
+      || tv_check_for_string_arg(argvars, 1) == FAIL
+      || tv_check_for_lnum_arg(argvars, 2) == FAIL
+      || tv_check_for_lnum_arg(argvars, 3) == FAIL
+      || tv_check_for_opt_dict_arg(argvars, 4) == FAIL) {
+    return;
+  }
+
+  const int prev_did_emsg = did_emsg;
+  buf_T *buf = tv_get_buf(&argvars[0], false);
+  if (buf == NULL) {
+    if (did_emsg == prev_did_emsg) {
+      semsg(_(e_invalid_buffer_name_str), tv_get_string(&argvars[0]));
+    }
+    return;
+  }
+  if (buf->b_ml.ml_mfp == NULL) {
+    emsg(_(e_buffer_is_not_loaded));
+    return;
+  }
+
+  char patbuf[NUMBUFLEN];
+  const char *pat = tv_get_string_buf(&argvars[1], patbuf);
+
+  const int did_emsg_before = did_emsg;
+  linenr_T slnum = tv_get_lnum_buf(&argvars[2], buf);
+  if (did_emsg > did_emsg_before) {
+    return;
+  }
+  if (slnum < 1) {
+    semsg(_(e_invargval), "lnum");
+    return;
+  }
+
+  linenr_T elnum = tv_get_lnum_buf(&argvars[3], buf);
+  if (did_emsg > did_emsg_before) {
+    return;
+  }
+  if (elnum < 1 || elnum < slnum) {
+    semsg(_(e_invargval), "end_lnum");
+    return;
+  }
+
+  if (elnum > buf->b_ml.ml_line_count) {
+    elnum = buf->b_ml.ml_line_count;
+  }
+
+  bool submatches = false;
+  if (argvars[4].v_type != VAR_UNKNOWN) {
+    dict_T *d = argvars[4].vval.v_dict;
+    if (d != NULL) {
+      dictitem_T *di = tv_dict_find(d, S_LEN("submatches"));
+      if (di != NULL) {
+        if (di->di_tv.v_type != VAR_BOOL) {
+          semsg(_(e_invargval), "submatches");
+          return;
+        }
+        submatches = tv_get_bool(&di->di_tv);
+      }
+    }
+  }
+
+  // Make 'cpoptions' empty, the 'l' flag should not be used here.
+  char *const save_cpo = p_cpo;
+  p_cpo = empty_string_option;
+
+  regmatch_T regmatch;
+  regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+  if (regmatch.regprog == NULL) {
+    goto theend;
+  }
+  regmatch.rm_ic = p_ic;
+
+  while (slnum <= elnum) {
+    const char *str = ml_get_buf(buf, slnum);
+    get_matches_in_str(str, &regmatch, retlist, slnum, submatches, true);
+    slnum++;
+  }
+
+  vim_regfree(regmatch.regprog);
+
+theend:
+  p_cpo = save_cpo;
+}
+
 /// "match()" function
 static void f_match(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
@@ -4731,6 +4898,73 @@ static void f_matchlist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void f_matchstr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   find_some_match(argvars, rettv, kSomeMatchStr);
+}
+
+/// "matchstrlist()" function
+static void f_matchstrlist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+{
+  rettv->vval.v_number = -1;
+  tv_list_alloc_ret(rettv, kListLenUnknown);
+  list_T *retlist = rettv->vval.v_list;
+
+  if (tv_check_for_list_arg(argvars, 0) == FAIL
+      || tv_check_for_string_arg(argvars, 1) == FAIL
+      || tv_check_for_opt_dict_arg(argvars, 2) == FAIL) {
+    return;
+  }
+
+  list_T *l = NULL;
+  if ((l = argvars[0].vval.v_list) == NULL) {
+    return;
+  }
+
+  char patbuf[NUMBUFLEN];
+  const char *pat = tv_get_string_buf_chk(&argvars[1], patbuf);
+  if (pat == NULL) {
+    return;
+  }
+
+  // Make 'cpoptions' empty, the 'l' flag should not be used here.
+  char *const save_cpo = p_cpo;
+  p_cpo = empty_string_option;
+
+  regmatch_T regmatch;
+  regmatch.regprog = vim_regcomp(pat, RE_MAGIC + RE_STRING);
+  if (regmatch.regprog == NULL) {
+    goto theend;
+  }
+  regmatch.rm_ic = p_ic;
+
+  bool submatches = false;
+  if (argvars[2].v_type != VAR_UNKNOWN) {
+    dict_T *d = argvars[2].vval.v_dict;
+    if (d != NULL) {
+      dictitem_T *di = tv_dict_find(d, S_LEN("submatches"));
+      if (di != NULL) {
+        if (di->di_tv.v_type != VAR_BOOL) {
+          semsg(_(e_invargval), "submatches");
+          goto cleanup;
+        }
+        submatches = tv_get_bool(&di->di_tv);
+      }
+    }
+  }
+
+  int idx = 0;
+  TV_LIST_ITER_CONST(l, li, {
+    const typval_T *const li_tv = TV_LIST_ITEM_TV(li);
+    if (li_tv->v_type == VAR_STRING && li_tv->vval.v_string != NULL) {
+      const char *str = li_tv->vval.v_string;
+      get_matches_in_str(str, &regmatch, retlist, idx, submatches, false);
+    }
+    idx++;
+  });
+
+cleanup:
+  vim_regfree(regmatch.regprog);
+
+theend:
+  p_cpo = save_cpo;
 }
 
 /// "matchstrpos()" function
@@ -6881,15 +7115,8 @@ static void f_screenchar(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   ScreenGrid *grid;
   screenchar_adjust(&grid, &row, &col);
 
-  int c;
-  if (row < 0 || row >= grid->rows || col < 0 || col >= grid->cols) {
-    c = -1;
-  } else {
-    char buf[MAX_SCHAR_SIZE + 1];
-    schar_get(buf, grid_getchar(grid, row, col, NULL));
-    c = utf_ptr2char(buf);
-  }
-  rettv->vval.v_number = c;
+  rettv->vval.v_number = (row < 0 || row >= grid->rows || col < 0 || col >= grid->cols)
+                         ? -1 : schar_get_first_codepoint(grid_getchar(grid, row, col, NULL));
 }
 
 /// "screenchars()" function
@@ -8383,7 +8610,6 @@ static void f_synIDtrans(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void f_synconcealed(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   int syntax_flags = 0;
-  int cchar;
   int matchid = 0;
   char str[NUMBUFLEN];
 
@@ -8402,14 +8628,13 @@ static void f_synconcealed(typval_T *argvars, typval_T *rettv, EvalFuncData fptr
 
     // get the conceal character
     if ((syntax_flags & HL_CONCEAL) && curwin->w_p_cole < 3) {
-      cchar = syn_get_sub_char();
+      schar_T cchar = schar_from_char(syn_get_sub_char());
       if (cchar == NUL && curwin->w_p_cole == 1) {
         cchar = (curwin->w_p_lcs_chars.conceal == NUL)
-                ? ' '
-                : curwin->w_p_lcs_chars.conceal;
+                ? schar_from_ascii(' ') : curwin->w_p_lcs_chars.conceal;
       }
       if (cchar != NUL) {
-        utf_char2bytes(cchar, str);
+        schar_get(str, cchar);
       }
     }
   }

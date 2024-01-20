@@ -95,7 +95,7 @@ vim.log = {
 --- throws an error if {cmd} cannot be run.
 ---
 --- @param cmd (string[]) Command to execute
---- @param opts (SystemOpts|nil) Options:
+--- @param opts vim.SystemOpts? Options:
 ---   - cwd: (string) Set the current working directory for the sub-process.
 ---   - env: table<string,string> Set environment variables for the new process. Inherits the
 ---     current environment with `NVIM` set to |v:servername|.
@@ -118,7 +118,7 @@ vim.log = {
 ---     parent exits. Note that the child process will still keep the parent's event loop alive
 ---     unless the parent process calls |uv.unref()| on the child's process handle.
 ---
---- @param on_exit (function|nil) Called when subprocess exits. When provided, the command runs
+--- @param on_exit? fun(out: vim.SystemCompleted) Called when subprocess exits. When provided, the command runs
 ---   asynchronously. Receives SystemCompleted object, see return of SystemObj:wait().
 ---
 --- @return vim.SystemObj Object with the fields:
@@ -190,12 +190,18 @@ function vim._os_proc_children(ppid)
   return children
 end
 
+--- @class vim.inspect.Opts
+--- @field depth? integer
+--- @field newline? string
+--- @field process? fun(item:any, path: string[]): any
+
 --- Gets a human-readable representation of the given object.
 ---
 ---@see |vim.print()|
 ---@see https://github.com/kikito/inspect.lua
 ---@see https://github.com/mpeterv/vinspect
 ---@return string
+---@overload fun(x: any, opts?: vim.inspect.Opts): string
 vim.inspect = vim.inspect
 
 do
@@ -219,10 +225,9 @@ do
   --- ```
   ---
   ---@see |paste|
-  ---@alias paste_phase -1 | 1 | 2 | 3
   ---
   ---@param lines  string[] # |readfile()|-style list of lines to paste. |channel-lines|
-  ---@param phase paste_phase  -1: "non-streaming" paste: the call contains all lines.
+  ---@param phase (-1|1|2|3)  -1: "non-streaming" paste: the call contains all lines.
   ---              If paste is "streamed", `phase` indicates the stream state:
   ---                - 1: starts the paste (exactly once)
   ---                - 2: continues the paste (zero or more times)
@@ -1028,21 +1033,44 @@ end
 ---
 ---@return string|nil # Deprecated message, or nil if no message was shown.
 function vim.deprecate(name, alternative, version, plugin, backtrace)
+  vim.validate {
+    name = { name, 'string' },
+    alternative = { alternative, 'string', true },
+    version = { version, 'string', true },
+    plugin = { plugin, 'string', true },
+  }
+  plugin = plugin or 'Nvim'
+
   -- Only issue warning if feature is hard-deprecated as specified by MAINTAIN.md.
-  if plugin == nil then
-    local current_version = vim.version()
-    local deprecated_version = assert(vim.version.parse(version))
-    local soft_deprecated_version =
-      { deprecated_version.major, deprecated_version.minor - 1, deprecated_version.patch }
-    local deprecate = vim.version.lt(current_version, soft_deprecated_version)
-    if deprecate then
+  -- e.g., when planned to be removed in version = '0.12' (soft-deprecated since 0.10-dev),
+  -- show warnings since 0.11, including 0.11-dev (hard_deprecated_since = 0.11-dev).
+  if plugin == 'Nvim' then
+    local current_version = vim.version() ---@type Version
+    local removal_version = assert(vim.version.parse(version))
+    local is_hard_deprecated ---@type boolean
+
+    if removal_version.minor > 0 then
+      local hard_deprecated_since = assert(vim.version._version({
+        major = removal_version.major,
+        minor = removal_version.minor - 1,
+        patch = 0,
+        prerelease = 'dev', -- Show deprecation warnings in devel (nightly) version as well
+      }))
+      is_hard_deprecated = (current_version >= hard_deprecated_since)
+    else
+      -- Assume there will be no next minor version before bumping up the major version;
+      -- therefore we can always show a warning.
+      assert(removal_version.minor == 0, vim.inspect(removal_version))
+      is_hard_deprecated = true
+    end
+
+    if not is_hard_deprecated then
       return
     end
   end
 
   local msg = ('%s is deprecated'):format(name)
-  plugin = plugin or 'Nvim'
-  msg = alternative and ('%s, use %s instead.'):format(msg, alternative) or msg
+  msg = alternative and ('%s, use %s instead.'):format(msg, alternative) or (msg .. '.')
   msg = ('%s%s\nThis feature will be removed in %s version %s'):format(
     msg,
     (plugin == 'Nvim' and ' :help deprecated' or ''),

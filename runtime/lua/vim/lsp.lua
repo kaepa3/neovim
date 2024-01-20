@@ -258,7 +258,7 @@ end
 --- Validates a client configuration as given to |vim.lsp.start_client()|.
 ---
 ---@param config (lsp.ClientConfig)
----@return (string|fun(dispatchers:vim.rpc.Dispatchers):RpcClientPublic?) Command
+---@return (string|fun(dispatchers:vim.rpc.Dispatchers):vim.lsp.rpc.PublicClient?) Command
 ---@return string[] Arguments
 ---@return string Encoding.
 local function validate_client_config(config)
@@ -291,7 +291,7 @@ local function validate_client_config(config)
     'flags.debounce_text_changes must be a number with the debounce time in milliseconds'
   )
 
-  local cmd, cmd_args --- @type (string|fun(dispatchers:vim.rpc.Dispatchers):RpcClientPublic), string[]
+  local cmd, cmd_args --- @type (string|fun(dispatchers:vim.rpc.Dispatchers):vim.lsp.rpc.PublicClient), string[]
   local config_cmd = config.cmd
   if type(config_cmd) == 'function' then
     cmd = config_cmd
@@ -488,8 +488,7 @@ end
 --- See |vim.lsp.start_client()| for all available options. The most important are:
 ---
 --- - `name` arbitrary name for the LSP client. Should be unique per language server.
---- - `cmd` command (in list form) used to start the language server. Must be absolute, or found on
----   `$PATH`. Shell constructs like `~` are not expanded.
+--- - `cmd` command string[] or function, described at |vim.lsp.start_client()|.
 --- - `root_dir` path to the project root. By default this is used to decide if an existing client
 ---   should be re-used. The example above uses |vim.fs.find()| and |vim.fs.dirname()| to detect the
 ---   root by traversing the file system upwards starting from the current directory until either
@@ -666,13 +665,13 @@ end
 --- Field `cmd` in {config} is required.
 ---
 ---@param config (lsp.ClientConfig) Configuration for the server:
---- - cmd: (string[]|fun(dispatchers: table):table) command a list of
----       strings treated like |jobstart()|. The command must launch the language server
----       process. `cmd` can also be a function that creates an RPC client.
----       The function receives a dispatchers table and must return a table with the
----       functions `request`, `notify`, `is_closing` and `terminate`
----       See |vim.lsp.rpc.request()| and |vim.lsp.rpc.notify()|
----       For TCP there is a built-in rpc client factory: |vim.lsp.rpc.connect()|
+--- - cmd: (string[]|fun(dispatchers: table):table) command string[] that launches the language
+---       server (treated as in |jobstart()|, must be absolute or on `$PATH`, shell constructs like
+---       "~" are not expanded), or function that creates an RPC client. Function receives
+---       a `dispatchers` table and returns a table with member functions `request`, `notify`,
+---       `is_closing` and `terminate`.
+---       See |vim.lsp.rpc.request()|, |vim.lsp.rpc.notify()|.
+---       For TCP there is a builtin RPC client factory: |vim.lsp.rpc.connect()|
 ---
 --- - cmd_cwd: (string, default=|getcwd()|) Directory to launch
 ---       the `cmd` process. Not related to `root_dir`.
@@ -826,6 +825,8 @@ function lsp.start_client(config)
   ---
   ---@param method (string) LSP method name
   ---@param params (table) The parameters for that method
+  ---@return any result
+  ---@return lsp.ResponseError error code and message set in case an exception happens during the request.
   function dispatch.server_request(method, params)
     if log.trace() then
       log.trace('server_request', method, params)
@@ -953,7 +954,7 @@ function lsp.start_client(config)
   end
 
   -- Start the RPC client.
-  local rpc --- @type RpcClientPublic?
+  local rpc --- @type vim.lsp.rpc.PublicClient?
   if type(cmd) == 'function' then
     rpc = cmd(dispatch)
   else

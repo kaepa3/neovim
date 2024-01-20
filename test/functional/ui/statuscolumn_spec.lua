@@ -7,7 +7,7 @@ local exec = helpers.exec
 local eval = helpers.eval
 local exec_lua = helpers.exec_lua
 local feed = helpers.feed
-local meths = helpers.meths
+local api = helpers.api
 local pcall_err = helpers.pcall_err
 local assert_alive = helpers.assert_alive
 
@@ -510,6 +510,28 @@ describe('statuscolumn', function()
       {0:~                                                    }|
                                                            |
     ]])
+    -- Also test "col_rows" code path for 'relativenumber' cursor movement
+    command([[
+      set cpoptions-=n nocursorline relativenumber
+      set stc=%{v:virtnum<0?'virtual':(!v:virtnum?'buffer':'wrapped')}%=%{'\ '.v:virtnum.'\ '.v:lnum.'\ '.v:relnum}
+    ]])
+    feed('kk')
+    screen:expect([[
+      {1:buffer  0 12 1}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 12 1}aaaaaaaaaaa                            |
+      {1:buffer  0 13 0}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 13 0}aaaaaaaaaa^a                            |
+      {1:buffer  0 14 1}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 14 1}aaaaaaaaaaa                            |
+      {1:buffer  0 15 2}aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 1 15 2}aaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaaaaa|
+      {1:wrapped 2 15 2}aaaaaaaaaaaaaaaaaaaaaaa                |
+      {1:virtual-3 15 2}virt_line1                             |
+      {1:virtual-2 15 2}virt_line2                             |
+      {1:virtual-1 15 2}END                                    |
+      {0:~                                                    }|
+                                                           |
+    ]])
   end)
 
   it('does not corrupt the screen with minwid sign item', function()
@@ -521,8 +543,8 @@ describe('statuscolumn', function()
     command([[set stc=%6s\ %l]])
     exec_lua('vim.api.nvim_buf_set_extmark(0, ns, 7, 0, {sign_text = "𒀀"})')
     screen:expect([[
-      {0:    𒀀  8}^aaaaa                                        |
-      {0:    }{1:  }{0: 9}aaaaa                                        |
+      {0:    𒀀  8 }^aaaaa                                       |
+      {0:    }{1:  }{0: 9 }aaaaa                                       |
                                                            |
     ]])
   end)
@@ -543,56 +565,56 @@ describe('statuscolumn', function()
       end)
 
       it('clicks work with mousemodel=' .. model, function()
-        meths.set_option_value('statuscolumn', '%0@MyClickFunc@%=%l%T', {})
-        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        api.nvim_set_option_value('statuscolumn', '%0@MyClickFunc@%=%l%T', {})
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
         eq('0 1 l 4', eval('g:testvar'))
-        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
         eq('0 2 l 4', eval('g:testvar'))
-        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
         eq('0 3 l 4', eval('g:testvar'))
-        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
         eq('0 4 l 4', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 0)
         eq('0 1 r 7', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 0)
         eq('0 2 r 7', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 0)
         eq('0 3 r 7', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 0)
         eq('0 4 r 7', eval('g:testvar'))
 
         command('rightbelow vsplit')
-        meths.input_mouse('left', 'press', '', 0, 0, 27)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 27)
         eq('0 1 l 4', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 27)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 27)
         eq('0 1 r 7', eval('g:testvar'))
         command('setlocal rightleft')
-        meths.input_mouse('left', 'press', '', 0, 0, 52)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 52)
         eq('0 1 l 4', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 52)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 52)
         eq('0 1 r 7', eval('g:testvar'))
         command('wincmd H')
-        meths.input_mouse('left', 'press', '', 0, 0, 25)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 25)
         eq('0 1 l 4', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 3, 25)
+        api.nvim_input_mouse('right', 'press', '', 0, 3, 25)
         eq('0 1 r 7', eval('g:testvar'))
         command('close')
 
         command('set laststatus=2 winbar=%f')
         command('let g:testvar = ""')
         -- Check that winbar click doesn't register as statuscolumn click
-        meths.input_mouse('right', 'press', '', 0, 0, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 0, 0)
         eq('', eval('g:testvar'))
         -- Check that statusline click doesn't register as statuscolumn click
-        meths.input_mouse('right', 'press', '', 0, 12, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 12, 0)
         eq('', eval('g:testvar'))
         -- Check that cmdline click doesn't register as statuscolumn click
-        meths.input_mouse('right', 'press', '', 0, 13, 0)
+        api.nvim_input_mouse('right', 'press', '', 0, 13, 0)
         eq('', eval('g:testvar'))
       end)
 
       it('clicks and highlights work with control characters', function()
-        meths.set_option_value('statuscolumn', '\t%#NonText#\1%0@MyClickFunc@\t\1%T\t%##\1', {})
+        api.nvim_set_option_value('statuscolumn', '\t%#NonText#\1%0@MyClickFunc@\t\1%T\t%##\1', {})
         screen:expect {
           grid = [[
           {1:^I}{0:^A^I^A^I}{1:^A}aaaaa                                    |*4
@@ -605,13 +627,13 @@ describe('statuscolumn', function()
             [1] = { foreground = Screen.colors.Brown }, -- LineNr
           },
         }
-        meths.input_mouse('right', 'press', '', 0, 4, 3)
+        api.nvim_input_mouse('right', 'press', '', 0, 4, 3)
         eq('', eval('g:testvar'))
-        meths.input_mouse('left', 'press', '', 0, 5, 8)
+        api.nvim_input_mouse('left', 'press', '', 0, 5, 8)
         eq('', eval('g:testvar'))
-        meths.input_mouse('right', 'press', '', 0, 6, 4)
+        api.nvim_input_mouse('right', 'press', '', 0, 6, 4)
         eq('0 1 r 10', eval('g:testvar'))
-        meths.input_mouse('left', 'press', '', 0, 7, 7)
+        api.nvim_input_mouse('left', 'press', '', 0, 7, 7)
         eq('0 1 l 11', eval('g:testvar'))
       end)
 
@@ -621,7 +643,7 @@ describe('statuscolumn', function()
           [0] = { foreground = Screen.colors.Brown },
           [1] = { background = Screen.colors.Plum1 },
         })
-        meths.set_option_value('statuscolumn', '%0@MyClickFunc@%l%T', {})
+        api.nvim_set_option_value('statuscolumn', '%0@MyClickFunc@%l%T', {})
         exec([[
           function! MyClickFunc(minwid, clicks, button, mods)
             let g:testvar = printf("%d %d %s %d", a:minwid, a:clicks, a:button, getmousepos().line)
@@ -630,26 +652,26 @@ describe('statuscolumn', function()
           endfunction
         ]])
         -- clicking an item does not drag mouse
-        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
         screen:expect([[
           {0:8 }^aaaaa                                              |
            {1: Echo }                                              |
         ]])
-        meths.input_mouse('left', 'press', '', 0, 1, 5)
-        meths.input_mouse('left', 'release', '', 0, 1, 5)
+        api.nvim_input_mouse('left', 'press', '', 0, 1, 5)
+        api.nvim_input_mouse('left', 'release', '', 0, 1, 5)
         screen:expect([[
           {0:8 }^aaaaa                                              |
           0 1 l 8                                              |
         ]])
         command('echo')
         -- clicking outside to close the menu does not drag mouse
-        meths.input_mouse('left', 'press', '', 0, 0, 0)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 0)
         screen:expect([[
           {0:8 }^aaaaa                                              |
            {1: Echo }                                              |
         ]])
-        meths.input_mouse('left', 'press', '', 0, 0, 10)
-        meths.input_mouse('left', 'release', '', 0, 0, 10)
+        api.nvim_input_mouse('left', 'press', '', 0, 0, 10)
+        api.nvim_input_mouse('left', 'release', '', 0, 0, 10)
         screen:expect([[
           {0:8 }^aaaaa                                              |
                                                                |

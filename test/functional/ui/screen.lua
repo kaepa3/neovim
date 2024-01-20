@@ -72,17 +72,17 @@
 
 local helpers = require('test.functional.helpers')(nil)
 local busted = require('busted')
-local deepcopy = helpers.deepcopy
+local deepcopy = vim.deepcopy
 local shallowcopy = helpers.shallowcopy
 local concat_tables = helpers.concat_tables
-local pesc = helpers.pesc
+local pesc = vim.pesc
 local run_session = helpers.run_session
 local eq = helpers.eq
 local dedent = helpers.dedent
 local get_session = helpers.get_session
 local create_callindex = helpers.create_callindex
 
-local inspect = require('vim.inspect')
+local inspect = vim.inspect
 
 local function isempty(v)
   return type(v) == 'table' and next(v) == nil
@@ -140,6 +140,7 @@ function Screen.new(width, height)
     suspended = false,
     mode = 'normal',
     options = {},
+    pwd = '',
     popupmenu = nil,
     cmdline = {},
     cmdline_block = {},
@@ -212,7 +213,6 @@ function Screen:attach(options, session)
   if options.ext_linegrid == nil then
     options.ext_linegrid = true
   end
-
   self._session = session
   self._options = options
   self._clear_attrs = (not options.ext_linegrid) and {} or nil
@@ -1108,6 +1108,10 @@ function Screen:_handle_option_set(name, value)
   self.options[name] = value
 end
 
+function Screen:_handle_chdir(path)
+  self.pwd = vim.fs.normalize(path, { expand_env = false })
+end
+
 function Screen:_handle_popupmenu_show(items, selected, row, col, grid)
   self.popupmenu = { items = items, pos = selected, anchor = { grid, row, col } }
 end
@@ -1484,9 +1488,9 @@ local function fmt_ext_state(name, state)
         str
         .. '  ['
         .. k
-        .. '] = {win = {id = '
-        .. v.win.id
-        .. '}, topline = '
+        .. '] = {win = '
+        .. v.win
+        .. ', topline = '
         .. v.topline
         .. ', botline = '
         .. v.botline
@@ -1505,7 +1509,7 @@ local function fmt_ext_state(name, state)
   elseif name == 'float_pos' then
     local str = '{\n'
     for k, v in pairs(state) do
-      str = str .. '  [' .. k .. '] = {{id = ' .. v[1].id .. '}'
+      str = str .. '  [' .. k .. '] = {' .. v[1]
       for i = 2, #v do
         str = str .. ', ' .. inspect(v[i])
       end
