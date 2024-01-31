@@ -13,6 +13,7 @@
 #include "nvim/globals.h"
 #include "nvim/mark.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/move.h"
@@ -141,17 +142,18 @@ static int coladvance2(pos_T *pos, bool addspaces, bool finetune, colnr_T wcol_a
       }
     }
 
-    chartabsize_T cts;
-    init_chartabsize_arg(&cts, curwin, pos->lnum, 0, line, line);
-    while (cts.cts_vcol <= wcol && *cts.cts_ptr != NUL) {
-      // Count a tab for what it's worth (if list mode not on)
-      csize = win_lbr_chartabsize(&cts, &head);
-      MB_PTR_ADV(cts.cts_ptr);
-      cts.cts_vcol += csize;
+    CharsizeArg csarg;
+    CSType cstype = init_charsize_arg(&csarg, curwin, pos->lnum, line);
+    StrCharInfo ci = utf_ptr2StrCharInfo(line);
+    col = 0;
+    while (col <= wcol && *ci.ptr != NUL) {
+      CharSize cs = win_charsize(cstype, col, ci.ptr, ci.chr.value, &csarg);
+      csize = cs.width;
+      head = cs.head;
+      col += cs.width;
+      ci = utfc_next(ci);
     }
-    col = cts.cts_vcol;
-    idx = (int)(cts.cts_ptr - line);
-    clear_chartabsize_arg(&cts);
+    idx = (int)(ci.ptr - line);
 
     // Handle all the special cases.  The virtual_active() check
     // is needed to ensure that a virtual position off the end of

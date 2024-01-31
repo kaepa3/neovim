@@ -146,16 +146,8 @@ static const char *highlight_init_both[] = {
   "RedrawDebugNormal gui=reverse   cterm=reverse",
   "TabLineSel        gui=bold      cterm=bold",
   "TermCursor        gui=reverse   cterm=reverse",
-  "Title             gui=bold      cterm=bold",
-  "Todo              gui=bold      cterm=bold",
   "Underlined        gui=underline cterm=underline",
   "lCursor           guifg=bg      guibg=fg",
-
-  "Constant   guifg=NONE",
-  "Operator   guifg=NONE",
-  "PreProc    guifg=NONE",
-  "Type       guifg=NONE",
-  "Delimiter  guifg=NONE",
 
   // UI
   "default link CursorIM       Cursor",
@@ -230,78 +222,85 @@ static const char *highlight_init_both[] = {
   "default link DiagnosticSignOk           DiagnosticOk",
   "default link DiagnosticUnnecessary      Comment",
 
-  // Text
-  "default link @text.literal   Comment",
-  "default link @text.reference Identifier",
-  "default link @text.title     Title",
-  "default link @text.uri       Underlined",
-  "default link @text.underline Underlined",
-  "default link @text.todo      Todo",
+  // Treesitter standard groups
+  "default link @variable.builtin Special",
 
-  // Miscs
-  "default link @comment     Comment",
-  "default link @punctuation Delimiter",
+  "default link @constant         Constant",
+  "default link @constant.builtin Special",
 
-  // Constants
-  "default link @constant          Constant",
-  "default link @constant.builtin  Special",
-  "default link @constant.macro    Define",
-  "default link @define            Define",
-  "default link @macro             Macro",
-  "default link @string            String",
-  "default link @string.escape     SpecialChar",
-  "default link @string.special    SpecialChar",
+  "default link @module         Structure",
+  "default link @module.builtin Special",
+  "default link @label          Label",
+
+  "default link @string             String",
+  "default link @string.regexp      @string.special",
+  "default link @string.escape      @string.special",
+  "default link @string.special     SpecialChar",
+  "default link @string.special.url Underlined",
+
   "default link @character         Character",
   "default link @character.special SpecialChar",
-  "default link @number            Number",
-  "default link @boolean           Boolean",
-  "default link @float             Float",
 
-  // Functions
+  "default link @boolean      Boolean",
+  "default link @number       Number",
+  "default link @number.float Float",
+
+  "default link @type         Type",
+  "default link @type.builtin Special",
+
+  "default link @attribute Macro",
+  "default link @property  Identifier",
+
   "default link @function         Function",
   "default link @function.builtin Special",
-  "default link @function.macro   Macro",
-  "default link @parameter        Identifier",
-  "default link @method           Function",
-  "default link @field            Identifier",
-  "default link @property         Identifier",
-  "default link @constructor      Special",
 
-  // Keywords
-  "default link @conditional Conditional",
-  "default link @repeat      Repeat",
-  "default link @label       Label",
+  "default link @constructor Special",
   "default link @operator    Operator",
-  "default link @keyword     Keyword",
-  "default link @exception   Exception",
 
-  "default link @variable        NONE",  // don't highlight to reduce visual overload
-  "default link @type            Type",
-  "default link @type.definition Typedef",
-  "default link @storageclass    StorageClass",
-  "default link @namespace       Identifier",
-  "default link @include         Include",
-  "default link @preproc         PreProc",
-  "default link @debug           Debug",
-  "default link @tag             Tag",
+  "default link @keyword Keyword",
+
+  "default link @punctuation         Delimiter",  // fallback for subgroups; never used itself
+  "default link @punctuation.special Special",
+
+  "default link @comment Comment",
+
+  "default link @comment.error   DiagnosticError",
+  "default link @comment.warning DiagnosticWarn",
+  "default link @comment.note    DiagnosticInfo",
+  "default link @comment.todo    Todo",
+
+  "@markup.strong        gui=bold          cterm=bold",
+  "@markup.italic        gui=italic        cterm=italic",
+  "@markup.strikethrough gui=strikethrough cterm=strikethrough",
+  "@markup.underline     gui=underline     cterm=underline",
+
+  "default link @markup         Special",  // fallback for subgroups; never used itself
+  "default link @markup.heading Title",
+  "default link @markup.link    Underlined",
+
+  "default link @diff.plus  Added",
+  "default link @diff.minus Removed",
+  "default link @diff.delta Changed",
+
+  "default link @tag Tag",
 
   // LSP semantic tokens
-  "default link @lsp.type.class         Structure",
-  "default link @lsp.type.comment       Comment",
-  "default link @lsp.type.decorator     Function",
-  "default link @lsp.type.enum          Structure",
-  "default link @lsp.type.enumMember    Constant",
-  "default link @lsp.type.function      Function",
-  "default link @lsp.type.interface     Structure",
-  "default link @lsp.type.macro         Macro",
-  "default link @lsp.type.method        Function",
-  "default link @lsp.type.namespace     Structure",
-  "default link @lsp.type.parameter     Identifier",
-  "default link @lsp.type.property      Identifier",
-  "default link @lsp.type.struct        Structure",
-  "default link @lsp.type.type          Type",
-  "default link @lsp.type.typeParameter TypeDef",
-  "default link @lsp.type.variable      NONE",  // don't highlight to reduce visual overload
+  "default link @lsp.type.class         @type",
+  "default link @lsp.type.comment       @comment",
+  "default link @lsp.type.decorator     @attribute",
+  "default link @lsp.type.enum          @type",
+  "default link @lsp.type.enumMember    @constant",
+  "default link @lsp.type.function      @function",
+  "default link @lsp.type.interface     @type",
+  "default link @lsp.type.macro         @constant.macro",
+  "default link @lsp.type.method        @function.method",
+  "default link @lsp.type.namespace     @module",
+  "default link @lsp.type.parameter     @variable.parameter",
+  "default link @lsp.type.property      @property",
+  "default link @lsp.type.struct        @type",
+  "default link @lsp.type.type          @type",
+  "default link @lsp.type.typeParameter @type.definition",
+  "default link @lsp.type.variable      @variable",
 
   NULL
 };
@@ -311,7 +310,7 @@ static const char *highlight_init_light[] = {
   "Normal guifg=NvimDarkGrey2 guibg=NvimLightGrey2 ctermfg=NONE ctermbg=NONE",
 
   // UI
-  "Added                guifg=NvimDarGreen                                   ctermfg=2",
+  "Added                guifg=NvimDarkGreen                                  ctermfg=2",
   "Changed              guifg=NvimDarkCyan                                   ctermfg=6",
   "ColorColumn                               guibg=NvimLightGrey4            cterm=reverse",
   "Conceal              guifg=NvimLightGrey4",
@@ -351,19 +350,27 @@ static const char *highlight_init_light[] = {
   "SpellRare            guisp=NvimDarkCyan   gui=undercurl                   cterm=undercurl",
   "StatusLine           guifg=NvimLightGrey3 guibg=NvimDarkGrey3             cterm=reverse",
   "StatusLineNC         guifg=NvimDarkGrey3  guibg=NvimLightGrey3            cterm=bold",
+  "Title                guifg=NvimDarkGrey2                        gui=bold  cterm=bold",
   "Visual                                    guibg=NvimLightGrey4            ctermfg=15 ctermbg=0",
   "WarningMsg           guifg=NvimDarkYellow                                 ctermfg=3",
   "WinBar               guifg=NvimDarkGrey4  guibg=NvimLightGrey1  gui=bold  cterm=bold",
   "WinBarNC             guifg=NvimDarkGrey4  guibg=NvimLightGrey1            cterm=bold",
 
   // Syntax
+  "Constant   guifg=NvimDarkGrey2",  // Use only `Normal` foreground to be usable on different background
+  "Operator   guifg=NvimDarkGrey2",
+  "PreProc    guifg=NvimDarkGrey2",
+  "Type       guifg=NvimDarkGrey2",
+  "Delimiter  guifg=NvimDarkGrey2",
+
   "Comment    guifg=NvimDarkGrey4",
   "String     guifg=NvimDarkGreen                    ctermfg=2",
   "Identifier guifg=NvimDarkBlue                     ctermfg=4",
   "Function   guifg=NvimDarkCyan                     ctermfg=6",
-  "Statement  gui=bold                               cterm=bold",
+  "Statement  guifg=NvimDarkGrey2 gui=bold           cterm=bold",
   "Special    guifg=NvimDarkCyan                     ctermfg=6",
   "Error      guifg=NvimDarkGrey1 guibg=NvimLightRed ctermfg=15 ctermbg=1",
+  "Todo       guifg=NvimDarkGrey2 gui=bold           cterm=bold",
 
   // Diagnostic
   "DiagnosticError          guifg=NvimDarkRed                      ctermfg=1",
@@ -377,6 +384,9 @@ static const char *highlight_init_light[] = {
   "DiagnosticUnderlineHint  guisp=NvimDarkBlue   gui=underline     cterm=underline",
   "DiagnosticUnderlineOk    guisp=NvimDarkGreen  gui=underline     cterm=underline",
   "DiagnosticDeprecated     guisp=NvimDarkRed    gui=strikethrough cterm=strikethrough",
+
+  // Treesitter standard groups
+  "@variable guifg=NvimDarkGrey2",
   NULL
 };
 
@@ -425,19 +435,27 @@ static const char *highlight_init_dark[] = {
   "SpellRare            guisp=NvimLightCyan   gui=undercurl                 cterm=undercurl",
   "StatusLine           guifg=NvimDarkGrey3   guibg=NvimLightGrey3          cterm=reverse",
   "StatusLineNC         guifg=NvimLightGrey3  guibg=NvimDarkGrey3           cterm=bold",
+  "Title                guifg=NvimLightGrey2                       gui=bold cterm=bold",
   "Visual                                     guibg=NvimDarkGrey4           ctermfg=0 ctermbg=15",
   "WarningMsg           guifg=NvimLightYellow                               ctermfg=11",
   "WinBar               guifg=NvimLightGrey4  guibg=NvimDarkGrey1  gui=bold cterm=bold",
   "WinBarNC             guifg=NvimLightGrey4  guibg=NvimDarkGrey1           cterm=bold",
 
   // Syntax
+  "Constant   guifg=NvimLightGrey2",  // Use only `Normal` foreground to be usable on different background
+  "Operator   guifg=NvimLightGrey2",
+  "PreProc    guifg=NvimLightGrey2",
+  "Type       guifg=NvimLightGrey2",
+  "Delimiter  guifg=NvimLightGrey2",
+
   "Comment    guifg=NvimLightGrey4",
   "String     guifg=NvimLightGreen                   ctermfg=10",
   "Identifier guifg=NvimLightBlue                    ctermfg=12",
   "Function   guifg=NvimLightCyan                    ctermfg=14",
-  "Statement  gui=bold                               cterm=bold",
+  "Statement  guifg=NvimLightGrey2 gui=bold          cterm=bold",
   "Special    guifg=NvimLightCyan                    ctermfg=14",
   "Error      guifg=NvimLightGrey1 guibg=NvimDarkRed ctermfg=0 ctermbg=9",
+  "Todo       guifg=NvimLightGrey2 gui=bold          cterm=bold",
 
   // Diagnostic
   "DiagnosticError          guifg=NvimLightRed                      ctermfg=9",
@@ -451,6 +469,9 @@ static const char *highlight_init_dark[] = {
   "DiagnosticUnderlineHint  guisp=NvimLightBlue   gui=underline     cterm=underline",
   "DiagnosticUnderlineOk    guisp=NvimLightGreen  gui=underline     cterm=underline",
   "DiagnosticDeprecated     guisp=NvimLightRed    gui=strikethrough cterm=strikethrough",
+
+  // Treesitter standard groups
+  "@variable guifg=NvimLightGrey2",
   NULL
 };
 
@@ -1881,8 +1902,8 @@ static void set_hl_attr(int idx)
   HlGroup *sgp = hl_table + idx;
 
   at_en.cterm_ae_attr = (int16_t)sgp->sg_cterm;
-  at_en.cterm_fg_color = sgp->sg_cterm_fg;
-  at_en.cterm_bg_color = sgp->sg_cterm_bg;
+  at_en.cterm_fg_color = (int16_t)sgp->sg_cterm_fg;
+  at_en.cterm_bg_color = (int16_t)sgp->sg_cterm_bg;
   at_en.rgb_ae_attr = (int16_t)sgp->sg_gui;
   // FIXME(tarruda): The "unset value" for rgb is -1, but since hlgroup is
   // initialized with 0(by garray functions), check for sg_rgb_{f,b}g_name

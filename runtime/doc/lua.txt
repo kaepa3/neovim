@@ -254,6 +254,14 @@ arguments separated by " " (space) instead of "\t" (tab).
 <    To see the LuaJIT version: >vim
         :lua =jit.version
 <
+:{range}lua
+    Executes buffer lines in {range} as Lua code. Unlike |:source|, this
+    always treats the lines as Lua code.
+
+    Example: select the following code and type ":lua<Enter>" to execute it: >lua
+        print(string.format(
+            'unix time: %s', os.time()))
+<
                                                                 *:lua-heredoc*
 :lua << [trim] [{endmarker}]
 {script}
@@ -266,10 +274,8 @@ arguments separated by " " (space) instead of "\t" (tab).
         function! CurrentLineInfo()
         lua << EOF
         local linenr = vim.api.nvim_win_get_cursor(0)[1]
-        local curline = vim.api.nvim_buf_get_lines(
-                0, linenr - 1, linenr, false)[1]
-        print(string.format("Current line [%d] has %d bytes",
-                linenr, #curline))
+        local curline = vim.api.nvim_buf_get_lines(0, linenr - 1, linenr, false)[1]
+        print(string.format('Line [%d] has %d bytes', linenr, #curline))
         EOF
         endfunction
 <
@@ -613,7 +619,7 @@ vim.highlight.on_yank({opts})                        *vim.highlight.on_yank()*
 vim.highlight.priorities                            *vim.highlight.priorities*
     Table with default priorities used for highlighting:
     • `syntax`: `50`, used for standard syntax highlighting
-    • `treesitter`: `100`, used for tree-sitter-based highlighting
+    • `treesitter`: `100`, used for treesitter-based highlighting
     • `semantic_tokens`: `125`, used for LSP semantic token highlighting
     • `diagnostics`: `150`, used for code analysis such as diagnostics
     • `user`: `200`, used for user-triggered highlights such as LSP document
@@ -3576,8 +3582,8 @@ vim.version.cmp({v1}, {v2})                                *vim.version.cmp()*
         otherwise-equivalent versions.
 
     Parameters: ~
-      • {v1}  (`Version|number[]`) Version object.
-      • {v2}  (`Version|number[]`) Version to compare with `v1` .
+      • {v1}  (`Version|number[]|string`) Version object.
+      • {v2}  (`Version|number[]|string`) Version to compare with `v1` .
 
     Return: ~
         (`integer`) -1 if `v1 < v2`, 0 if `v1 == v2`, 1 if `v1 > v2`.
@@ -3587,8 +3593,18 @@ vim.version.eq({v1}, {v2})                                  *vim.version.eq()*
     usage.
 
     Parameters: ~
-      • {v1}  (`Version|number[]`)
-      • {v2}  (`Version|number[]`)
+      • {v1}  (`Version|number[]|string`)
+      • {v2}  (`Version|number[]|string`)
+
+    Return: ~
+        (`boolean`)
+
+vim.version.ge({v1}, {v2})                                  *vim.version.ge()*
+    Returns `true` if `v1 >= v2` . See |vim.version.cmp()| for usage.
+
+    Parameters: ~
+      • {v1}  (`Version|number[]|string`)
+      • {v2}  (`Version|number[]|string`)
 
     Return: ~
         (`boolean`)
@@ -3597,8 +3613,8 @@ vim.version.gt({v1}, {v2})                                  *vim.version.gt()*
     Returns `true` if `v1 > v2` . See |vim.version.cmp()| for usage.
 
     Parameters: ~
-      • {v1}  (`Version|number[]`)
-      • {v2}  (`Version|number[]`)
+      • {v1}  (`Version|number[]|string`)
+      • {v2}  (`Version|number[]|string`)
 
     Return: ~
         (`boolean`)
@@ -3612,12 +3628,22 @@ vim.version.last({versions})                              *vim.version.last()*
     Return: ~
         (`Version?`)
 
+vim.version.le({v1}, {v2})                                  *vim.version.le()*
+    Returns `true` if `v1 <= v2` . See |vim.version.cmp()| for usage.
+
+    Parameters: ~
+      • {v1}  (`Version|number[]|string`)
+      • {v2}  (`Version|number[]|string`)
+
+    Return: ~
+        (`boolean`)
+
 vim.version.lt({v1}, {v2})                                  *vim.version.lt()*
     Returns `true` if `v1 < v2` . See |vim.version.cmp()| for usage.
 
     Parameters: ~
-      • {v1}  (`Version|number[]`)
-      • {v2}  (`Version|number[]`)
+      • {v1}  (`Version|number[]|string`)
+      • {v2}  (`Version|number[]|string`)
 
     Return: ~
         (`boolean`)
@@ -3638,7 +3664,8 @@ vim.version.parse({version}, {opts})                     *vim.version.parse()*
                      "1.0", "0-x", "tmux 3.2a" into valid versions.
 
     Return: ~
-        (`table?`) parsed_version Version object or `nil` if input is invalid.
+        (`Version?`) parsed_version Version object or `nil` if input is
+        invalid.
 
     See also: ~
       • # https://semver.org/spec/v2.0.0.html
@@ -3662,9 +3689,10 @@ vim.version.range({spec})                                *vim.version.range()*
         print(r:has(vim.version())) -- check against current Nvim version
 <
 
-    Or use cmp(), eq(), lt(), and gt() to compare `.to` and `.from` directly: >lua
-        local r = vim.version.range('1.0.0 - 2.0.0')
-        print(vim.version.gt({1,0,3}, r.from) and vim.version.lt({1,0,3}, r.to))
+    Or use cmp(), le(), lt(), ge(), gt(), and/or eq() to compare a version
+    against `.to` and `.from` directly: >lua
+        local r = vim.version.range('1.0.0 - 2.0.0') -- >=1.0, <2.0
+        print(vim.version.ge({1,0,3}, r.from) and vim.version.lt({1,0,3}, r.to))
 <
 
     Parameters: ~

@@ -2,32 +2,38 @@
 --
 -- NOTE: :helptags checks for duplicate tags, whereas this script checks _links_ (to tags).
 --
+-- USAGE (For CI/local testing purposes): Simply `make lintdoc` or `scripts/lintdoc.lua`, which
+-- basically does the following:
+--   1. :helptags ALL
+--   2. nvim -V1 -es +"lua require('scripts.gen_help_html').run_validate()" +q
+--   3. nvim -V1 -es +"lua require('scripts.gen_help_html').test_gen()" +q
+--
 -- USAGE (GENERATE HTML):
---   1. Run `make helptags` first; this script depends on vim.fn.taglist().
---   2. nvim -V1 -es --clean +"lua require('scripts.gen_help_html').gen('./build/runtime/doc/', 'target/dir/')"
+--   1. `:helptags ALL` first; this script depends on vim.fn.taglist().
+--   2. nvim -V1 -es --clean +"lua require('scripts.gen_help_html').gen('./runtime/doc', 'target/dir/')" +q
 --      - Read the docstring at gen().
 --   3. cd target/dir/ && jekyll serve --host 0.0.0.0
 --   4. Visit http://localhost:4000/…/help.txt.html
 --
 -- USAGE (VALIDATE):
---   1. nvim -V1 -es +"lua require('scripts.gen_help_html').validate()"
+--   1. nvim -V1 -es +"lua require('scripts.gen_help_html').validate('./runtime/doc')" +q
 --      - validate() is 10x faster than gen(), so it is used in CI.
 --
 -- SELF-TEST MODE:
---   1. nvim -V1 -es +"lua require('scripts.gen_help_html')._test()"
+--   1. nvim -V1 -es +"lua require('scripts.gen_help_html')._test()" +q
 --
 -- NOTES:
---   * gen() and validate() are the primary entrypoints. validate() only exists because gen() is too
---     slow (~1 min) to run in per-commit CI.
+--   * gen() and validate() are the primary (programmatic) entrypoints. validate() only exists
+--     because gen() is too slow (~1 min) to run in per-commit CI.
 --   * visit_node() is the core function used by gen() to traverse the document tree and produce HTML.
 --   * visit_validate() is the core function used by validate().
 --   * Files in `new_layout` will be generated with a "flow" layout instead of preformatted/fixed-width layout.
 
-local tagmap = nil
-local helpfiles = nil
-local invalid_links = {}
-local invalid_urls = {}
-local invalid_spelling = {}
+local tagmap = nil ---@type table<string, string>
+local helpfiles = nil ---@type string[]
+local invalid_links = {} ---@type table<string, any>
+local invalid_urls = {} ---@type table<string, any>
+local invalid_spelling = {} ---@type table<string, table<string, string>>
 local spell_dict = {
   Neovim = 'Nvim',
   NeoVim = 'Nvim',
@@ -36,9 +42,14 @@ local spell_dict = {
   VimL = 'Vimscript',
   vimL = 'Vimscript',
   viml = 'Vimscript',
+  ['tree-sitter'] = 'treesitter',
+  ['Tree-sitter'] = 'Treesitter',
 }
+--- specify the list of keywords to ignore (i.e. allow), or true to disable spell check completely.
+--- @type table<string, true|string[]>
 local spell_ignore_files = {
-  ['backers.txt'] = 'true',
+  ['backers.txt'] = true,
+  ['news.txt'] = { 'tree-sitter' }, -- in news, may refer to the upstream "tree-sitter" library
 }
 local language = nil
 
@@ -102,8 +113,9 @@ local function tofile(fname, text)
   end
 end
 
+---@type fun(s: string): string
 local function html_esc(s)
-  return s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;')
+  return (s:gsub('&', '&amp;'):gsub('<', '&lt;'):gsub('>', '&gt;'))
 end
 
 local function url_encode(s)
@@ -118,7 +130,7 @@ local function url_encode(s)
 end
 
 local function expandtabs(s)
-  return s:gsub('\t', (' '):rep(8))
+  return s:gsub('\t', (' '):rep(8)) --[[ @as string ]]
 end
 
 local function to_titlecase(s)
@@ -142,6 +154,7 @@ local function is_blank(s)
   return not not s:find([[^[\t ]*$]])
 end
 
+---@type fun(s: string, dir?:0|1|2): string
 local function trim(s, dir)
   return vim.fn.trim(s, '\r\t\n ', dir or 0)
 end
@@ -150,7 +163,8 @@ end
 ---
 --- TODO: fix this in the parser instead... https://github.com/neovim/tree-sitter-vimdoc
 ---
---- @returns (fixed_url, removed_chars) where `removed_chars` is in the order found in the input.
+--- @param url string
+--- @return string, string (fixed_url, removed_chars) where `removed_chars` is in the order found in the input.
 local function fix_url(url)
   local removed_chars = ''
   local fixed_url = url
@@ -262,6 +276,9 @@ local function trim_indent(s)
 end
 
 --- Gets raw buffer text in the node's range (+/- an offset), as a newline-delimited string.
+---@param node TSNode
+---@param bufnr integer
+---@param offset integer
 local function getbuflinestr(node, bufnr, offset)
   local line1, _, line2, _ = node:range()
   line1 = line1 - offset
@@ -272,8 +289,12 @@ end
 
 --- Gets the whitespace just before `node` from the raw buffer text.
 --- Needed for preformatted `old` lines.
+---@param node TSNode
+---@param bufnr integer
+---@return string
 local function getws(node, bufnr)
   local line1, c1, line2, _ = node:range()
+  ---@type string
   local raw = vim.fn.getbufline(bufnr, line1 + 1, line2 + 1)[1]
   local text_before = raw:sub(1, c1)
   local leading_ws = text_before:match('%s+$') or ''
@@ -310,9 +331,10 @@ local function ignore_parse_error(fname, s)
   return s:find("^[`'|*]")
 end
 
+---@param node TSNode
 local function has_ancestor(node, ancestor_name)
-  local p = node
-  while true do
+  local p = node ---@type TSNode?
+  while p do
     p = p:parent()
     if not p or p:type() == 'help_file' then
       break
@@ -324,6 +346,7 @@ local function has_ancestor(node, ancestor_name)
 end
 
 --- Gets the first matching child node matching `name`.
+---@param node TSNode
 local function first(node, name)
   for c, _ in node:iter_children() do
     if c:named() and c:type() == name then
@@ -357,6 +380,11 @@ local function validate_url(text, fname)
 end
 
 --- Traverses the tree at `root` and checks that |tag| links point to valid helptags.
+---@param root TSNode
+---@param level integer
+---@param lang_tree TSTree
+---@param opt table
+---@param stats table
 local function visit_validate(root, level, lang_tree, opt, stats)
   level = level or 0
   local node_name = (root.named and root:named()) and root:type() or nil
@@ -391,9 +419,18 @@ local function visit_validate(root, level, lang_tree, opt, stats)
   then
     local text_nopunct = vim.fn.trim(text, '.,', 0) -- Ignore some punctuation.
     local fname_basename = assert(vim.fs.basename(opt.fname))
-    if spell_dict[text_nopunct] and not spell_ignore_files[fname_basename] then
-      invalid_spelling[text_nopunct] = invalid_spelling[text_nopunct] or {}
-      invalid_spelling[text_nopunct][fname_basename] = node_text(root:parent())
+    if spell_dict[text_nopunct] then
+      local should_ignore = (
+        spell_ignore_files[fname_basename] == true
+        or vim.tbl_contains(
+          (spell_ignore_files[fname_basename] or {}) --[[ @as string[] ]],
+          text_nopunct
+        )
+      )
+      if not should_ignore then
+        invalid_spelling[text_nopunct] = invalid_spelling[text_nopunct] or {}
+        invalid_spelling[text_nopunct][fname_basename] = node_text(root:parent())
+      end
     end
   elseif node_name == 'url' then
     local fixed_url, _ = fix_url(trim(text))
@@ -405,6 +442,8 @@ end
 
 -- Fix tab alignment issues caused by concealed characters like |, `, * in tags
 -- and code blocks.
+---@param text string
+---@param next_node_text string
 local function fix_tab_after_conceal(text, next_node_text)
   -- Vim tabs take into account the two concealed characters even though they
   -- are invisible, so we need to add back in the two spaces if this is
@@ -415,7 +454,18 @@ local function fix_tab_after_conceal(text, next_node_text)
   return text
 end
 
+---@class (exact) nvim.gen_help_html.heading
+---@field name string
+---@field subheadings nvim.gen_help_html.heading[]
+---@field tag string
+
 -- Generates HTML from node `root` recursively.
+---@param root TSNode
+---@param level integer
+---@param lang_tree TSTree
+---@param headings nvim.gen_help_html.heading[]
+---@param opt table
+---@param stats table
 local function visit_node(root, level, lang_tree, headings, opt, stats)
   level = level or 0
 
@@ -433,7 +483,6 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
   -- Parent kind (string).
   local parent = root:parent() and root:parent():type() or nil
   local text = ''
-  local trimmed
   -- Gets leading whitespace of `node`.
   local function ws(node)
     node = node or root
@@ -451,6 +500,7 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     return string.format('%s%s', ws_, vim.treesitter.get_node_text(node, opt.buf))
   end
 
+  local trimmed ---@type string
   if root:named_child_count() == 0 or node_name == 'ERROR' then
     text = node_text()
     trimmed = html_esc(trim(text))
@@ -485,7 +535,9 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     local tagname = tagnode and url_encode(node_text(tagnode:child(1), false))
       or to_heading_tag(hname)
     if node_name == 'h1' or #headings == 0 then
-      table.insert(headings, { name = hname, subheadings = {}, tag = tagname })
+      ---@type nvim.gen_help_html.heading
+      local heading = { name = hname, subheadings = {}, tag = tagname }
+      headings[#headings + 1] = heading
     else
       table.insert(
         headings[#headings].subheadings,
@@ -575,7 +627,7 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     if is_blank(text) then
       return ''
     end
-    local code
+    local code ---@type string
     if language then
       code = ('<pre><code class="language-%s">%s</code></pre>'):format(
         language,
@@ -656,8 +708,10 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
   end
 end
 
-local function get_helpfiles(include)
-  local dir = './build/runtime/doc'
+--- @param dir string e.g. '$VIMRUNTIME/doc'
+--- @param include string[]|nil
+--- @return string[]
+local function get_helpfiles(dir, include)
   local rv = {}
   for f, type in vim.fs.dir(dir) do
     if
@@ -698,13 +752,15 @@ end
 ---
 --- @param fname string help file to parse
 --- @param parser_path string? path to non-default vimdoc.so
---- @returns lang_tree, bufnr
+--- @return LanguageTree, integer (lang_tree, bufnr)
 local function parse_buf(fname, parser_path)
-  local buf
+  local buf ---@type integer
   if type(fname) == 'string' then
     vim.cmd('split ' .. vim.fn.fnameescape(fname)) -- Filename.
     buf = vim.api.nvim_get_current_buf()
   else
+    -- Left for debugging
+    ---@diagnostic disable-next-line: no-unknown
     buf = fname
     vim.cmd('sbuffer ' .. tostring(fname)) -- Buffer number.
   end
@@ -721,7 +777,7 @@ end
 ---
 --- @param fname string help file to validate
 --- @param parser_path string? path to non-default vimdoc.so
---- @returns { invalid_links: number, parse_errors: string[] }
+--- @return { invalid_links: number, parse_errors: string[] }
 local function validate_one(fname, parser_path)
   local stats = {
     parse_errors = {},
@@ -742,7 +798,8 @@ end
 --- @param old boolean Preformat paragraphs (for old :help files which are full of arbitrary whitespace)
 --- @param parser_path string? path to non-default vimdoc.so
 ---
---- @returns html, stats
+--- @return string html
+--- @return table stats
 local function gen_one(fname, to_fname, old, commit, parser_path)
   local stats = {
     noise_lines = {},
@@ -750,6 +807,7 @@ local function gen_one(fname, to_fname, old, commit, parser_path)
     first_tags = {}, -- Track the first few tags in doc.
   }
   local lang_tree, buf = parse_buf(fname, parser_path)
+  ---@type nvim.gen_help_html.heading[]
   local headings = {} -- Headings (for ToC). 2-dimensional: h1 contains h2/h3.
   local title = to_titlecase(basename_noext(fname))
 
@@ -883,6 +941,7 @@ local function gen_one(fname, to_fname, old, commit, parser_path)
     main
   )
 
+  ---@type string
   local toc = [[
     <div class="col-narrow toc">
       <div><a href="index.html">Main</a></div>
@@ -896,6 +955,7 @@ local function gen_one(fname, to_fname, old, commit, parser_path)
     n = n + 1 + #h1.subheadings
   end
   for _, h1 in ipairs(headings) do
+    ---@type string
     toc = toc .. ('<div class="help-toc-h1"><a href="#%s">%s</a>\n'):format(h1.tag, h1.name)
     if n < 30 or #headings < 10 then -- Show subheadings only if there aren't too many.
       for _, h2 in ipairs(h1.subheadings) do
@@ -1113,25 +1173,34 @@ local function gen_css(fname)
   tofile(fname, css)
 end
 
-function M._test()
-  tagmap = get_helptags('./build/runtime/doc')
-  helpfiles = get_helpfiles()
+-- Testing
 
-  local function ok(cond, expected, actual)
+local function ok(cond, expected, actual, message)
+  assert(
+    (not expected and not actual) or (expected and actual),
+    'if "expected" is given, "actual" is also required'
+  )
+  if expected then
     assert(
-      (not expected and not actual) or (expected and actual),
-      'if "expected" is given, "actual" is also required'
+      cond,
+      ('%sexpected %s, got: %s'):format(
+        message and (message .. '\n') or '',
+        vim.inspect(expected),
+        vim.inspect(actual)
+      )
     )
-    if expected then
-      assert(cond, ('expected %s, got: %s'):format(vim.inspect(expected), vim.inspect(actual)))
-      return cond
-    else
-      return assert(cond)
-    end
+    return cond
+  else
+    return assert(cond)
   end
-  local function eq(expected, actual)
-    return ok(expected == actual, expected, actual)
-  end
+end
+local function eq(expected, actual, message)
+  return ok(vim.deep_equal(expected, actual), expected, actual, message)
+end
+
+function M._test()
+  tagmap = get_helptags('$VIMRUNTIME/doc')
+  helpfiles = get_helpfiles(vim.fn.expand('$VIMRUNTIME/doc'))
 
   ok(vim.tbl_count(tagmap) > 3000, '>3000', vim.tbl_count(tagmap))
   ok(
@@ -1169,20 +1238,25 @@ function M._test()
   eq('https://example.com', fixed_url)
   eq('', removed_chars)
 
-  print('all tests passed')
+  print('all tests passed.\n')
 end
+
+--- @class nvim.gen_help_html.gen_result
+--- @field helpfiles string[] list of generated HTML files, from the source docs {include}
+--- @field err_count integer number of parse errors in :help docs
+--- @field invalid_links table<string, any>
 
 --- Generates HTML from :help docs located in `help_dir` and writes the result in `to_dir`.
 ---
 --- Example:
 ---
----   gen('./build/runtime/doc', '/path/to/neovim.github.io/_site/doc/', {'api.txt', 'autocmd.txt', 'channel.txt'}, nil)
+---   gen('$VIMRUNTIME/doc', '/path/to/neovim.github.io/_site/doc/', {'api.txt', 'autocmd.txt', 'channel.txt'}, nil)
 ---
 --- @param help_dir string Source directory containing the :help files. Must run `make helptags` first.
 --- @param to_dir string Target directory where the .html files will be written.
---- @param include table|nil Process only these filenames. Example: {'api.txt', 'autocmd.txt', 'channel.txt'}
+--- @param include string[]|nil Process only these filenames. Example: {'api.txt', 'autocmd.txt', 'channel.txt'}
 ---
---- @returns info dict
+--- @return nvim.gen_help_html.gen_result result
 function M.gen(help_dir, to_dir, include, commit, parser_path)
   vim.validate {
     help_dir = {
@@ -1207,7 +1281,7 @@ function M.gen(help_dir, to_dir, include, commit, parser_path)
   local err_count = 0
   ensure_runtimepath()
   tagmap = get_helptags(vim.fn.expand(help_dir))
-  helpfiles = get_helpfiles(include)
+  helpfiles = get_helpfiles(help_dir, include)
   to_dir = vim.fn.expand(to_dir)
   parser_path = parser_path and vim.fn.expand(parser_path) or nil
 
@@ -1233,6 +1307,7 @@ function M.gen(help_dir, to_dir, include, commit, parser_path)
   print(('total errors: %d'):format(err_count))
   print(('invalid tags:\n%s'):format(vim.inspect(invalid_links)))
 
+  --- @type nvim.gen_help_html.gen_result
   return {
     helpfiles = helpfiles,
     err_count = err_count,
@@ -1240,13 +1315,21 @@ function M.gen(help_dir, to_dir, include, commit, parser_path)
   }
 end
 
--- Validates all :help files found in `help_dir`:
---  - checks that |tag| links point to valid helptags.
---  - recursively counts parse errors ("ERROR" nodes)
---
--- This is 10x faster than gen(), for use in CI.
---
--- @returns results dict
+--- @class nvim.gen_help_html.validate_result
+--- @field helpfiles integer number of generated helpfiles
+--- @field err_count integer number of parse errors
+--- @field parse_errors table<string, string[]>
+--- @field invalid_links table<string, any> invalid tags in :help docs
+--- @field invalid_urls table<string, any> invalid URLs in :help docs
+--- @field invalid_spelling table<string, table<string, string>> invalid spelling in :help docs
+
+--- Validates all :help files found in `help_dir`:
+---  - checks that |tag| links point to valid helptags.
+---  - recursively counts parse errors ("ERROR" nodes)
+---
+--- This is 10x faster than gen(), for use in CI.
+---
+--- @return nvim.gen_help_html.validate_result result
 function M.validate(help_dir, include, parser_path)
   vim.validate {
     help_dir = {
@@ -1265,15 +1348,15 @@ function M.validate(help_dir, include, parser_path)
       'valid vimdoc.{so,dll} filepath',
     },
   }
-  local err_count = 0
-  local files_to_errors = {}
+  local err_count = 0 ---@type integer
+  local files_to_errors = {} ---@type table<string, string[]>
   ensure_runtimepath()
   tagmap = get_helptags(vim.fn.expand(help_dir))
-  helpfiles = get_helpfiles(include)
+  helpfiles = get_helpfiles(help_dir, include)
   parser_path = parser_path and vim.fn.expand(parser_path) or nil
 
   for _, f in ipairs(helpfiles) do
-    local helpfile = vim.fs.basename(f)
+    local helpfile = assert(vim.fs.basename(f))
     local rv = validate_one(f, parser_path)
     print(('validated (%-4s errors): %s'):format(#rv.parse_errors, helpfile))
     if #rv.parse_errors > 0 then
@@ -1285,14 +1368,65 @@ function M.validate(help_dir, include, parser_path)
     err_count = err_count + #rv.parse_errors
   end
 
+  ---@type nvim.gen_help_html.validate_result
   return {
     helpfiles = #helpfiles,
     err_count = err_count,
+    parse_errors = files_to_errors,
     invalid_links = invalid_links,
     invalid_urls = invalid_urls,
     invalid_spelling = invalid_spelling,
-    parse_errors = files_to_errors,
   }
+end
+
+--- Validates vimdoc files on $VIMRUNTIME. and print human-readable error messages if fails.
+---
+--- If this fails, try these steps (in order):
+--- 1. Fix/cleanup the :help docs.
+--- 2. Fix the parser: https://github.com/neovim/tree-sitter-vimdoc
+--- 3. File a parser bug, and adjust the tolerance of this test in the meantime.
+---
+--- @param help_dir? string e.g. '$VIMRUNTIME/doc' or './runtime/doc'
+function M.run_validate(help_dir)
+  help_dir = vim.fn.expand(help_dir or '$VIMRUNTIME/doc')
+  print('doc path = ' .. vim.uv.fs_realpath(help_dir))
+
+  local rv = M.validate(help_dir)
+
+  -- Check that we actually found helpfiles.
+  ok(rv.helpfiles > 100, '>100 :help files', rv.helpfiles)
+
+  eq({}, rv.parse_errors, 'no parse errors')
+  eq(0, rv.err_count, 'no parse errors')
+  eq({}, rv.invalid_links, 'invalid tags in :help docs')
+  eq({}, rv.invalid_urls, 'invalid URLs in :help docs')
+  eq(
+    {},
+    rv.invalid_spelling,
+    'invalid spelling in :help docs (see spell_dict in scripts/gen_help_html.lua)'
+  )
+end
+
+--- Test-generates HTML from docs.
+---
+--- 1. Test that gen_help_html.lua actually works.
+--- 2. Test that parse errors did not increase wildly. Because we explicitly test only a few
+---    :help files, we can be precise about the tolerances here.
+--- @param help_dir? string e.g. '$VIMRUNTIME/doc' or './runtime/doc'
+function M.test_gen(help_dir)
+  local tmpdir = assert(vim.fs.dirname(vim.fn.tempname()))
+  help_dir = vim.fn.expand(help_dir or '$VIMRUNTIME/doc')
+  print('doc path = ' .. vim.uv.fs_realpath(help_dir))
+
+  local rv = M.gen(
+    help_dir,
+    tmpdir,
+    -- Because gen() is slow (~30s), this test is limited to a few files.
+    { 'pi_health.txt', 'help.txt', 'index.txt', 'nvim.txt' }
+  )
+  eq(4, #rv.helpfiles)
+  eq(0, rv.err_count, 'parse errors in :help docs')
+  eq({}, rv.invalid_links, 'invalid tags in :help docs')
 end
 
 return M

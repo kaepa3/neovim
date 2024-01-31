@@ -1146,10 +1146,10 @@ static void gotchars(const uint8_t *chars, size_t len)
   maptick++;
 }
 
-/// Record a <Nop> key.
-void gotchars_nop(void)
+/// Record an <Ignore> key.
+void gotchars_ignore(void)
 {
-  uint8_t nop_buf[3] = { K_SPECIAL, KS_EXTRA, KE_NOP };
+  uint8_t nop_buf[3] = { K_SPECIAL, KS_EXTRA, KE_IGNORE };
   gotchars(nop_buf, 3);
 }
 
@@ -2502,20 +2502,22 @@ static int vgetorpeek(bool advance)
               // we are expecting to truncate the trailing
               // white-space, so find the last non-white
               // character -- webb
-              if (did_ai
-                  && *skipwhite(get_cursor_line_ptr() + curwin->w_cursor.col) == NUL) {
+              if (did_ai && *skipwhite(get_cursor_line_ptr() + curwin->w_cursor.col) == NUL) {
                 curwin->w_wcol = 0;
                 ptr = get_cursor_line_ptr();
-                chartabsize_T cts;
-                init_chartabsize_arg(&cts, curwin, curwin->w_cursor.lnum, 0, ptr, ptr);
-                while (cts.cts_ptr < ptr + curwin->w_cursor.col) {
-                  if (!ascii_iswhite(*cts.cts_ptr)) {
-                    curwin->w_wcol = cts.cts_vcol;
+                char *endptr = ptr + curwin->w_cursor.col;
+
+                CharsizeArg csarg;
+                CSType cstype = init_charsize_arg(&csarg, curwin, curwin->w_cursor.lnum, ptr);
+                StrCharInfo ci = utf_ptr2StrCharInfo(ptr);
+                int vcol = 0;
+                while (ci.ptr < endptr) {
+                  if (!ascii_iswhite(ci.chr.value)) {
+                    curwin->w_wcol = vcol;
                   }
-                  cts.cts_vcol += lbr_chartabsize(&cts);
-                  cts.cts_ptr += utfc_ptr2len(cts.cts_ptr);
+                  vcol += win_charsize(cstype, vcol, ci.ptr, ci.chr.value, &csarg).width;
+                  ci = utfc_next(ci);
                 }
-                clear_chartabsize_arg(&cts);
 
                 curwin->w_wrow = curwin->w_cline_row
                                  + curwin->w_wcol / curwin->w_width_inner;
@@ -2744,9 +2746,9 @@ static int vgetorpeek(bool advance)
   }
 
   if (timedout && c == ESC) {
-    // When recording there will be no timeout.  Add a <Nop> after the ESC
-    // to avoid that it forms a key code with following characters.
-    gotchars_nop();
+    // When recording there will be no timeout.  Add an <Ignore> after the
+    // ESC to avoid that it forms a key code with following characters.
+    gotchars_ignore();
   }
 
   vgetc_busy--;

@@ -23,6 +23,7 @@
 #include "nvim/macros_defs.h"
 #include "nvim/mark_defs.h"
 #include "nvim/mbyte.h"
+#include "nvim/mbyte_defs.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/menu.h"
@@ -1325,18 +1326,18 @@ retnomove:
                 && !sep_line_offset
                 && (wp->w_p_rl
                     ? col < wp->w_width_inner - fdc
-                    : col >= fdc + (cmdwin_type == 0 && wp == curwin ? 0 : 1))
+                    : col >= fdc + (wp != cmdwin_win ? 0 : 1))
                 && (flags & MOUSE_MAY_STOP_VIS)))) {
       end_visual_mode();
       redraw_curbuf_later(UPD_INVERTED);  // delete the inversion
     }
-    if (cmdwin_type != 0 && wp != curwin) {
+    if (cmdwin_type != 0 && wp != cmdwin_win) {
       // A click outside the command-line window: Use modeless
       // selection if possible.  Allow dragging the status lines.
       sep_line_offset = 0;
       row = 0;
       col += wp->w_wincol;
-      wp = curwin;
+      wp = cmdwin_win;
     }
     // Only change window focus when not clicking on or dragging the
     // status line.  Do change focus when releasing the mouse button
@@ -1755,22 +1756,23 @@ colnr_T vcol2col(win_T *wp, linenr_T lnum, colnr_T vcol, colnr_T *coladdp)
 {
   // try to advance to the specified column
   char *line = ml_get_buf(wp->w_buffer, lnum);
-  chartabsize_T cts;
-  init_chartabsize_arg(&cts, wp, lnum, 0, line, line);
-  while (cts.cts_vcol < vcol && *cts.cts_ptr != NUL) {
-    int size = win_lbr_chartabsize(&cts, NULL);
-    if (cts.cts_vcol + size > vcol) {
+  CharsizeArg csarg;
+  CSType cstype = init_charsize_arg(&csarg, wp, lnum, line);
+  StrCharInfo ci = utf_ptr2StrCharInfo(line);
+  int cur_vcol = 0;
+  while (cur_vcol < vcol && *ci.ptr != NUL) {
+    int next_vcol = cur_vcol + win_charsize(cstype, cur_vcol, ci.ptr, ci.chr.value, &csarg).width;
+    if (next_vcol > vcol) {
       break;
     }
-    cts.cts_vcol += size;
-    MB_PTR_ADV(cts.cts_ptr);
+    cur_vcol = next_vcol;
+    ci = utfc_next(ci);
   }
-  clear_chartabsize_arg(&cts);
 
   if (coladdp != NULL) {
-    *coladdp = vcol - cts.cts_vcol;
+    *coladdp = vcol - cur_vcol;
   }
-  return (colnr_T)(cts.cts_ptr - line);
+  return (colnr_T)(ci.ptr - line);
 }
 
 /// Set UI mouse depending on current mode and 'mouse'.
