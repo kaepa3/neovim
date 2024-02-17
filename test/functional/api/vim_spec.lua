@@ -95,6 +95,14 @@ describe('API', function()
     assert_alive()
   end)
 
+  it('input is processed first when followed immediately by non-fast events', function()
+    api.nvim_set_current_line('ab')
+    async_meths.nvim_input('x')
+    async_meths.nvim_exec_lua('_G.res1 = vim.api.nvim_get_current_line()', {})
+    async_meths.nvim_exec_lua('_G.res2 = vim.api.nvim_get_current_line()', {})
+    eq({ 'b', 'b' }, exec_lua('return { _G.res1, _G.res2 }'))
+  end)
+
   it('does not set CA_COMMAND_BUSY #7254', function()
     command('split')
     command('autocmd WinEnter * startinsert')
@@ -2441,7 +2449,6 @@ describe('API', function()
     }
 
     it('returns {} for invalid channel', function()
-      eq({}, api.nvim_get_chan_info(0))
       eq({}, api.nvim_get_chan_info(-1))
       -- more preallocated numbers might be added, try something high
       eq({}, api.nvim_get_chan_info(10))
@@ -2449,6 +2456,8 @@ describe('API', function()
 
     it('stream=stdio channel', function()
       eq({ [1] = testinfo, [2] = stderr }, api.nvim_list_chans())
+      -- 0 should return current channel
+      eq(testinfo, api.nvim_get_chan_info(0))
       eq(testinfo, api.nvim_get_chan_info(1))
       eq(stderr, api.nvim_get_chan_info(2))
 
@@ -2514,6 +2523,7 @@ describe('API', function()
         "Vim:Error invoking 'nvim_set_current_buf' on channel 3 (amazing-cat):\nWrong type for argument 1 when calling nvim_set_current_buf, expecting Buffer",
         pcall_err(eval, 'rpcrequest(3, "nvim_set_current_buf", -1)')
       )
+      eq(info, eval('rpcrequest(3, "nvim_get_chan_info", 0)'))
     end)
 
     it('stream=job :terminal channel', function()
@@ -3645,6 +3655,7 @@ describe('API', function()
       eq({ 2, 2, buf, mark[4] }, mark)
     end)
   end)
+
   describe('nvim_eval_statusline', function()
     it('works', function()
       eq({
@@ -3652,57 +3663,89 @@ describe('API', function()
         width = 31,
       }, api.nvim_eval_statusline('%%StatusLineString%#WarningMsg#WithHighlights', {}))
     end)
+
     it("doesn't exceed maxwidth", function()
       eq({
         str = 'Should be trun>',
         width = 15,
       }, api.nvim_eval_statusline('Should be truncated%<', { maxwidth = 15 }))
     end)
-    it('supports ASCII fillchar', function()
+
+    it('has correct default fillchar', function()
+      local oldwin = api.nvim_get_current_win()
+      command('set fillchars=stl:#,stlnc:$,wbr:%')
+      command('new')
+      eq({ str = 'a###b', width = 5 }, api.nvim_eval_statusline('a%=b', { maxwidth = 5 }))
       eq(
-        { str = 'a~~~b', width = 5 },
-        api.nvim_eval_statusline('a%=b', { fillchar = '~', maxwidth = 5 })
+        { str = 'a$$$b', width = 5 },
+        api.nvim_eval_statusline('a%=b', { winid = oldwin, maxwidth = 5 })
+      )
+      eq(
+        { str = 'a%%%b', width = 5 },
+        api.nvim_eval_statusline('a%=b', { use_winbar = true, maxwidth = 5 })
+      )
+      eq(
+        { str = 'a   b', width = 5 },
+        api.nvim_eval_statusline('a%=b', { use_tabline = true, maxwidth = 5 })
+      )
+      eq(
+        { str = 'a   b', width = 5 },
+        api.nvim_eval_statusline('a%=b', { use_statuscol_lnum = 1, maxwidth = 5 })
       )
     end)
-    it('supports single-width multibyte fillchar', function()
-      eq(
-        { str = 'a━━━b', width = 5 },
-        api.nvim_eval_statusline('a%=b', { fillchar = '━', maxwidth = 5 })
-      )
-    end)
-    it('treats double-width fillchar as single-width', function()
-      eq(
-        { str = 'a哦哦哦b', width = 5 },
-        api.nvim_eval_statusline('a%=b', { fillchar = '哦', maxwidth = 5 })
-      )
-    end)
-    it('treats control character fillchar as single-width', function()
-      eq(
-        { str = 'a\031\031\031b', width = 5 },
-        api.nvim_eval_statusline('a%=b', { fillchar = '\031', maxwidth = 5 })
-      )
-    end)
+
+    for fc, desc in pairs({
+      ['~'] = 'supports ASCII fillchar',
+      ['━'] = 'supports single-width multibyte fillchar',
+      ['c̳'] = 'supports single-width fillchar with composing',
+      ['哦'] = 'treats double-width fillchar as single-width',
+      ['\031'] = 'treats control character fillchar as single-width',
+    }) do
+      it(desc, function()
+        eq(
+          { str = 'a' .. fc:rep(3) .. 'b', width = 5 },
+          api.nvim_eval_statusline('a%=b', { fillchar = fc, maxwidth = 5 })
+        )
+        eq(
+          { str = 'a' .. fc:rep(3) .. 'b', width = 5 },
+          api.nvim_eval_statusline('a%=b', { fillchar = fc, use_winbar = true, maxwidth = 5 })
+        )
+        eq(
+          { str = 'a' .. fc:rep(3) .. 'b', width = 5 },
+          api.nvim_eval_statusline('a%=b', { fillchar = fc, use_tabline = true, maxwidth = 5 })
+        )
+        eq(
+          { str = 'a' .. fc:rep(3) .. 'b', width = 5 },
+          api.nvim_eval_statusline('a%=b', { fillchar = fc, use_statuscol_lnum = 1, maxwidth = 5 })
+        )
+      end)
+    end
+
     it('rejects multiple-character fillchar', function()
       eq(
         "Invalid 'fillchar': expected single character",
         pcall_err(api.nvim_eval_statusline, '', { fillchar = 'aa' })
       )
     end)
+
     it('rejects empty string fillchar', function()
       eq(
         "Invalid 'fillchar': expected single character",
         pcall_err(api.nvim_eval_statusline, '', { fillchar = '' })
       )
     end)
+
     it('rejects non-string fillchar', function()
       eq(
         "Invalid 'fillchar': expected String, got Integer",
         pcall_err(api.nvim_eval_statusline, '', { fillchar = 1 })
       )
     end)
+
     it('rejects invalid string', function()
       eq('E539: Illegal character <}>', pcall_err(api.nvim_eval_statusline, '%{%}', {}))
     end)
+
     it('supports various items', function()
       eq({ str = '0', width = 1 }, api.nvim_eval_statusline('%l', { maxwidth = 5 }))
       command('set readonly')
@@ -3717,6 +3760,7 @@ describe('API', function()
       screen:expect({ any = '123456' })
       eq({ str = '<3456', width = 5 }, api.nvim_eval_statusline('%S', { maxwidth = 5 }))
     end)
+
     describe('highlight parsing', function()
       it('works', function()
         eq(
@@ -3734,6 +3778,7 @@ describe('API', function()
           )
         )
       end)
+
       it('works with no highlight', function()
         eq({
           str = 'TextWithNoHighlight',
@@ -3743,9 +3788,9 @@ describe('API', function()
           },
         }, api.nvim_eval_statusline('TextWithNoHighlight', { highlights = true }))
       end)
+
       it('works with inactive statusline', function()
         command('split')
-
         eq(
           {
             str = 'TextWithNoHighlightTextWithWarningHighlight',
@@ -3761,6 +3806,7 @@ describe('API', function()
           )
         )
       end)
+
       it('works with tabline', function()
         eq(
           {
@@ -3777,6 +3823,7 @@ describe('API', function()
           )
         )
       end)
+
       it('works with winbar', function()
         eq(
           {
@@ -3793,10 +3840,12 @@ describe('API', function()
           )
         )
       end)
+
       it('works with statuscolumn', function()
         exec([[
           let &stc='%C%s%=%l '
-          set cul nu nuw=3 scl=yes:2 fdc=2
+          " should not use "stl" from 'fillchars'
+          set cul nu nuw=3 scl=yes:2 fdc=2 fillchars=stl:#
           call setline(1, repeat(['aaaaa'], 5))
           let g:ns = nvim_create_namespace('')
           call sign_define('a', {'text':'aa', 'texthl':'IncSearch', 'numhl':'Normal'})
@@ -3831,6 +3880,7 @@ describe('API', function()
           api.nvim_eval_statusline('%l%#ErrorMsg# ', { use_statuscol_lnum = 3, highlights = true })
         )
       end)
+
       it('no memory leak with click functions', function()
         api.nvim_eval_statusline('%@ClickFunc@StatusLineStringWithClickFunc%T', {})
         eq({

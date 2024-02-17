@@ -22,6 +22,7 @@
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/eval/userfunc.h"
 #include "nvim/ex_cmds_defs.h"
 #include "nvim/ex_session.h"
 #include "nvim/garray.h"
@@ -311,7 +312,8 @@ static bool set_maparg_lhs_rhs(const char *const orig_lhs, const size_t orig_lhs
   // replace_termcodes() may move the result to allocated memory, which
   // needs to be freed later (*lhs_buf and *rhs_buf).
   // replace_termcodes() also removes CTRL-Vs and sometimes backslashes.
-  // If something like <C-H> is simplified to 0x08 then mark it as simplified.
+  // If something like <C-H> is simplified to 0x08 then mark it as simplified
+  // and also add en entry with a modifier.
   bool did_simplify = false;
   const int flags = REPTERM_FROM_PART | REPTERM_DO_LT;
   char *bufarg = lhs_buf;
@@ -1643,7 +1645,7 @@ char *eval_map_expr(mapblock_T *mp, int c)
   if (mp->m_luaref != LUA_NOREF) {
     Error err = ERROR_INIT;
     Array args = ARRAY_DICT_INIT;
-    Object ret = nlua_call_ref(mp->m_luaref, NULL, args, true, &err);
+    Object ret = nlua_call_ref(mp->m_luaref, NULL, args, kRetObject, NULL, &err);
     if (ret.type == kObjectTypeString) {
       p = string_to_cstr(ret.data.string);
     }
@@ -2304,13 +2306,13 @@ void f_mapset(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   LuaRef rhs_lua = LUA_NOREF;
   dictitem_T *callback_di = tv_dict_find(d, S_LEN("callback"));
   if (callback_di != NULL) {
-    Object callback_obj = vim_to_object(&callback_di->di_tv);
-    if (callback_obj.type == kObjectTypeLuaRef && callback_obj.data.luaref != LUA_NOREF) {
-      rhs_lua = callback_obj.data.luaref;
-      orig_rhs = "";
-      callback_obj.data.luaref = LUA_NOREF;
+    if (callback_di->di_tv.v_type == VAR_FUNC) {
+      ufunc_T *fp = find_func(callback_di->di_tv.vval.v_string);
+      if (fp != NULL && (fp->uf_flags & FC_LUAREF)) {
+        rhs_lua = api_new_luaref(fp->uf_luaref);
+        orig_rhs = "";
+      }
     }
-    api_free_object(callback_obj);
   }
   if (lhs == NULL || lhsraw == NULL || orig_rhs == NULL) {
     emsg(_(e_entries_missing_in_mapset_dict_argument));

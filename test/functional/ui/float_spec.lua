@@ -104,14 +104,20 @@ describe('float window', function()
   end)
 
   it('open with WinNew autocmd', function()
-    local res = exec_lua([[
-      local triggerd = false
+    local new_triggered_before_enter, new_curwin, win = unpack(exec_lua([[
+      local enter_triggered = false
+      local new_triggered_before_enter = false
+      local new_curwin
       local buf = vim.api.nvim_create_buf(true, true)
+      vim.api.nvim_create_autocmd('WinEnter', {
+        callback = function()
+          enter_triggered = true
+        end
+      })
       vim.api.nvim_create_autocmd('WinNew', {
-        callback = function(opt)
-          if opt.buf == buf then
-            triggerd = true
-          end
+        callback = function()
+          new_triggered_before_enter = not enter_triggered
+          new_curwin = vim.api.nvim_get_current_win()
         end
       })
       local opts = {
@@ -120,10 +126,11 @@ describe('float window', function()
         width = 1, height = 1,
         noautocmd = false,
       }
-      vim.api.nvim_open_win(buf, true, opts)
-      return triggerd
-    ]])
-    eq(true, res)
+      local win = vim.api.nvim_open_win(buf, true, opts)
+      return {new_triggered_before_enter, new_curwin, win}
+    ]]))
+    eq(true, new_triggered_before_enter)
+    eq(win, new_curwin)
   end)
 
   it('opened with correct height', function()
@@ -862,8 +869,8 @@ describe('float window', function()
         [24] = {foreground = Screen.colors.Black, background = Screen.colors.Grey80};
         [25] = {blend = 100, background = Screen.colors.Gray0};
         [26] = {blend = 80, background = Screen.colors.Gray0};
-        [27] = {background = Screen.colors.LightGray};
-        [28] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGray};
+        [27] = {foreground = Screen.colors.Black, background = Screen.colors.LightGrey};
+        [28] = {foreground = Screen.colors.DarkBlue, background = Screen.colors.LightGrey};
       }
       screen:set_default_attr_ids(attrs)
     end)
@@ -1094,8 +1101,17 @@ describe('float window', function()
       local win = api.nvim_open_win(buf, false, {relative='editor', width=20, height=2, row=3, col=5, zindex=60})
       local expected = {anchor='NW', col=5, external=false, focusable=true, height=2, relative='editor', row=3, width=20, zindex=60, hide=false}
       eq(expected, api.nvim_win_get_config(win))
+      eq(true, exec_lua([[
+        local expected, win = ...
+        local actual = vim.api.nvim_win_get_config(win)
+        for k,v in pairs(expected) do
+          if v ~= actual[k] then
+            error(k)
+          end
+        end
+        return true]], expected, win))
 
-      eq({relative='', external=false, focusable=true, hide=false}, api.nvim_win_get_config(0))
+      eq({external=false, focusable=true, hide=false, relative='',split="left",width=40,height=6}, api.nvim_win_get_config(0))
 
       if multigrid then
         api.nvim_win_set_config(win, {external=true, width=10, height=1})
@@ -2878,27 +2894,31 @@ describe('float window', function()
     it('API has proper error messages', function()
       local buf = api.nvim_create_buf(false,false)
       eq("Invalid key: 'bork'",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=2,bork=true}))
-      eq("'win' key is only valid with relative='win'",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,win=0}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,bork=true}))
+      eq("'win' key is only valid with relative='win' and relative=''",
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='editor',row=0,col=0,win=0}))
+      eq("floating windows cannot have 'vertical'",
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='editor',row=0,col=0,vertical=true}))
+      eq("floating windows cannot have 'split'",
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='editor',row=0,col=0,split="left"}))
       eq("Only one of 'relative' and 'external' must be used",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,external=true}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='editor',row=0,col=0,external=true}))
       eq("Invalid value of 'relative' key",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=2,relative='shell',row=0,col=0}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='shell',row=0,col=0}))
       eq("Invalid value of 'anchor' key",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=2,relative='editor',row=0,col=0,anchor='bottom'}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='editor',row=0,col=0,anchor='bottom'}))
       eq("'relative' requires 'row'/'col' or 'bufpos'",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=2,relative='editor'}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=2,relative='editor'}))
       eq("'width' key must be a positive Integer",
-         pcall_err(api.nvim_open_win,buf, false, {width=-1,height=2,relative='editor', row=0, col=0}))
+         pcall_err(api.nvim_open_win, buf, false, {width=-1,height=2,relative='editor', row=0, col=0}))
       eq("'height' key must be a positive Integer",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=-1,relative='editor', row=0, col=0}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=-1,relative='editor', row=0, col=0}))
       eq("'height' key must be a positive Integer",
-         pcall_err(api.nvim_open_win,buf, false, {width=20,height=0,relative='editor', row=0, col=0}))
+         pcall_err(api.nvim_open_win, buf, false, {width=20,height=0,relative='editor', row=0, col=0}))
       eq("Must specify 'width'",
-         pcall_err(api.nvim_open_win,buf, false, {relative='editor', row=0, col=0}))
+         pcall_err(api.nvim_open_win, buf, false, {relative='editor', row=0, col=0}))
       eq("Must specify 'height'",
-         pcall_err(api.nvim_open_win,buf, false, {relative='editor', row=0, col=0, width=2}))
+         pcall_err(api.nvim_open_win, buf, false, {relative='editor', row=0, col=0, width=2}))
     end)
 
     it('can be placed relative window or cursor', function()
@@ -7428,8 +7448,8 @@ describe('float window', function()
         [10] = {foreground = Screen.colors.Red, background = Screen.colors.LightMagenta, blend = 0},
         [11] = {foreground = Screen.colors.Red, background = Screen.colors.LightMagenta, blend = 80},
         [12] = {background = Screen.colors.LightMagenta, bold = true, foreground = Screen.colors.Blue1, blend = 30},
-        [13] = {background = Screen.colors.LightGray, blend = 30},
-        [14] = {foreground = Screen.colors.Grey0, background = Screen.colors.Grey88},
+        [13] = {foreground = Screen.colors.Black, background = Screen.colors.LightGray, blend = 30},
+        [14] = {foreground = Screen.colors.Black, background = Screen.colors.Grey88},
         [15] = {foreground = tonumber('0x939393'), background = Screen.colors.Grey88},
         [16] = {background = Screen.colors.Grey90};
         [17] = {blend = 100};

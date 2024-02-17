@@ -11,7 +11,7 @@ local M = {}
 --- @field severity? vim.diagnostic.Severity
 --- @field message string
 --- @field source? string
---- @field code? string
+--- @field code? string|integer
 --- @field _tags? { deprecated: boolean, unnecessary: boolean}
 --- @field user_data? any arbitrary data plugins can add
 --- @field namespace? integer
@@ -1023,7 +1023,7 @@ end
 
 --- @class vim.diagnostic.GotoOpts : vim.diagnostic.GetOpts
 --- @field cursor_position? {[1]:integer,[2]:integer}
---- @field wrap? integer
+--- @field wrap? boolean
 --- @field float? boolean|vim.diagnostic.Opts.Float
 --- @field win_id? integer
 
@@ -1732,7 +1732,7 @@ function M.open_float(opts, ...)
   if not opts.focus_id then
     opts.focus_id = scope
   end
-  local float_bufnr, winnr = require('vim.lsp.util').open_floating_preview(lines, 'plaintext', opts)
+  local float_bufnr, winnr = vim.lsp.util.open_floating_preview(lines, 'plaintext', opts)
   for i, hl in ipairs(highlights) do
     local line = lines[i]
     local prefix_len = hl.prefix and hl.prefix.length or 0

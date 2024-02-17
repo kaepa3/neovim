@@ -155,8 +155,9 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 ---                    will be `nvim_buf_changedtick_event`. Not for Lua
 ---                    callbacks.
 --- @param opts vim.api.keyset.buf_attach Optional parameters.
----                    • on_lines: Lua callback invoked on change. Return `true` to
----                      detach. Args:
+---                    • on_lines: Lua callback invoked on change. Return a
+---                      truthy value (not `false` or `nil`)
+---                      to detach. Args:
 ---                      • the string "lines"
 ---                      • buffer handle
 ---                      • b:changedtick
@@ -169,7 +170,8 @@ function vim.api.nvim_buf_add_highlight(buffer, ns_id, hl_group, line, col_start
 ---
 ---                    • on_bytes: Lua callback invoked on change. This
 ---                      callback receives more granular information about the
----                      change compared to on_lines. Return `true` to
+---                      change compared to on_lines. Return a truthy value
+---                      (not `false` or `nil`) to
 ---                      detach. Args:
 ---                      • the string "bytes"
 ---                      • buffer handle
@@ -863,9 +865,9 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---                troubleshooting).
 ---              • callback (function|string) optional: Lua function (or
 ---                Vimscript function name, if string) called when the
----                event(s) is triggered. Lua callback can return true to
----                delete the autocommand, and receives a table argument with
----                these keys:
+---                event(s) is triggered. Lua callback can return a truthy
+---                value (not `false` or `nil`) to delete the
+---                autocommand. Receives a table argument with these keys:
 ---                • id: (number) autocommand id
 ---                • event: (string) name of the triggered event
 ---                  `autocmd-events`
@@ -1158,7 +1160,7 @@ function vim.api.nvim_get_autocmds(opts) end
 
 --- Gets information about a channel.
 ---
---- @param chan integer
+--- @param chan integer channel_id, or 0 for current channel
 --- @return table<string,any>
 function vim.api.nvim_get_chan_info(chan) end
 
@@ -1483,15 +1485,24 @@ function vim.api.nvim_notify(msg, log_level, opts) end
 --- @return integer
 function vim.api.nvim_open_term(buffer, opts) end
 
---- Open a new window.
---- Currently this is used to open floating and external windows. Floats are
---- windows that are drawn above the split layout, at some anchor position in
---- some other window. Floats can be drawn internally or by external GUI with
---- the `ui-multigrid` extension. External windows are only supported with
---- multigrid GUIs, and are displayed as separate top-level windows.
+--- Opens a new split window, or a floating window if `relative` is specified,
+--- or an external window (managed by the UI) if `external` is specified.
+--- Floats are windows that are drawn above the split layout, at some anchor
+--- position in some other window. Floats can be drawn internally or by
+--- external GUI with the `ui-multigrid` extension. External windows are only
+--- supported with multigrid GUIs, and are displayed as separate top-level
+--- windows.
 --- For a general overview of floats, see `api-floatwin`.
---- Exactly one of `external` and `relative` must be specified. The `width`
---- and `height` of the new window must be specified.
+--- The `width` and `height` of the new window must be specified when opening
+--- a floating window, but are optional for normal windows.
+--- If `relative` and `external` are omitted, a normal "split" window is
+--- created. The `win` property determines which window will be split. If no
+--- `win` is provided or `win == 0`, a window will be created adjacent to the
+--- current window. If -1 is provided, a top-level split will be created.
+--- `vertical` and `split` are only valid for normal windows, and are used to
+--- control split direction. For `vertical`, the exact direction is determined
+--- by `'splitright'` and `'splitbelow'`. Split windows cannot have
+--- `bufpos`/`row`/`col`/`border`/`title`/`footer` properties.
 --- With relative=editor (row=0,col=0) refers to the top-left corner of the
 --- screen-grid and (row=Lines-1,col=Columns-1) refers to the bottom-right
 --- corner. Fractional values are allowed, but the builtin implementation
@@ -1515,9 +1526,18 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---       {relative='win', width=12, height=3, bufpos={100,10}})
 --- ```
 ---
+--- Example (Lua): vertical split left of the current window
+---
+--- ```lua
+---     vim.api.nvim_open_win(0, false, {
+---       split = 'left',
+---       win = 0
+---     })
+--- ```
+---
 --- @param buffer integer Buffer to display, or 0 for current buffer
 --- @param enter boolean Enter the window (make it the current window)
---- @param config vim.api.keyset.float_config Map defining the window configuration. Keys:
+--- @param config vim.api.keyset.win_config Map defining the window configuration. Keys:
 ---               • relative: Sets the window layout to "floating", placed at
 ---                 (row,col) coordinates relative to:
 ---                 • "editor" The global editor grid
@@ -1526,7 +1546,8 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---                 • "cursor" Cursor position in current window.
 ---                 • "mouse" Mouse position
 ---
----               • win: `window-ID` for relative="win".
+---               • win: `window-ID` window to split, or relative window when
+---                 creating a float (relative="win").
 ---               • anchor: Decides which corner of the float to place at
 ---                 (row,col):
 ---                 • "NW" northwest (default)
@@ -1623,6 +1644,8 @@ function vim.api.nvim_open_term(buffer, opts) end
 ---               • fixed: If true when anchor is NW or SW, the float window
 ---                 would be kept fixed even if the window would be truncated.
 ---               • hide: If true the floating window will be hidden.
+---               • vertical: Split vertically `:vertical`.
+---               • split: Split direction: "left", "right", "above", "below".
 --- @return integer
 function vim.api.nvim_open_win(buffer, enter, config) end
 
@@ -2072,7 +2095,7 @@ function vim.api.nvim_win_set_buf(window, buffer) end
 --- changed. `row`/`col` and `relative` must be reconfigured together.
 ---
 --- @param window integer Window handle, or 0 for current window
---- @param config vim.api.keyset.float_config Map defining the window configuration, see `nvim_open_win()`
+--- @param config vim.api.keyset.win_config Map defining the window configuration, see `nvim_open_win()`
 function vim.api.nvim_win_set_config(window, config) end
 
 --- Sets the (1,0)-indexed cursor position in the window. `api-indexing` This

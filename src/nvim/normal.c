@@ -375,7 +375,7 @@ static int nv_compare(const void *s1, const void *s2)
   if (c2 < 0) {
     c2 = -c2;
   }
-  return c1 - c2;
+  return c1 == c2 ? 0 : c1 > c2 ? 1 : -1;
 }
 
 /// Initialize the nv_cmd_idx[] table.
@@ -1347,10 +1347,6 @@ static void normal_redraw(NormalState *s)
 
   show_cursor_info_later(false);
 
-  if (VIsual_active) {
-    redraw_curbuf_later(UPD_INVERTED);  // update inverted part
-  }
-
   if (must_redraw) {
     update_screen();
   } else {
@@ -1455,9 +1451,7 @@ static int normal_check(VimState *state)
     // has been done, close any file for startup messages.
     if (time_fd != NULL) {
       TIME_MSG("first screen update");
-      TIME_MSG("--- NVIM STARTED ---");
-      fclose(time_fd);
-      time_fd = NULL;
+      time_finish();
     }
     // After the first screen update may start triggering WinScrolled
     // autocmd events.  Store all the scroll positions and sizes now.
@@ -5129,6 +5123,7 @@ static void n_start_visual_mode(int c)
     curwin->w_old_cursor_lnum = curwin->w_cursor.lnum;
     curwin->w_old_visual_lnum = curwin->w_cursor.lnum;
   }
+  redraw_curbuf_later(UPD_VALID);
 }
 
 /// CTRL-W: Window commands

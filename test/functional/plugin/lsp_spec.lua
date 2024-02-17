@@ -139,30 +139,6 @@ describe('LSP', function()
       end)
     end)
   end)
-
-  describe('lsp._cmd_parts test', function()
-    local function _cmd_parts(input)
-      return exec_lua(
-        [[
-        lsp = require('vim.lsp')
-        return lsp._cmd_parts(...)
-      ]],
-        input
-      )
-    end
-    it('should valid cmd argument', function()
-      eq(true, pcall(_cmd_parts, { 'nvim' }))
-      eq(true, pcall(_cmd_parts, { 'nvim', '--head' }))
-    end)
-
-    it('should invalid cmd argument', function()
-      eq('.../lsp.lua:0: cmd: expected list, got nvim', pcall_err(_cmd_parts, 'nvim'))
-      eq(
-        '.../lsp.lua:0: cmd argument: expected string, got number',
-        pcall_err(_cmd_parts, { 'nvim', 1 })
-      )
-    end)
-  end)
 end)
 
 describe('LSP', function()
@@ -547,7 +523,7 @@ describe('LSP', function()
           if ctx.method == 'start' then
             exec_lua([=[
               local client = vim.lsp.get_client_by_id(TEST_RPC_CLIENT_ID)
-              client.config.settings = {
+              client.settings = {
                 testSetting1 = true;
                 testSetting2 = false;
                 test = {Setting3 = 'nested' };
@@ -2443,6 +2419,68 @@ describe('LSP', function()
       eq(0, lines)
       os.remove(new)
     end)
+    it('new buffer remains unlisted and unloaded if the old was not in window before', function()
+      local old = tmpname()
+      write_file(old, 'Test content')
+      local new = tmpname()
+      os.remove(new) -- only reserve the name, file must not exist for the test scenario
+      local actual = exec_lua(
+        [[
+        local old = select(1, ...)
+        local oldbufnr = vim.fn.bufadd(old)
+        local new = select(2, ...)
+        local newbufnr = vim.fn.bufadd(new)
+        vim.lsp.util.rename(old, new)
+        return {
+          buflisted = vim.bo[newbufnr].buflisted,
+          bufloaded = vim.api.nvim_buf_is_loaded(newbufnr)
+        }
+      ]],
+        old,
+        new
+      )
+
+      local expected = {
+        buflisted = false,
+        bufloaded = false,
+      }
+
+      eq(expected, actual)
+
+      os.remove(new)
+    end)
+    it('new buffer is listed and loaded if the old was in window before', function()
+      local old = tmpname()
+      write_file(old, 'Test content')
+      local new = tmpname()
+      os.remove(new) -- only reserve the name, file must not exist for the test scenario
+      local actual = exec_lua(
+        [[
+        local win =  vim.api.nvim_get_current_win()
+        local old = select(1, ...)
+        local oldbufnr = vim.fn.bufadd(old)
+        vim.api.nvim_win_set_buf(win, oldbufnr)
+        local new = select(2, ...)
+        vim.lsp.util.rename(old, new)
+        local newbufnr = vim.fn.bufadd(new)
+        return {
+          buflisted = vim.bo[newbufnr].buflisted,
+          bufloaded = vim.api.nvim_buf_is_loaded(newbufnr)
+        }
+      ]],
+        old,
+        new
+      )
+
+      local expected = {
+        buflisted = true,
+        bufloaded = true,
+      }
+
+      eq(expected, actual)
+
+      os.remove(new)
+    end)
     it('Can rename a directory', function()
       -- only reserve the name, file must not exist for the test scenario
       local old_dir = tmpname()
@@ -4013,6 +4051,105 @@ describe('LSP', function()
       check_notify('both', true, true)
     end)
   end)
+
+  describe('vim.lsp.tagfunc', function()
+    before_each(function()
+      clear()
+      ---@type lsp.Location[]
+      local mock_locations = {
+        {
+          range = {
+            ['start'] = { line = 5, character = 23 },
+            ['end'] = { line = 10, character = 0 },
+          },
+          uri = 'test://buf',
+        },
+        {
+          range = {
+            ['start'] = { line = 42, character = 10 },
+            ['end'] = { line = 44, character = 0 },
+          },
+          uri = 'test://another-file',
+        },
+      }
+      exec_lua(create_server_definition)
+      exec_lua(
+        [[
+        _G.mock_locations = ...
+        _G.server = _create_server({
+          ---@type lsp.ServerCapabilities
+          capabilities = {
+            definitionProvider = true,
+            workspaceSymbolProvider = true,
+          },
+          handlers = {
+            ---@return lsp.Location[]
+            ['textDocument/definition'] = function()
+              return { _G.mock_locations[1] }
+            end,
+            ---@return lsp.WorkspaceSymbol[]
+            ['workspace/symbol'] = function(_, request)
+              assert(request.query == 'foobar')
+              return {
+                {
+                  name = 'foobar',
+                  kind = 13, ---@type lsp.SymbolKind
+                  location = _G.mock_locations[1],
+                },
+                {
+                  name = 'vim.foobar',
+                  kind = 12, ---@type lsp.SymbolKind
+                  location = _G.mock_locations[2],
+                }
+              }
+            end,
+          },
+        })
+        _G.client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+      ]],
+        mock_locations
+      )
+    end)
+    after_each(function()
+      exec_lua [[
+        vim.lsp.stop_client(_G.client_id)
+      ]]
+    end)
+
+    it('with flags=c, returns matching tags using textDocument/definition', function()
+      local result = exec_lua [[
+        return vim.lsp.tagfunc('foobar', 'c')
+      ]]
+      eq({
+        {
+          cmd = '/\\%6l\\%1c/', -- for location (5, 23)
+          filename = 'test://buf',
+          name = 'foobar',
+        },
+      }, result)
+    end)
+
+    it('without flags=c, returns all matching tags using workspace/symbol', function()
+      local result = exec_lua [[
+        return vim.lsp.tagfunc('foobar', '')
+      ]]
+      eq({
+        {
+          cmd = '/\\%6l\\%1c/', -- for location (5, 23)
+          filename = 'test://buf',
+          kind = 'Variable',
+          name = 'foobar',
+        },
+        {
+          cmd = '/\\%43l\\%1c/', -- for location (42, 10)
+          filename = 'test://another-file',
+          kind = 'Function',
+          name = 'vim.foobar',
+        },
+      }, result)
+    end)
+  end)
+
   describe('cmd', function()
     it('can connect to lsp server via rpc.connect', function()
       local result = exec_lua [[

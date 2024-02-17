@@ -120,7 +120,7 @@ M[ms.client_registerCapability] = function(_, result, ctx)
   local unsupported = {}
   for _, reg in ipairs(result.registrations) do
     if reg.method == ms.workspace_didChangeWatchedFiles then
-      require('vim.lsp._watchfiles').register(reg, ctx)
+      vim.lsp._watchfiles.register(reg, ctx)
     elseif not client.dynamic_capabilities:supports_registration(reg.method) then
       unsupported[#unsupported + 1] = reg.method
     end
@@ -144,7 +144,7 @@ M[ms.client_unregisterCapability] = function(_, result, ctx)
 
   for _, unreg in ipairs(result.unregisterations) do
     if unreg.method == ms.workspace_didChangeWatchedFiles then
-      require('vim.lsp._watchfiles').unregister(unreg, ctx)
+      vim.lsp._watchfiles.unregister(unreg, ctx)
     end
   end
   return vim.NIL
@@ -197,10 +197,10 @@ M[ms.workspace_configuration] = function(_, result, ctx)
   local response = {}
   for _, item in ipairs(result.items) do
     if item.section then
-      local value = lookup_section(client.config.settings, item.section)
+      local value = lookup_section(client.settings, item.section)
       -- For empty sections with no explicit '' key, return settings as is
       if value == nil and item.section == '' then
-        value = client.config.settings
+        value = client.settings
       end
       if value == nil then
         value = vim.NIL
@@ -223,19 +223,19 @@ M[ms.workspace_workspaceFolders] = function(_, _, ctx)
 end
 
 M[ms.textDocument_publishDiagnostics] = function(...)
-  return require('vim.lsp.diagnostic').on_publish_diagnostics(...)
+  return vim.lsp.diagnostic.on_publish_diagnostics(...)
 end
 
 M[ms.textDocument_diagnostic] = function(...)
-  return require('vim.lsp.diagnostic').on_diagnostic(...)
+  return vim.lsp.diagnostic.on_diagnostic(...)
 end
 
 M[ms.textDocument_codeLens] = function(...)
-  return require('vim.lsp.codelens').on_codelens(...)
+  return vim.lsp.codelens.on_codelens(...)
 end
 
 M[ms.textDocument_inlayHint] = function(...)
-  return require('vim.lsp.inlay_hint').on_inlayhint(...)
+  return vim.lsp.inlay_hint.on_inlayhint(...)
 end
 
 --see: https://microsoft.github.io/language-server-protocol/specifications/specification-current/#textDocument_references
@@ -413,9 +413,7 @@ M[ms.textDocument_hover] = M.hover
 ---(`textDocument/definition` can return `Location` or `Location[]`
 local function location_handler(_, result, ctx, config)
   if result == nil or vim.tbl_isempty(result) then
-    if log.info() then
-      log.info(ctx.method, 'No location found')
-    end
+    log.info(ctx.method, 'No location found')
     return nil
   end
   local client = assert(vim.lsp.get_client_by_id(ctx.client_id))
@@ -643,19 +641,25 @@ end
 
 ---@see https://microsoft.github.io/language-server-protocol/specification/#workspace_inlayHint_refresh
 M[ms.workspace_inlayHint_refresh] = function(err, result, ctx, config)
-  return require('vim.lsp.inlay_hint').on_refresh(err, result, ctx, config)
+  return vim.lsp.inlay_hint.on_refresh(err, result, ctx, config)
+end
+
+---@see https://microsoft.github.io/language-server-protocol/specifications/specification-current/#semanticTokens_refreshRequest
+M[ms.workspace_semanticTokens_refresh] = function(err, result, ctx, _config)
+  return vim.lsp.semantic_tokens._refresh(err, result, ctx)
 end
 
 -- Add boilerplate error validation and logging for all of these.
 for k, fn in pairs(M) do
   M[k] = function(err, result, ctx, config)
-    local _ = log.trace()
-      and log.trace('default_handler', ctx.method, {
+    if log.trace() then
+      log.trace('default_handler', ctx.method, {
         err = err,
         result = result,
         ctx = vim.inspect(ctx),
         config = config,
       })
+    end
 
     if err then
       -- LSP spec:

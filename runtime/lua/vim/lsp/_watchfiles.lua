@@ -1,6 +1,6 @@
 local bit = require('bit')
-local glob = require('vim.glob')
-local watch = require('vim._watch')
+local glob = vim.glob
+local watch = vim._watch
 local protocol = require('vim.lsp.protocol')
 local ms = protocol.Methods
 local lpeg = vim.lpeg
@@ -44,12 +44,8 @@ function M.register(reg, ctx)
   local client = assert(vim.lsp.get_client_by_id(client_id), 'Client must be running')
   -- Ill-behaved servers may not honor the client capability and try to register
   -- anyway, so ignore requests when the user has opted out of the feature.
-  local has_capability = vim.tbl_get(
-    client.config.capabilities or {},
-    'workspace',
-    'didChangeWatchedFiles',
-    'dynamicRegistration'
-  )
+  local has_capability =
+    vim.tbl_get(client.capabilities, 'workspace', 'didChangeWatchedFiles', 'dynamicRegistration')
   if not has_capability or not client.workspace_folders then
     return
   end
