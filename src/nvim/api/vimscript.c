@@ -351,9 +351,7 @@ typedef struct {
   Object *ret_node_p;
 } ExprASTConvStackItem;
 
-/// @cond DOXYGEN_NOT_A_FUNCTION
 typedef kvec_withinit_t(ExprASTConvStackItem, 16) ExprASTConvStack;
-/// @endcond
 
 /// Parse a Vimscript expression.
 ///
@@ -367,8 +365,8 @@ typedef kvec_withinit_t(ExprASTConvStackItem, 16) ExprASTConvStack;
 ///                    - "l" when needing to start parsing with lvalues for
 ///                      ":let" or ":for".
 ///                    Common flag sets:
-///                    - "m" to parse like for ":echo".
-///                    - "E" to parse like for "<C-r>=".
+///                    - "m" to parse like for `":echo"`.
+///                    - "E" to parse like for `"<C-r>="`.
 ///                    - empty string for ":call".
 ///                    - "lm" to parse for ":let".
 /// @param[in]  highlight  If true, return value will also include "highlight"
@@ -387,12 +385,12 @@ typedef kvec_withinit_t(ExprASTConvStackItem, 16) ExprASTConvStack;
 ///          - "arg": String, error message argument.
 ///        - "len": Amount of bytes successfully parsed. With flags equal to ""
 ///                 that should be equal to the length of expr string.
-///                 (“Successfully parsed” here means “participated in AST
-///                  creation”, not “till the first error”.)
+///                 ("Successfully parsed" here means "participated in AST
+///                  creation", not "till the first error".)
 ///        - "ast": AST, either nil or a dictionary with these keys:
 ///          - "type": node type, one of the value names from ExprASTNodeType
 ///                    stringified without "kExprNode" prefix.
-///          - "start": a pair [line, column] describing where node is "started"
+///          - "start": a pair `[line, column]` describing where node is "started"
 ///                     where "line" is always 0 (will not be 0 if you will be
 ///                     using this API on e.g. ":let", but that is not
 ///                     present yet). Both elements are Integers.

@@ -581,7 +581,7 @@ static void draw_lnum_col(win_T *wp, winlinevars_T *wlv, int sign_num_attr, int 
 }
 
 /// Build and draw the 'statuscolumn' string for line "lnum" in window "wp".
-static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int virtnum,
+static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int virtnum, int col_rows,
                            statuscol_T *stcp)
 {
   // When called for the first non-filler row of line "lnum" set num v:vars
@@ -597,9 +597,14 @@ static void draw_statuscol(win_T *wp, winlinevars_T *wlv, linenr_T lnum, int vir
     int width = build_statuscol_str(wp, wp->w_nrwidth_line_count, 0, buf, stcp);
     if (width > stcp->width) {
       int addwidth = MIN(width - stcp->width, MAX_STCWIDTH - stcp->width);
-      stcp->width += addwidth;
       wp->w_nrwidth += addwidth;
       wp->w_nrwidth_width = wp->w_nrwidth;
+      if (col_rows > 0) {
+        // If only column is being redrawn, we now need to redraw the text as well
+        wp->w_redr_statuscol = true;
+        return;
+      }
+      stcp->width += addwidth;
       wp->w_valid &= ~VALID_WCOL;
     }
   }
@@ -949,8 +954,6 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
   colnr_T vcol_prev = -1;             // "wlv.vcol" of previous character
   ScreenGrid *grid = &wp->w_grid;     // grid specific to the window
 
-  static char *at_end_str = "";       // used for p_extra when displaying curwin->w_p_lcs_chars.eol
-                                      // at end-of-line
   const bool has_fold = foldinfo.fi_level != 0 && foldinfo.fi_lines > 0;
   const bool has_foldtext = has_fold && *wp->w_p_fdt != NUL;
 
@@ -1541,7 +1544,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
           statuscol.num_attr = get_line_number_attr(wp, &wlv);
         }
         const int v = (int)(ptr - line);
-        draw_statuscol(wp, &wlv, lnum, wlv.row - startrow - wlv.filler_lines, &statuscol);
+        draw_statuscol(wp, &wlv, lnum, wlv.row - startrow - wlv.filler_lines, col_rows, &statuscol);
         if (wp->w_redr_statuscol) {
           break;
         }
@@ -2341,7 +2344,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
             // In virtualedit, visual selections may extend beyond end of line
             if (!(area_highlighting && virtual_active()
                   && wlv.tocol != MAXCOL && wlv.vcol < wlv.tocol)) {
-              wlv.p_extra = at_end_str;
+              wlv.p_extra = "";
             }
             wlv.n_extra = 0;
           }
@@ -2840,8 +2843,7 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
     if (wlv.col >= grid->cols && (!has_foldtext || virt_line_offset >= 0)
         && (*ptr != NUL
             || wlv.filler_todo > 0
-            || (wp->w_p_list && wp->w_p_lcs_chars.eol != NUL
-                && wlv.p_extra != at_end_str)
+            || (wp->w_p_list && wp->w_p_lcs_chars.eol != NUL && lcs_eol_todo)
             || (wlv.n_extra != 0 && (wlv.sc_extra != NUL || *wlv.p_extra != NUL))
             || (may_have_inline_virt && has_more_inline_virt(&wlv, ptr - line)))) {
       const bool wrap = is_wrapped                    // Wrapping enabled (not a folded line).
@@ -2875,9 +2877,8 @@ int win_line(win_T *wp, linenr_T lnum, int startrow, int endrow, int col_rows, s
       wlv.vcol_off = 0;
       wlv.row++;
 
-      // When not wrapping and finished diff lines, or when displayed
-      // '$' and highlighting until last column, break here.
-      if ((!is_wrapped && wlv.filler_todo <= 0) || !lcs_eol_todo) {
+      // When not wrapping and finished diff lines, break here.
+      if (!is_wrapped && wlv.filler_todo <= 0) {
         break;
       }
 

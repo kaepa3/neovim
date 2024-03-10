@@ -1178,7 +1178,7 @@ void comp_col(void)
       sc_col = ru_col;
     }
   }
-  if (p_sc) {
+  if (p_sc && *p_sloc == 'l') {
     sc_col += SHOWCMD_COLS;
     if (!p_ru || last_has_status) {         // no need for separating space
       sc_col++;
@@ -1513,7 +1513,7 @@ static void win_update(win_T *wp)
 
   // Make sure skipcol is valid, it depends on various options and the window
   // width.
-  if (wp->w_skipcol > 0) {
+  if (wp->w_skipcol > 0 && wp->w_width_inner > win_col_off(wp)) {
     int w = 0;
     int width1 = wp->w_width_inner - win_col_off(wp);
     int width2 = width1 + win_col_off2(wp);

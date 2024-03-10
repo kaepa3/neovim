@@ -442,8 +442,7 @@ static void f_and(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "api_info()" function
 static void f_api_info(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  Dictionary metadata = api_metadata();
-  object_to_vim(DICTIONARY_OBJ(metadata), rettv, NULL);
+  object_to_vim(api_metadata(), rettv, NULL);
 }
 
 /// "atan2()" function
@@ -2822,35 +2821,34 @@ static void f_getregion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   tv_list_alloc_ret(rettv, kListLenMayKnow);
 
-  if (tv_check_for_string_arg(argvars, 0) == FAIL
-      || tv_check_for_string_arg(argvars, 1) == FAIL
-      || tv_check_for_string_arg(argvars, 2) == FAIL) {
+  if (tv_check_for_list_arg(argvars, 0) == FAIL
+      || tv_check_for_list_arg(argvars, 1) == FAIL
+      || tv_check_for_opt_dict_arg(argvars, 2) == FAIL) {
     return;
   }
 
-  int fnum = -1;
-  // NOTE: var2fpos() returns static pointer.
-  pos_T *fp = var2fpos(&argvars[0], true, &fnum, false);
-  if (fp == NULL || (fnum >= 0 && fnum != curbuf->b_fnum)) {
+  int fnum1 = -1;
+  int fnum2 = -1;
+  pos_T p1, p2;
+  if (list2fpos(&argvars[0], &p1, &fnum1, NULL, false) != OK
+      || list2fpos(&argvars[1], &p2, &fnum2, NULL, false) != OK
+      || fnum1 != fnum2) {
     return;
   }
-  pos_T p1 = *fp;
 
-  fp = var2fpos(&argvars[1], true, &fnum, false);
-  if (fp == NULL || (fnum >= 0 && fnum != curbuf->b_fnum)) {
-    return;
-  }
-  pos_T p2 = *fp;
-
-  const char *pos1 = tv_get_string(&argvars[0]);
-  const char *pos2 = tv_get_string(&argvars[1]);
-  const char *type = tv_get_string(&argvars[2]);
-
-  const bool is_visual
-    = (pos1[0] == 'v' && pos1[1] == NUL) || (pos2[0] == 'v' && pos2[1] == NUL);
-
-  if (is_visual && !VIsual_active) {
-    return;
+  bool is_select_exclusive;
+  char *type;
+  char default_type[] = "v";
+  if (argvars[2].v_type == VAR_DICT) {
+    is_select_exclusive = tv_dict_get_bool(argvars[2].vval.v_dict, "exclusive",
+                                           *p_sel == 'e');
+    type = tv_dict_get_string(argvars[2].vval.v_dict, "type", false);
+    if (type == NULL) {
+      type = default_type;
+    }
+  } else {
+    is_select_exclusive = *p_sel == 'e';
+    type = default_type;
   }
 
   MotionType region_type = kMTUnknown;
@@ -2864,8 +2862,23 @@ static void f_getregion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     return;
   }
 
+  buf_T *const save_curbuf = curbuf;
+
+  if (fnum1 != 0) {
+    buf_T *findbuf = buflist_findnr(fnum1);
+    // buffer not loaded
+    if (findbuf == NULL || findbuf->b_ml.ml_mfp == NULL) {
+      return;
+    }
+    curbuf = findbuf;
+  }
+
   const TriState save_virtual = virtual_op;
   virtual_op = virtual_active();
+
+  // NOTE: Adjust is needed.
+  p1.col--;
+  p2.col--;
 
   if (!lt(p1, p2)) {
     // swap position
@@ -2879,7 +2892,7 @@ static void f_getregion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   if (region_type == kMTCharWise) {
     // handle 'selection' == "exclusive"
-    if (*p_sel == 'e' && !equalpos(p1, p2)) {
+    if (is_select_exclusive && !equalpos(p1, p2)) {
       if (p2.coladd > 0) {
         p2.coladd--;
       } else if (p2.col > 0) {
@@ -2908,7 +2921,7 @@ static void f_getregion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     oa.start = p1;
     oa.end = p2;
     oa.start_vcol = MIN(sc1, sc2);
-    if (*p_sel == 'e' && ec1 < sc2 && 0 < sc2 && ec2 > ec1) {
+    if (is_select_exclusive && ec1 < sc2 && 0 < sc2 && ec2 > ec1) {
       oa.end_vcol = sc2 - 1;
     } else {
       oa.end_vcol = MAX(ec1, ec2);
@@ -2940,6 +2953,10 @@ static void f_getregion(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
     assert(akt != NULL);
     tv_list_append_allocated_string(rettv->vval.v_list, akt);
+  }
+
+  if (curbuf != save_curbuf) {
+    curbuf = save_curbuf;
   }
 
   virtual_op = save_virtual;
@@ -3309,7 +3326,6 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     "path_extra",
     "persistent_undo",
     "profile",
-    "pythonx",
     "reltime",
     "quickfix",
     "rightleft",
@@ -3400,6 +3416,8 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
       n = syntax_present(curwin);
     } else if (STRICMP(name, "clipboard_working") == 0) {
       n = eval_has_provider("clipboard");
+    } else if (STRICMP(name, "pythonx") == 0) {
+      n = eval_has_provider("python3");
     } else if (STRICMP(name, "wsl") == 0) {
       n = has_wsl();
 #ifdef UNIX
@@ -5999,6 +6017,12 @@ static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_bl
     }
   }
 
+  if (blob) {
+    tv_blob_alloc_ret(rettv);
+  } else {
+    tv_list_alloc_ret(rettv, kListLenUnknown);
+  }
+
   // Always open the file in binary mode, library functions have a mind of
   // their own about CR-LF conversion.
   const char *const fname = tv_get_string(&argvars[0]);
@@ -6013,7 +6037,6 @@ static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_bl
   }
 
   if (blob) {
-    tv_blob_alloc_ret(rettv);
     if (read_blob(fd, rettv, offset, size) == FAIL) {
       semsg(_(e_notread), fname);
     }
@@ -6021,7 +6044,7 @@ static void read_file_or_blob(typval_T *argvars, typval_T *rettv, bool always_bl
     return;
   }
 
-  list_T *const l = tv_list_alloc_ret(rettv, kListLenUnknown);
+  list_T *const l = rettv->vval.v_list;
 
   while (maxline < 0 || tv_list_len(l) < maxline) {
     int readlen = (int)fread(buf, 1, (size_t)io_size, fd);

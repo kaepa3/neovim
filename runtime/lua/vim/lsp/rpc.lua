@@ -26,7 +26,7 @@ local function format_message_with_content_length(message)
   })
 end
 
----@class vim.lsp.rpc.Headers: {string: any}
+---@class (private) vim.lsp.rpc.Headers: {string: any}
 ---@field content_length integer
 
 --- Parses an LSP Message's header
@@ -130,7 +130,7 @@ local M = {}
 
 --- Mapping of error codes used by the client
 --- @nodoc
-M.client_errors = {
+local client_errors = {
   INVALID_SERVER_MESSAGE = 1,
   INVALID_SERVER_JSON = 2,
   NO_RESULT_CALLBACK_FOUND = 3,
@@ -140,7 +140,12 @@ M.client_errors = {
   SERVER_RESULT_CALLBACK_ERROR = 7,
 }
 
-M.client_errors = vim.tbl_add_reverse_lookup(M.client_errors)
+--- @type table<string|integer, string|integer>
+--- @nodoc
+M.client_errors = vim.deepcopy(client_errors)
+for k, v in pairs(client_errors) do
+  M.client_errors[v] = k
+end
 
 --- Constructs an error message from an LSP error object.
 ---
@@ -193,7 +198,9 @@ function M.rpc_response_error(code, message, data)
   })
 end
 
+--- Dispatchers for LSP message types.
 --- @class vim.lsp.rpc.Dispatchers
+--- @inlinedoc
 --- @field notification fun(method: string, params: table)
 --- @field server_request fun(method: string, params: table): any?, lsp.ResponseError?
 --- @field on_exit fun(code: integer, signal: integer)
@@ -266,15 +273,12 @@ function M.create_read_loop(handle_body, on_no_chunk, on_error)
   end
 end
 
----@private
----@class vim.lsp.rpc.Client
+---@class (private) vim.lsp.rpc.Client
 ---@field message_index integer
 ---@field message_callbacks table<integer, function> dict of message_id to callback
 ---@field notify_reply_callbacks table<integer, function> dict of message_id to callback
 ---@field transport vim.lsp.rpc.Transport
 ---@field dispatchers vim.lsp.rpc.Dispatchers
-
----@class vim.lsp.rpc.Client
 local Client = {}
 
 ---@private
@@ -524,7 +528,7 @@ function Client:handle_body(body)
   end
 end
 
----@class vim.lsp.rpc.Transport
+---@class (private) vim.lsp.rpc.Transport
 ---@field write fun(msg: string)
 ---@field is_closing fun(): boolean
 ---@field terminate fun()
@@ -723,32 +727,21 @@ function M.domain_socket_connect(pipe_path)
   end
 end
 
----@class vim.lsp.rpc.ExtraSpawnParams
----@field cwd? string Working directory for the LSP server process
----@field detached? boolean Detach the LSP server process from the current process
----@field env? table<string,string> Additional environment variables for LSP server process. See |vim.system|
+--- Additional context for the LSP server process.
+--- @class vim.lsp.rpc.ExtraSpawnParams
+--- @inlinedoc
+--- @field cwd? string Working directory for the LSP server process
+--- @field detached? boolean Detach the LSP server process from the current process
+--- @field env? table<string,string> Additional environment variables for LSP server process. See |vim.system()|
 
 --- Starts an LSP server process and create an LSP RPC client object to
 --- interact with it. Communication with the spawned process happens via stdio. For
 --- communication via TCP, spawn a process manually and use |vim.lsp.rpc.connect()|
 ---
----@param cmd string[] Command to start the LSP server.
----
----@param dispatchers? vim.lsp.rpc.Dispatchers Dispatchers for LSP message types.
---- Valid dispatcher names are:
----  - `"notification"`
----  - `"server_request"`
----  - `"on_error"`
----  - `"on_exit"`
----
----@param extra_spawn_params? vim.lsp.rpc.ExtraSpawnParams Additional context for the LSP
---- server process. May contain:
----   - {cwd} (string) Working directory for the LSP server process
----   - {detached?} (boolean) Detach the LSP server process from the current process.
----                  Defaults to false on Windows and true otherwise.
----   - {env?} (table) Additional environment variables for LSP server process
----
----@return vim.lsp.rpc.PublicClient? Client RPC object, with these methods:
+--- @param cmd string[] Command to start the LSP server.
+--- @param dispatchers? vim.lsp.rpc.Dispatchers
+--- @param extra_spawn_params? vim.lsp.rpc.ExtraSpawnParams
+--- @return vim.lsp.rpc.PublicClient? : Client RPC object, with these methods:
 ---   - `notify()` |vim.lsp.rpc.notify()|
 ---   - `request()` |vim.lsp.rpc.request()|
 ---   - `is_closing()` returns a boolean indicating if the RPC is closing.
@@ -821,7 +814,8 @@ function M.start(cmd, dispatchers, extra_spawn_params)
     else
       sfx = string.format(' with error message: %s', err)
     end
-    local msg = string.format('Spawning language server with cmd: `%s` failed%s', cmd, sfx)
+    local msg =
+      string.format('Spawning language server with cmd: `%s` failed%s', vim.inspect(cmd), sfx)
     vim.notify(msg, vim.log.levels.WARN)
     return nil
   end

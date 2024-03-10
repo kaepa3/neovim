@@ -3973,7 +3973,7 @@ M.funcs = {
       |getbufoneline()|
     ]=],
     name = 'getline',
-    params = { { 'lnum', 'integer' }, { 'end', 'nil|false' } },
+    params = { { 'lnum', 'integer|string' }, { 'end', 'nil|false' } },
     signature = 'getline({lnum} [, {end}])',
     returns = 'string',
   },
@@ -4356,49 +4356,63 @@ M.funcs = {
     signature = 'getreginfo([{regname}])',
   },
   getregion = {
-    args = 3,
+    args = { 2, 3 },
     base = 1,
     desc = [=[
-      Returns the list of strings from {pos1} to {pos2} as if it's
-      selected in visual mode of {type}.
-      For possible values of {pos1} and {pos2} see |line()|.
-      {type} is the selection type:
-      	"v" for |charwise| mode
-      	"V" for |linewise| mode
-      	"<CTRL-V>" for |blockwise-visual| mode
+      Returns the list of strings from {pos1} to {pos2} from a
+      buffer.
+
+      {pos1} and {pos2} must both be |List|s with four numbers.
+      See |getpos()| for the format of the list.  It's possible
+      to specify positions from a different buffer, but please
+      note the limitations at |getregion-notes|.
+
+      The optional argument {opts} is a Dict and supports the
+      following items:
+
+      	type		Specify the region's selection type
+      			(default: "v"):
+      	    "v"		for |charwise| mode
+      	    "V"		for |linewise| mode
+      	    "<CTRL-V>"	for |blockwise-visual| mode
+
+      	exclusive	If |TRUE|, use exclusive selection
+      			for the end position
+      			(default: follow 'selection')
+
       You can get the last selection type by |visualmode()|.
       If Visual mode is active, use |mode()| to get the Visual mode
       (e.g., in a |:vmap|).
-      This function uses the line and column number from the
-      specified position.
-      It is useful to get text starting and ending in different
-      columns, such as |charwise-visual| selection.
+      This function is useful to get text starting and ending in
+      different columns, such as a |charwise-visual| selection.
 
+      					*getregion-notes*
       Note that:
       - Order of {pos1} and {pos2} doesn't matter, it will always
         return content from the upper left position to the lower
         right position.
-      - If 'virtualedit' is enabled and selection is past the end of
-        line, resulting lines are filled with blanks.
-      - If the selection starts or ends in the middle of a multibyte
-        character, it is not included but its selected part is
-        substituted with spaces.
-      - If {pos1} or {pos2} equals "v" (see |line()|) and it is not in
-        |visual-mode|, an empty list is returned.
-      - If {pos1}, {pos2} or {type} is an invalid string, an empty
+      - If 'virtualedit' is enabled and the region is past the end
+        of the lines, resulting lines are padded with spaces.
+      - If the region is blockwise and it starts or ends in the
+        middle of a multi-cell character, it is not included but
+        its selected part is substituted with spaces.
+      - If {pos1} and {pos2} are not in the same buffer, an empty
         list is returned.
-      - If {pos1} or {pos2} is a mark in different buffer, an empty
-        list is returned.
+      - {pos1} and {pos2} must belong to a |bufloaded()| buffer.
+      - It is evaluated in current window context, which makes a
+        difference if the buffer is displayed in a window with
+        different 'virtualedit' or 'list' values.
 
       Examples: >
       	:xnoremap <CR>
-      	\ <Cmd>echom getregion('v', '.', mode())<CR>
+      	\ <Cmd>echom getregion(
+      	\ getpos('v'), getpos('.'), #{ type: mode() })<CR>
       <
     ]=],
     name = 'getregion',
-    params = { { 'pos1', 'string' }, { 'pos2', 'string' }, { 'type', 'string' } },
+    params = { { 'pos1', 'table' }, { 'pos2', 'table' }, { 'opts', 'table' } },
     returns = 'string[]',
-    signature = 'getregion({pos1}, {pos2}, {type})',
+    signature = 'getregion({pos1}, {pos2} [, {opts}])',
   },
   getregtype = {
     args = { 0, 1 },
@@ -5212,7 +5226,7 @@ M.funcs = {
 
     ]=],
     name = 'indent',
-    params = { { 'lnum', 'integer' } },
+    params = { { 'lnum', 'integer|string' } },
     returns = 'integer',
     signature = 'indent({lnum})',
   },
@@ -6546,6 +6560,7 @@ M.funcs = {
       Note that when {count} is added the way {start} works changes,
       see above.
 
+      				*match-pattern*
       See |pattern| for the patterns that are accepted.
       The 'ignorecase' option is used to set the ignore-caseness of
       the pattern.  'smartcase' is NOT used.  The matching is always
@@ -6725,6 +6740,9 @@ M.funcs = {
 
       This function works only for loaded buffers. First call
       |bufload()| if needed.
+
+      See |match-pattern| for information about the effect of some
+      option settings on the pattern.
 
       When {buf} is not a valid buffer, the buffer is not loaded or
       {lnum} or {end} is not valid then an error is given and an
@@ -6959,6 +6977,9 @@ M.funcs = {
           text	matched string
           submatches	a List of submatches.  Present only if
       		"submatches" is set to v:true in {dict}.
+
+      See |match-pattern| for information about the effect of some
+      option settings on the pattern.
 
       Example: >vim
           :echo matchstrlist(['tik tok'], '\<\k\+\>')
@@ -9749,7 +9770,7 @@ M.funcs = {
 
     ]=],
     name = 'setreg',
-    params = { { 'regname', 'string' }, { 'value', 'any' }, { 'options', 'table' } },
+    params = { { 'regname', 'string' }, { 'value', 'any' }, { 'options', 'string' } },
     signature = 'setreg({regname}, {value} [, {options}])',
   },
   settabvar = {
@@ -12678,10 +12699,10 @@ M.funcs = {
     args = { 2, 3 },
     base = 1,
     desc = [=[
-      Move the window {nr} to a new split of the window {target}.
-      This is similar to moving to {target}, creating a new window
-      using |:split| but having the same contents as window {nr}, and
-      then closing {nr}.
+      Temporarily switch to window {target}, then move window {nr}
+      to a new split adjacent to {target}.
+      Unlike commands such as |:split|, no new windows are created
+      (the |window-ID| of window {nr} is unchanged after the move).
 
       Both {nr} and {target} can be window numbers or |window-ID|s.
       Both must be in the current tab page.
