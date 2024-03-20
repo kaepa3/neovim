@@ -145,16 +145,17 @@ endif
 
 " Numbers {{{2
 " =======
-syn match vimNumber	'\<\d\+\%(\.\d\+\%([eE][+-]\=\d\+\)\=\)\=' skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
-syn match vimNumber	'-\d\+\%(\.\d\+\%([eE][+-]\=\d\+\)\=\)\='  skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
-syn match vimNumber	'\<0[xX]\x\+'		       skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
-syn match vimNumber	'\%(^\|\A\)\zs#\x\{6}'             	       skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
-syn match vimNumber	'\<0[zZ][a-zA-Z0-9.]\+'                    skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
-syn match vimNumber	'0[0-7]\+'		       skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
-syn match vimNumber	'0[bB][01]\+'		       skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn case ignore
+syn match	vimNumber	'\<\d\+\%(\.\d\+\%(e[+-]\=\d\+\)\=\)\='	skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn match	vimNumber	'\<0b[01]\+'			skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn match	vimNumber	'\<0o\=\o\+'			skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn match	vimNumber	'\<0x\x\+'			skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn match	vimNumber	'\<0z\%(\x\x\)\+\%(\.\%(\x\x\)\+\)*'	skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn match	vimNumber	'\%(^\|\A\)\zs#\x\{6}'		skipwhite nextgroup=vimGlobal,vimSubst1,vimCommand,vimComment,vim9Comment
+syn case match
 
 " All vimCommands are contained by vimIsCommand. {{{2
-syn cluster vimCmdList	contains=vimAbb,vimAddress,vimAutoCmd,vimAugroup,vimBehave,vimEcho,vimEchoHL,vimExecute,vimIsCommand,vimExtCmd,vimFunction,vimGlobal,vimHighlight,vimLet,vimMap,vimMark,vimNotFunc,vimNorm,vimSet,vimSyntax,vimUnlet,vimUnmap,vimUserCmd,vimMenu,vimMenutranslate
+syn cluster vimCmdList	contains=vimAbb,vimAddress,vimAutoCmd,vimAugroup,vimBehave,@vimEcho,vimExecute,vimIsCommand,vimExtCmd,vimFunction,vimGlobal,vimHighlight,vimLet,vimMap,vimMark,vimNotFunc,vimNorm,vimSet,vimSyntax,vimUnlet,vimUnmap,vimUserCmd,vimMenu,vimMenutranslate
 syn match vimCmdSep	"[:|]\+"	skipwhite nextgroup=@vimCmdList,vimSubst1
 syn match vimIsCommand	"\<\%(\h\w*\|[23]mat\%[ch]\)\>"	contains=vimCommand
 syn match vimVar	      contained	"\<\h[a-zA-Z0-9#_]*\>"
@@ -435,16 +436,27 @@ syn match	vimAutoCmdMod	"\(++\)\=\(once\|nested\)"
 
 " Echo And Execute: -- prefer strings! {{{2
 " ================
-" GEN_SYN_VIM: vimCommand echo, START_STR='syn keyword vimEcho', END_STR='skipwhite nextgroup=vimEchoExpr'
-syn keyword vimEcho ec[ho] echoe[rr] echom[sg] echoc[onsole] echon echow[indow] skipwhite nextgroup=vimEchoExpr
-syn region	vimEchoExpr 	contained	start="[^[:space:]|]" skip=+\\\\\|\\|\|\n\s*\\\|\n\s*"\\ + matchgroup=vimCmdSep end="|" end="$" contains=@vimContinue,@vimExprList
+" NOTE: No trailing comments
 
-syn match	vimEchoHL	"\<echohl\=\>"	skipwhite nextgroup=vimGroup,vimHLGroup,vimEchoHLNone,vimOnlyHLGroup,nvimHLGroup
+syn region	vimEcho
+      \ matchgroup=vimCommand
+      \ start="\<ec\%[ho]\>"
+      \ start="\<echoe\%[rr]\>"
+      \ start="\<echom\%[sg]\>"
+      \ start="\<echoc\%[onsole]\>"
+      \ start="\<echon\>"
+      \ start="\<echow\%[indow]\>"
+      \ skip=+\\|\|\n\s*\\\|\n\s*"\\ +
+      \ matchgroup=vimCmdSep end="|" excludenl end="$" contains=@vimContinue,@vimExprList transparent
+
+syn match	vimEchohl	"\<echohl\=\>"	skipwhite nextgroup=vimGroup,vimHLGroup,vimEchohlNone,vimOnlyHLGroup,nvimHLGroup
 syn case ignore
-syn keyword	vimEchoHLNone	none
+syn keyword	vimEchohlNone	contained none
 syn case match
 
-syn region	vimExecute	oneline excludenl matchgroup=vimCommand start="\<exe\%[cute]\>" skip="\(\\\\\)*\\|" end="$\||\|<[cC][rR]>" contains=vimFuncVar,vimIsCommand,vimOper,vimNotation,vimOperParen,vimString,vimVar
+syn cluster	vimEcho	contains=vimEcho.*
+
+syn region	vimExecute	matchgroup=vimCommand start="\<exe\%[cute]\>" skip=+\\|\|\n\s*\\\|\n\s*"\\ + matchgroup=vimCmdSep end="|" excludenl end="$" contains=@vimContinue,@vimExprList transparent
 
 " Maps: {{{2
 " ====
@@ -476,8 +488,8 @@ syn keyword vimMenu am[enu] an[oremenu] aun[menu] cme[nu] cnoreme[nu] cunme[nu] 
 syn keyword vimMenu popu[p] skipwhite nextgroup=vimMenuBang,vimMenuName
 syn region	vimMenuRhs	 contained contains=@vimContinue,vimNotation start="|\@!\S"            skip=+\\\\\|\\|\|\n\s*\\\|\n\s*"\\ + end="$" matchgroup=vimSep end="|"
 syn region	vimMenuRhsContinue contained contains=@vimContinue,vimNotation start=+^\s*\%(\\\|"\\ \)+ skip=+\\\\\|\\|\|\n\s*\\\|\n\s*"\\ + end="$" matchgroup=vimSep end="|"
-syn match	vimMenuName	"\%(\\\s\|\S\)\+"        contained contains=vimMenuNotation,vimNotation skipwhite        nextgroup=vimCmdSep,vimMenuRhs
-syn match	vimMenuName	"\%(\\\s\|\S\)\+\ze\s*$" contained contains=vimMenuNotation,vimNotation skipwhite skipnl nextgroup=vimCmdSep,vimMenuRhsContinue
+syn match	vimMenuName	"\.\@!\%(\\\s\|\S\)\+"        contained contains=vimMenuNotation,vimNotation skipwhite        nextgroup=vimCmdSep,vimMenuRhs
+syn match	vimMenuName	"\.\@!\%(\\\s\|\S\)\+\ze\s*$" contained contains=vimMenuNotation,vimNotation skipwhite skipnl nextgroup=vimCmdSep,vimMenuRhsContinue
 syn match	vimMenuNotation	"&\a\|&&\|\\\s\|\\\." contained
 syn match	vimMenuPriority	"\<\d\+\%(\.\d\+\)*\>" contained skipwhite nextgroup=vimMenuName
 syn match	vimMenuMod	"\c<\%(script\|silent\|special\)>" contained skipwhite nextgroup=vimMenuName,vimMenuPriority,vimMenuMod contains=vimMapModKey,vimMapModErr
@@ -519,9 +531,9 @@ syn case match
 " User Function Highlighting: {{{2
 " (following Gautam Iyer's suggestion)
 " ==========================
-syn match vimFunc		"\%(\%([sSgGbBwWtTlL]:\|<[sS][iI][dD]>\)\=\%(\w\+\.\)*\I[a-zA-Z0-9_.]*\)\ze\s*("		contains=vimFuncEcho,vimFuncName,vimUserFunc,vimExecute
-syn match vimUserFunc contained	"\%(\%([sSgGbBwWtTlL]:\|<[sS][iI][dD]>\)\=\%(\w\+\.\)*\I[a-zA-Z0-9_.]*\)\|\<\u[a-zA-Z0-9.]*\>\|\<if\>"	contains=vimNotation
-syn keyword vimFuncEcho contained	ec ech echo
+syn match	vimFunc              	"\%(\%([sSgGbBwWtTlL]:\|<[sS][iI][dD]>\)\=\%(\w\+\.\)*\I[a-zA-Z0-9_.]*\)\ze\s*("                	contains=vimFuncEcho,vimFuncName,vimUserFunc,vimExecute
+syn match	vimUserFunc	contained        	"\%(\%([sSgGbBwWtTlL]:\|<[sS][iI][dD]>\)\=\%(\w\+\.\)*\I[a-zA-Z0-9_.]*\)\|\<\u[a-zA-Z0-9.]*\>\|\<if\>"	contains=vimNotation
+syn keyword	vimFuncEcho	contained      	ec ech echo
 
 " User Command Highlighting: {{{2
 syn match vimUsrCmd	'^\s*\zs\u\%(\w*\)\@>\%([(#[]\|\s\+\%([-+*/%]\=\|\.\.\)=\)\@!'
@@ -656,7 +668,7 @@ if !exists("g:vimsyn_noerror") && !exists("g:vimsyn_novimhictermerror")
  syn match	vimHiCtermError	contained	"\D\i*"
 endif
 syn match	vimHighlight	"\<hi\%[ghlight]\>"	skipwhite nextgroup=vimHiBang,@vimHighlightCluster
-syn match	vimHiBang	contained	"!"	skipwhite nextgroup=@vimHighlightCluster
+syn match	vimHiBang	contained	"\a\@1<=!"	skipwhite nextgroup=@vimHighlightCluster
 
 syn match	vimHiGroup	contained	"\i\+"
 syn case ignore
@@ -675,16 +687,17 @@ syn match	vimHiGuiFontname	contained	"'[a-zA-Z\-* ]\+'"
 syn match	vimHiGuiRgb	contained	"#\x\{6}"
 
 " Highlighting: hi group key=arg ... {{{2
-syn cluster	vimHiCluster contains=vimGroup,vimHiBlend,vimHiGroup,vimHiTerm,vimHiCTerm,vimHiStartStop,vimHiCtermFgBg,vimHiCtermul,vimHiGui,vimHiGuiFont,vimHiGuiFgBg,vimHiKeyError,vimNotation,vimComment,vim9comment
-syn region	vimHiKeyList	contained oneline start="\i\+" skip="\\\\\|\\|" end="$\||"	contains=@vimHiCluster
+syn cluster	vimHiCluster contains=vimGroup,vimHiBlend,vimHiGroup,vimHiTerm,vimHiCTerm,vimHiStartStop,vimHiCtermFgBg,vimHiCtermul,vimHiCtermfont,vimHiGui,vimHiGuiFont,vimHiGuiFgBg,vimHiKeyError,vimNotation,vimComment,vim9comment
+syn region	vimHiKeyList	contained 	start="\i\+" skip=+\\\\\|\\|\|\n\s*\\\|\n\s*"\\ + matchgroup=vimCmdSep end="|" excludenl end="$" contains=@vimContinue,@vimHiCluster
 if !exists("g:vimsyn_noerror") && !exists("g:vimsyn_vimhikeyerror")
  syn match	vimHiKeyError	contained	"\i\+="he=e-1
 endif
 syn match	vimHiTerm	contained	"\cterm="he=e-1		nextgroup=vimHiAttribList
-syn match	vimHiStartStop	contained	"\c\(start\|stop\)="he=e-1	nextgroup=vimHiTermcap,vimOption
+syn match	vimHiStartStop	contained	"\c\%(start\|stop\)="he=e-1	nextgroup=vimHiTermcap,vimOption
 syn match	vimHiCTerm	contained	"\ccterm="he=e-1		nextgroup=vimHiAttribList
 syn match	vimHiCtermFgBg	contained	"\ccterm[fb]g="he=e-1	nextgroup=vimHiNmbr,vimHiCtermColor,vimFgBgAttrib,vimHiCtermError
 syn match	vimHiCtermul	contained	"\cctermul="he=e-1	nextgroup=vimHiNmbr,vimHiCtermColor,vimFgBgAttrib,vimHiCtermError
+syn match	vimHiCtermfont	contained	"\cctermfont="he=e-1	nextgroup=vimHiNmbr,vimHiCtermColor,vimFgBgAttrib,vimHiCtermError
 syn match	vimHiGui	contained	"\cgui="he=e-1		nextgroup=vimHiAttribList
 syn match	vimHiGuiFont	contained	"\cfont="he=e-1		nextgroup=vimHiFontname
 syn match	vimHiGuiFgBg	contained	"\cgui\%([fb]g\|sp\)="he=e-1	nextgroup=vimHiGroup,vimHiGuiFontname,vimHiGuiRgb,vimFgBgAttrib
@@ -693,12 +706,13 @@ syn match	vimHiBlend	contained	"\cblend="he=e-1		nextgroup=vimHiNmbr
 syn match	vimHiNmbr	contained	'\d\+'
 
 " Highlight: clear {{{2
-syn keyword	vimHiClear	contained	clear	nextgroup=vimHiGroup
+syn keyword	vimHiClear	contained	clear	skipwhite nextgroup=vimGroup,vimHiGroup
 
 " Highlight: link {{{2
 " see tst24 (hi def vs hi) (Jul 06, 2018)
 "syn region	vimHiLink	contained oneline matchgroup=vimCommand start="\(\<hi\%[ghlight]\s\+\)\@<=\(\(def\%[ault]\s\+\)\=link\>\|\<def\>\)" end="$"	contains=vimHiGroup,vimGroup,vimHLGroup,vimNotation
-syn region	vimHiLink	contained oneline matchgroup=vimCommand start="\(\<hi\%[ghlight]\s\+\)\@<=\(\(def\%[ault]\s\+\)\=link\>\|\<def\>\)" end="$"	contains=@vimHiCluster
+" TODO: simplify and allow line continuations --djk
+syn region	vimHiLink	contained matchgroup=Type start="\%(\<hi\%[ghlight]!\=\s\+\)\@<=\%(\%(def\%[ault]\s\+\)\=link\>\|\<def\%[ault]\>\)" skip=+\\\\\|\\|\|\n\s*\\\|\n\s*"\\ + matchgroup=vimCmdSep end="|" excludenl end="$" contains=@vimContinue,@vimHiCluster
 
 " Control Characters: {{{2
 " ==================
@@ -964,8 +978,8 @@ if !exists("skip_vim_syntax_inits")
  hi def link vimContinueComment	vimComment
  hi def link vimCtrlChar	SpecialChar
  hi def link vimEcho	vimCommand
- hi def link vimEchoHLNone	vimGroup
- hi def link vimEchoHL	vimCommand
+ hi def link vimEchohlNone	vimGroup
+ hi def link vimEchohl	vimCommand
  hi def link vimElseIfErr	Error
  hi def link vimElseif	vimCondHL
  hi def link vimEnvvar	PreProc
@@ -974,7 +988,6 @@ if !exists("skip_vim_syntax_inits")
  hi def link vimFBVar	vimVar
  hi def link vimFgBgAttrib	vimHiAttrib
  hi def link vimFuncEcho	vimCommand
- hi def link vimHiCtermul	vimHiTerm
  hi def link vimFold	Folded
  hi def link vimFor	vimCommand
  hi def link vimFTCmd	vimCommand
@@ -991,8 +1004,11 @@ if !exists("skip_vim_syntax_inits")
  hi def link vimHiAttrib	PreProc
  hi def link vimHiBang	vimBang
  hi def link vimHiBlend	vimHiTerm
- hi def link vimHiClear	vimHighlight
+ hi def link vimHiClear	Type
+ hi def link vimHiCtermColor	Constant
  hi def link vimHiCtermFgBg	vimHiTerm
+ hi def link vimHiCtermfont	vimHiTerm
+ hi def link vimHiCtermul	vimHiTerm
  hi def link vimHiCTerm	vimHiTerm
  hi def link vimHighlight	vimCommand
  hi def link vimHiGroup	vimGroupName

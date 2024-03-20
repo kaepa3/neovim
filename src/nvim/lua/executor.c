@@ -1767,7 +1767,7 @@ void ex_luado(exarg_T *const eap)
     lua_pushvalue(lstate, -1);
     const char *const old_line = ml_get_buf(curbuf, l);
     // Get length of old_line here as calling Lua code may free it.
-    const size_t old_line_len = strlen(old_line);
+    const colnr_T old_line_len = ml_get_buf_len(curbuf, l);
     lua_pushstring(lstate, old_line);
     lua_pushnumber(lstate, (lua_Number)l);
     if (nlua_pcall(lstate, 2, 1)) {
@@ -1791,13 +1791,13 @@ void ex_luado(exarg_T *const eap)
         }
       }
       ml_replace(l, new_line_transformed, false);
-      inserted_bytes(l, 0, (int)old_line_len, (int)new_line_len);
+      inserted_bytes(l, 0, old_line_len, (int)new_line_len);
     }
     lua_pop(lstate, 1);
   }
 
   lua_pop(lstate, 1);
-  check_cursor();
+  check_cursor(curwin);
   redraw_curbuf_later(UPD_NOT_VALID);
 }
 
@@ -1908,6 +1908,9 @@ static void nlua_add_treesitter(lua_State *const lstate) FUNC_ATTR_NONNULL_ALL
 
   lua_pushcfunction(lstate, tslua_push_parser);
   lua_setfield(lstate, -2, "_create_ts_parser");
+
+  lua_pushcfunction(lstate, tslua_push_querycursor);
+  lua_setfield(lstate, -2, "_create_ts_querycursor");
 
   lua_pushcfunction(lstate, tslua_add_language);
   lua_setfield(lstate, -2, "_ts_add_language");

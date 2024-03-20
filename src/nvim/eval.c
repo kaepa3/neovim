@@ -6699,7 +6699,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
     if (charcol) {
       len = mb_charlen(ml_get(pos.lnum));
     } else {
-      len = (int)strlen(ml_get(pos.lnum));
+      len = ml_get_len(pos.lnum);
     }
 
     // We accept "$" for the column number: last column.
@@ -6789,7 +6789,7 @@ pos_T *var2fpos(const typval_T *const tv, const bool dollar_lnum, int *const ret
       if (charcol) {
         pos.col = (colnr_T)mb_charlen(get_cursor_line_ptr());
       } else {
-        pos.col = (colnr_T)strlen(get_cursor_line_ptr());
+        pos.col = get_cursor_line_len();
       }
     }
     return &pos;
@@ -8085,10 +8085,12 @@ void ex_echo(exarg_T *eap)
         // Call msg_start() after eval1(), evaluating the expression
         // may cause a message to appear.
         if (eap->cmdidx == CMD_echo) {
-          // Mark the saved text as finishing the line, so that what
-          // follows is displayed on a new line when scrolling back
-          // at the more prompt.
-          msg_sb_eol();
+          if (!msg_didout) {
+            // Mark the saved text as finishing the line, so that what
+            // follows is displayed on a new line when scrolling back
+            // at the more prompt.
+            msg_sb_eol();
+          }
           msg_start();
         }
       } else if (eap->cmdidx == CMD_echo) {

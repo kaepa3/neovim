@@ -223,7 +223,8 @@ static const char *highlight_init_both[] = {
   "default link DiagnosticUnnecessary      Comment",
 
   // Treesitter standard groups
-  "default link @variable.builtin Special",
+  "default link @variable.builtin           Special",
+  "default link @variable.parameter.builtin Special",
 
   "default link @constant         Constant",
   "default link @constant.builtin Special",
@@ -248,8 +249,9 @@ static const char *highlight_init_both[] = {
   "default link @type         Type",
   "default link @type.builtin Special",
 
-  "default link @attribute Macro",
-  "default link @property  Identifier",
+  "default link @attribute         Macro",
+  "default link @attribute.builtin Special",
+  "default link @property          Identifier",
 
   "default link @function         Function",
   "default link @function.builtin Special",
@@ -282,7 +284,8 @@ static const char *highlight_init_both[] = {
   "default link @diff.minus Removed",
   "default link @diff.delta Changed",
 
-  "default link @tag Tag",
+  "default link @tag         Tag",
+  "default link @tag.builtin Special",
 
   // LSP semantic tokens
   "default link @lsp.type.class         @type",
@@ -290,13 +293,20 @@ static const char *highlight_init_both[] = {
   "default link @lsp.type.decorator     @attribute",
   "default link @lsp.type.enum          @type",
   "default link @lsp.type.enumMember    @constant",
+  "default link @lsp.type.event         @type",
   "default link @lsp.type.function      @function",
   "default link @lsp.type.interface     @type",
+  "default link @lsp.type.keyword       @keyword",
   "default link @lsp.type.macro         @constant.macro",
   "default link @lsp.type.method        @function.method",
+  "default link @lsp.type.modifier      @type.qualifier",
   "default link @lsp.type.namespace     @module",
+  "default link @lsp.type.number        @number",
+  "default link @lsp.type.operator      @operator",
   "default link @lsp.type.parameter     @variable.parameter",
   "default link @lsp.type.property      @property",
+  "default link @lsp.type.regexp        @string.regexp",
+  "default link @lsp.type.string        @string",
   "default link @lsp.type.struct        @type",
   "default link @lsp.type.type          @type",
   "default link @lsp.type.typeParameter @type.definition",
@@ -1149,9 +1159,8 @@ void do_highlight(const char *line, const bool forceit, const bool init)
         error = true;
         break;
       }
-      memcpy(key, key_start, key_len);
-      key[key_len] = NUL;
-      vim_strup(key);
+      vim_memcpy_up(key, key_start, key_len);
+      key[key_len] = '\0';
       linep = skipwhite(linep);
 
       if (strcmp(key, "NONE") == 0) {
@@ -1943,9 +1952,8 @@ int syn_name2id_len(const char *name, size_t len)
 
   // Avoid using stricmp() too much, it's slow on some systems */
   // Avoid alloc()/free(), these are slow too.
-  memcpy(name_u, name, len);
+  vim_memcpy_up(name_u, name, len);
   name_u[len] = '\0';
-  vim_strup(name_u);
 
   // map_get(..., int) returns 0 when no key is present, which is
   // the expected value for missing highlight group.

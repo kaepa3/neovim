@@ -530,6 +530,16 @@ Example: File-change detection                                    *watch-file*
     vim.api.nvim_command(
       "command! -nargs=1 Watch call luaeval('watch_file(_A)', expand('<args>'))")
 <
+                                                         *fswatch-limitations*
+When on Linux and using fswatch, you may need to increase the maximum number
+of `inotify` watches and queued events as the default limit can be too low. To
+increase the limit, run: >sh
+    sysctl fs.inotify.max_user_watches=100000
+    sysctl fs.inotify.max_queued_events=100000
+<
+This will increase the limit to 100000 watches and queued events. These lines
+can be added to `/etc/sysctl.conf` to make the changes persistent.
+
 Example: TCP echo-server                                          *tcp-server*
     1. Save this code to a file.
     2. Execute it with ":luafile %".
@@ -633,12 +643,14 @@ vim.highlight.range({bufnr}, {ns}, {higroup}, {start}, {finish}, {opts})
                    tuple or string accepted by |getpos()|
       • {finish}   (`integer[]|string`) End of region as a (line, column)
                    tuple or string accepted by |getpos()|
-      • {opts}     (`table?`) Optional parameters
-                   • regtype type of range (see |setreg()|, default charwise)
-                   • inclusive boolean indicating whether the range is
-                     end-inclusive (default false)
-                   • priority number indicating priority of highlight (default
-                     priorities.user)
+      • {opts}     (`table?`) A table with the following fields:
+                   • {regtype}? (`string`, default: `'charwise'`) Type of
+                     range. See |setreg()|
+                   • {inclusive}? (`boolean`, default: `false`) Indicates
+                     whether the range is end-inclusive
+                   • {priority}? (`integer`, default:
+                     `vim.highlight.priorities.user`) Indicates priority of
+                     highlight
 
 
 ==============================================================================
@@ -1161,6 +1173,7 @@ Lua list copies the list object to Vimscript and does NOT modify the Lua list: >
     vim.print(list)  --> "{ 1, 2, 3 }"
 <
 
+
 vim.call({func}, {...})                                           *vim.call()*
     Invokes |vim-function| or |user-function| {func} with arguments {...}.
     See also |vim.fn|.
@@ -1239,6 +1252,7 @@ vim.v                                                                  *vim.v*
     |v:| variables.
     Invalid or unset key returns `nil`.
 
+
                                                                  *lua-options*
                                                              *lua-vim-options*
                                                                  *lua-vim-set*
@@ -1261,6 +1275,7 @@ Similarly, there is |vim.bo| and |vim.wo| for setting buffer-scoped and
 window-scoped options. Note that this must NOT be confused with
 |local-options| and |:setlocal|. There is also |vim.go| that only accesses the
 global value of a |global-local| option, see |:setglobal|.
+
 
                                                                *vim.opt_local*
                                                               *vim.opt_global*
@@ -2190,8 +2205,8 @@ vim.tbl_deep_extend({behavior}, {...})                 *vim.tbl_deep_extend()*
     Merges recursively two or more tables.
 
     Parameters: ~
-      • {behavior}  (`"error"|"keep"|"force"`) (string) Decides what to do if
-                    a key is found in more than one map:
+      • {behavior}  (`'error'|'keep'|'force'`) Decides what to do if a key is
+                    found in more than one map:
                     • "error": raise an error
                     • "keep": use value from the leftmost map
                     • "force": use value from the rightmost map
@@ -2207,8 +2222,8 @@ vim.tbl_extend({behavior}, {...})                           *vim.tbl_extend()*
     Merges two or more tables.
 
     Parameters: ~
-      • {behavior}  (`string`) Decides what to do if a key is found in more
-                    than one map:
+      • {behavior}  (`'error'|'keep'|'force'`) Decides what to do if a key is
+                    found in more than one map:
                     • "error": raise an error
                     • "keep": use value from the leftmost map
                     • "force": use value from the rightmost map
@@ -2781,9 +2796,9 @@ vim.keymap.del({modes}, {lhs}, {opts})                      *vim.keymap.del()*
     Parameters: ~
       • {modes}  (`string|string[]`)
       • {lhs}    (`string`)
-      • {opts}   (`table?`) A table of optional arguments:
-                 • "buffer": (integer|boolean) Remove a mapping from the given
-                   buffer. When `0` or `true`, use the current buffer.
+      • {opts}   (`table?`) A table with the following fields:
+                 • {buffer}? (`integer|boolean`) Remove a mapping from the
+                   given buffer. When `0` or `true`, use the current buffer.
 
     See also: ~
       • |vim.keymap.set()|
@@ -2805,20 +2820,20 @@ vim.keymap.set({mode}, {lhs}, {rhs}, {opts})                *vim.keymap.set()*
 <
 
     Parameters: ~
-      • {mode}  (`string|table`) Mode short-name, see |nvim_set_keymap()|. Can
-                also be list of modes to create mapping on multiple modes.
+      • {mode}  (`string|string[]`) Mode short-name, see |nvim_set_keymap()|.
+                Can also be list of modes to create mapping on multiple modes.
       • {lhs}   (`string`) Left-hand side |{lhs}| of the mapping.
       • {rhs}   (`string|function`) Right-hand side |{rhs}| of the mapping,
                 can be a Lua function.
-      • {opts}  (`table?`) Table of |:map-arguments|.
-                • Same as |nvim_set_keymap()| {opts}, except:
-                  • "replace_keycodes" defaults to `true` if "expr" is `true`.
-                  • "noremap": inverse of "remap" (see below).
-                • Also accepts:
-                  • "buffer": (integer|boolean) Creates buffer-local mapping,
-                    `0` or `true` for current buffer.
-                  • "remap": (boolean) Make the mapping recursive. Inverse of
-                    "noremap". Defaults to `false`.
+      • {opts}  (`table?`) Table of |:map-arguments|. Same as
+                |nvim_set_keymap()| {opts}, except:
+                • {replace_keycodes} defaults to `true` if "expr" is `true`.
+
+                Also accepts:
+                • {buffer}? (`integer|boolean`) Creates buffer-local mapping,
+                  `0` or `true` for current buffer.
+                • {remap}? (`boolean`, default: `false`) Make the mapping
+                  recursive. Inverse of {noremap}.
 
     See also: ~
       • |nvim_set_keymap()|
@@ -3553,7 +3568,7 @@ vim.secure.trust({opts})                                  *vim.secure.trust()*
     The trust database is located at |$XDG_STATE_HOME|/nvim/trust.
 
     Parameters: ~
-      • {opts}  (`table?`) A table with the following fields:
+      • {opts}  (`table`) A table with the following fields:
                 • {action} (`'allow'|'deny'|'remove'`) - `'allow'` to add a
                   file to the trust database and trust it,
                 • `'deny'` to add a file to the trust database and deny it,
@@ -3764,7 +3779,6 @@ vim.version.range({spec})                                *vim.version.range()*
         (`table?`) A table with the following fields:
         • {from} (`vim.Version`)
         • {to}? (`vim.Version`)
-        • {has} (`fun(self: vim.VersionRangeversion: string|vim.Version)`)
 
     See also: ~
       • https://github.com/npm/node-semver#ranges
@@ -3897,6 +3911,7 @@ Iter:enumerate()                                            *Iter:enumerate()*
 <
 
     Example: >lua
+
         local it = vim.iter(vim.gsplit('abc', '')):enumerate()
         it:next()
         -- 1	'a'
@@ -3931,6 +3946,7 @@ Iter:find({f})                                                   *Iter:find()*
     found.
 
     Examples: >lua
+
         local it = vim.iter({ 3, 6, 9, 12 })
         it:find(12)
         -- 12
@@ -4011,6 +4027,7 @@ Iter:last()                                                      *Iter:last()*
     Drains the iterator and returns the last item.
 
     Example: >lua
+
         local it = vim.iter(vim.gsplit('abcdefg', ''))
         it:last()
         -- 'g'
@@ -4051,6 +4068,7 @@ Iter:next()                                                      *Iter:next()*
     Gets the next value from the iterator.
 
     Example: >lua
+
         local it = vim.iter(string.gmatch('1 2 3', '%d+')):map(tonumber)
         it:next()
         -- 1
@@ -4082,6 +4100,7 @@ Iter:nth({n})                                                     *Iter:nth()*
     Gets the nth value of an iterator (and advances to it).
 
     Example: >lua
+
         local it = vim.iter({ 3, 6, 9, 12 })
         it:nth(2)
         -- 6
@@ -4099,6 +4118,7 @@ Iter:nthback({n})                                             *Iter:nthback()*
     Gets the nth value from the end of a |list-iterator| (and advances to it).
 
     Example: >lua
+
         local it = vim.iter({ 3, 6, 9, 12 })
         it:nthback(2)
         -- 9
@@ -4116,6 +4136,7 @@ Iter:peek()                                                      *Iter:peek()*
     Gets the next value in a |list-iterator| without consuming it.
 
     Example: >lua
+
         local it = vim.iter({ 3, 6, 9, 12 })
         it:peek()
         -- 3
@@ -4150,6 +4171,7 @@ Iter:rev()                                                        *Iter:rev()*
     Reverses a |list-iterator| pipeline.
 
     Example: >lua
+
         local it = vim.iter({ 3, 6, 9, 12 }):rev()
         it:totable()
         -- { 12, 9, 6, 3 }
@@ -4166,6 +4188,7 @@ Iter:rfind({f})                                                 *Iter:rfind()*
     found.
 
     Examples: >lua
+
         local it = vim.iter({ 1, 2, 3, 2, 1 }):enumerate()
         it:rfind(1)
         -- 5	1
@@ -4186,6 +4209,7 @@ Iter:skip({n})                                                   *Iter:skip()*
     Skips `n` values of an iterator pipeline.
 
     Example: >lua
+
         local it = vim.iter({ 3, 6, 9, 12 }):skip(2)
         it:next()
         -- 9

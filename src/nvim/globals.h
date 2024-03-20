@@ -363,7 +363,7 @@ EXTERN bool sys_menu INIT( = false);
 // currently active window.
 EXTERN win_T *firstwin;              // first window
 EXTERN win_T *lastwin;               // last window
-EXTERN win_T *prevwin INIT( = NULL);  // previous window
+EXTERN win_T *prevwin INIT( = NULL);  // previous window (may equal curwin)
 #define ONE_WINDOW (firstwin == lastwin)
 #define FOR_ALL_FRAMES(frp, first_frame) \
   for ((frp) = first_frame; (frp) != NULL; (frp) = (frp)->fr_next)
@@ -958,6 +958,7 @@ EXTERN const char e_highlight_group_name_invalid_char[] INIT(= N_("E5248: Invali
 
 EXTERN const char e_highlight_group_name_too_long[] INIT(= N_("E1249: Highlight group name too long"));
 
+EXTERN const char e_invalid_column_number_nr[] INIT( = N_("E964: Invalid column number: %ld"));
 EXTERN const char e_invalid_line_number_nr[] INIT(= N_("E966: Invalid line number: %ld"));
 
 EXTERN const char e_stray_closing_curly_str[]
@@ -969,6 +970,9 @@ EXTERN const char e_val_too_large[] INIT(= N_("E1510: Value too large: %s"));
 
 EXTERN const char e_undobang_cannot_redo_or_move_branch[]
 INIT(= N_("E5767: Cannot use :undo! to redo or move to a different undo branch"));
+
+EXTERN const char e_winfixbuf_cannot_go_to_buffer[]
+INIT(= N_("E1513: Cannot switch buffer. 'winfixbuf' is enabled"));
 
 EXTERN const char e_trustfile[] INIT(= N_("E5570: Cannot update trust file: %s"));
 

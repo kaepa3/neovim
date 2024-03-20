@@ -1305,6 +1305,12 @@ int do_buffer(int action, int start, int dir, int count, int forceit)
     }
     return FAIL;
   }
+
+  if (action == DOBUF_GOTO && buf != curbuf && !check_can_set_curbuf_forceit(forceit)) {
+    // disallow navigating to another buffer when 'winfixbuf' is applied
+    return FAIL;
+  }
+
   if ((action == DOBUF_GOTO || action == DOBUF_SPLIT) && (buf->b_flags & BF_DUMMY)) {
     // disallow navigating to the dummy buffer
     semsg(_(e_nobufnr), count);
@@ -1746,7 +1752,7 @@ void enter_buffer(buf_T *buf)
   maketitle();
   // when autocmds didn't change it
   if (curwin->w_topline == 1 && !curwin->w_topline_was_set) {
-    scroll_cursor_halfway(false, false);  // redisplay at correct position
+    scroll_cursor_halfway(curwin, false, false);  // redisplay at correct position
   }
 
   // Change directories when the 'acd' option is set.
@@ -2166,7 +2172,7 @@ int buflist_getfile(int n, linenr_T lnum, int options, int forceit)
     // cursor is at to BOL and w_cursor.lnum is checked due to getfile()
     if (!p_sol && col != 0) {
       curwin->w_cursor.col = col;
-      check_cursor_col();
+      check_cursor_col(curwin);
       curwin->w_cursor.coladd = 0;
       curwin->w_set_curswant = true;
     }
@@ -2191,7 +2197,7 @@ void buflist_getfpos(void)
     curwin->w_cursor.col = 0;
   } else {
     curwin->w_cursor.col = fpos->col;
-    check_cursor_col();
+    check_cursor_col(curwin);
     curwin->w_cursor.coladd = 0;
     curwin->w_set_curswant = true;
   }
@@ -3251,7 +3257,7 @@ void fileinfo(int fullname, int shorthelp, bool dont_truncate)
                      (int64_t)curwin->w_cursor.lnum,
                      (int64_t)curbuf->b_ml.ml_line_count,
                      n);
-    validate_virtcol();
+    validate_virtcol(curwin);
     size_t len = strlen(buffer);
     col_print(buffer + len, IOSIZE - len,
               (int)curwin->w_cursor.col + 1, (int)curwin->w_virtcol + 1);

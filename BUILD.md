@@ -290,13 +290,13 @@ Platform-specific requirements are listed below.
 ### Ubuntu / Debian
 
 ```sh
-sudo apt-get install ninja-build gettext cmake unzip curl
+sudo apt-get install ninja-build gettext cmake unzip curl build-essential
 ```
 
-### CentOS / RHEL / Fedora
+### RHEL / Fedora
 
 ```
-sudo dnf -y install ninja-build cmake gcc make unzip gettext curl
+sudo dnf -y install ninja-build cmake gcc make unzip gettext curl glibc-gconv-extra
 ```
 
 ### openSUSE
