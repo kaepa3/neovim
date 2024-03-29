@@ -466,6 +466,7 @@ local extension = {
   glsl = 'glsl',
   gn = 'gn',
   gni = 'gn',
+  gnuplot = 'gnuplot',
   gpi = 'gnuplot',
   go = 'go',
   gp = 'gp',
@@ -1304,7 +1305,6 @@ local filename = {
   ['.gnashpluginrc'] = 'gnash',
   gnashpluginrc = 'gnash',
   gnashrc = 'gnash',
-  ['.gnuplot'] = 'gnuplot',
   ['go.sum'] = 'gosum',
   ['go.work.sum'] = 'gosum',
   ['go.work'] = 'gowork',
@@ -1472,7 +1472,6 @@ local filename = {
   ['bash.bashrc'] = detect.bash,
   bashrc = detect.bash,
   ['.bashrc'] = detect.bash,
-  ['.env'] = detect.sh,
   ['.kshrc'] = detect.ksh,
   ['.profile'] = detect.sh,
   ['/etc/profile'] = detect.sh,
@@ -2387,7 +2386,9 @@ function M.match(args)
     end
 
     -- Next, check file extension
-    local ext = fn.fnamemodify(name, ':e')
+    -- Don't use fnamemodify() with :e modifier here,
+    -- as that's empty when there is only an extension.
+    local ext = name:match('%.([^.]-)$') or ''
     ft, on_detect = dispatch(extension[ext], path, bufnr)
     if ft then
       return ft, on_detect
