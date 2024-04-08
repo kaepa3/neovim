@@ -1667,7 +1667,7 @@ static const int included_patches[] = {
   818,
   817,
   816,
-  // 815,
+  815,
   814,
   813,
   812,
@@ -2715,9 +2715,11 @@ void list_version(void)
 /// Whether it still is not too late to show an intro message
 bool may_show_intro(void)
 {
-  return (buf_is_empty(firstwin->w_buffer)
-          && (firstwin->w_buffer->b_fname == NULL)
-          && one_window(firstwin)
+  return (buf_is_empty(curbuf)
+          && (curbuf->b_fname == NULL)
+          && (curbuf->handle == 1)
+          && (curwin->handle == LOWEST_WIN_ID)
+          && one_window(curwin)
           && (vim_strchr(p_shm, SHM_INTRO) == NULL));
 }
 

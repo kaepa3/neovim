@@ -32,6 +32,7 @@
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
 #include "nvim/ex_docmd.h"
+#include "nvim/ex_eval.h"
 #include "nvim/ex_getln.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
@@ -1078,7 +1079,7 @@ static int normal_execute(VimState *state, int key)
     // When "restart_edit" is set fake a "d"elete command, Insert mode will restart automatically.
     // Insert the typed character in the typeahead buffer, so that it can
     // be mapped in Insert mode.  Required for ":lmap" to work.
-    int len = ins_char_typebuf(vgetc_char, vgetc_mod_mask);
+    int len = ins_char_typebuf(vgetc_char, vgetc_mod_mask, true);
 
     // When recording and gotchars() was called the character will be
     // recorded again, remove the previous recording.
@@ -1402,6 +1403,12 @@ static int normal_check(VimState *state)
   NormalState *s = (NormalState *)state;
   normal_check_stuff_buffer(s);
   normal_check_interrupt(s);
+
+  // At the toplevel there is no exception handling.  Discard any that
+  // may be hanging around (e.g. from "interrupt" at the debug prompt).
+  if (did_throw && !ex_normal_busy) {
+    discard_current_exception();
+  }
 
   if (!exmode_active) {
     msg_scroll = false;

@@ -1325,9 +1325,11 @@ void aucmd_prepbuf(aco_save_T *aco, buf_T *buf)
     buf->b_nwindows++;
     win_init_empty(auc_win);  // set cursor and topline to safe values
 
-    // Make sure w_localdir and globaldir are NULL to avoid a chdir() in
-    // win_enter_ext().
+    // Make sure w_localdir, tp_localdir and globaldir are NULL to avoid a
+    // chdir() in win_enter_ext().
     XFREE_CLEAR(auc_win->w_localdir);
+    aco->tp_localdir = curtab->tp_localdir;
+    curtab->tp_localdir = NULL;
     aco->globaldir = globaldir;
     globaldir = NULL;
 
@@ -1427,6 +1429,13 @@ win_found:
     vars_clear(&awp->w_vars->dv_hashtab);         // free all w: variables
     hash_init(&awp->w_vars->dv_hashtab);          // re-use the hashtab
 
+    // If :lcd has been used in the autocommand window, correct current
+    // directory before restoring tp_localdir and globaldir.
+    if (awp->w_localdir != NULL) {
+      win_fix_current_dir();
+    }
+    xfree(curtab->tp_localdir);
+    curtab->tp_localdir = aco->tp_localdir;
     xfree(globaldir);
     globaldir = aco->globaldir;
 
@@ -1750,7 +1759,7 @@ bool apply_autocmds_group(event_T event, char *fname, char *fname_io, bool force
       saveRedobuff(&save_redo);
       did_save_redobuff = true;
     }
-    did_filetype = keep_filetype;
+    curbuf->b_did_filetype = curbuf->b_keep_filetype;
   }
 
   // Note that we are applying autocmds.  Some commands need to know.
@@ -1760,7 +1769,7 @@ bool apply_autocmds_group(event_T event, char *fname, char *fname_io, bool force
 
   // Remember that FileType was triggered.  Used for did_filetype().
   if (event == EVENT_FILETYPE) {
-    did_filetype = true;
+    curbuf->b_did_filetype = true;
   }
 
   char *tail = path_tail(fname);
@@ -1864,7 +1873,7 @@ bool apply_autocmds_group(event_T event, char *fname, char *fname_io, bool force
     if (did_save_redobuff) {
       restoreRedobuff(&save_redo);
     }
-    did_filetype = false;
+    curbuf->b_did_filetype = false;
     while (au_pending_free_buf != NULL) {
       buf_T *b = au_pending_free_buf->b_next;
 
@@ -1901,7 +1910,7 @@ BYPASS_AU:
   }
 
   if (retval == OK && event == EVENT_FILETYPE) {
-    au_did_filetype = true;
+    curbuf->b_au_did_filetype = true;
   }
 
   return retval;
@@ -2645,7 +2654,7 @@ void do_filetype_autocmd(buf_T *buf, bool force)
   secure = 0;
 
   ft_recursive++;
-  did_filetype = true;
+  buf->b_did_filetype = true;
   // Only pass true for "force" when it is true or
   // used recursively, to avoid endless recurrence.
   apply_autocmds(EVENT_FILETYPE, buf->b_p_ft, buf->b_fname, force || ft_recursive == 1, buf);
