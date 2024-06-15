@@ -69,7 +69,7 @@ static const char *const xdg_defaults[] = {
 const char *get_appname(void)
 {
   const char *env_val = os_getenv("NVIM_APPNAME");
-  if (env_val == NULL || *env_val == '\0') {
+  if (env_val == NULL || *env_val == NUL) {
     env_val = "nvim";
   }
   return env_val;
@@ -198,7 +198,7 @@ char *get_xdg_home(const XDGVarType idx)
   assert(appname_len < (IOSIZE - sizeof("-data")));
 
   if (dir) {
-    xstrlcpy(IObuff, appname, appname_len + 1);
+    xmemcpyz(IObuff, appname, appname_len);
 #if defined(MSWIN)
     if (idx == kXDGDataHome || idx == kXDGStateHome) {
       xstrlcat(IObuff, "-data", IOSIZE);

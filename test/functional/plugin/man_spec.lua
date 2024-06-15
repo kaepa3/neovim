@@ -1,17 +1,19 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local command, feed = helpers.command, helpers.feed
-local clear = helpers.clear
-local exec_lua = helpers.exec_lua
-local fn = helpers.fn
-local nvim_prog = helpers.nvim_prog
-local matches = helpers.matches
-local write_file = helpers.write_file
-local tmpname = helpers.tmpname
-local eq = helpers.eq
+
+local command, feed = n.command, n.feed
+local clear = n.clear
+local exec_lua = n.exec_lua
+local fn = n.fn
+local nvim_prog = n.nvim_prog
+local matches = t.matches
+local write_file = t.write_file
+local tmpname = t.tmpname
+local eq = t.eq
 local pesc = vim.pesc
-local skip = helpers.skip
-local is_ci = helpers.is_ci
+local skip = t.skip
+local is_ci = t.is_ci
 
 -- Collects all names passed to find_path() after attempting ":Man foo".
 local function get_search_history(name)
@@ -115,6 +117,29 @@ describe(':Man', function()
       ]])
     end)
 
+    it('clears OSC 8 hyperlink markup from text', function()
+      feed(
+        [[
+        ithis <C-v><ESC>]8;;http://example.com<C-v><ESC>\Link Title<C-v><ESC>]8;;<C-v><ESC>\<ESC>]]
+      )
+
+      screen:expect {
+        grid = [=[
+        this {c:^[}]8;;http://example.com{c:^[}\Link Title{c:^[}]8;;{c:^[}^\ |
+        {eob:~                                                   }|*3
+                                                            |
+      ]=],
+      }
+
+      exec_lua [[require'man'.init_pager()]]
+
+      screen:expect([[
+      ^this Link Title                                     |
+      {eob:~                                                   }|*3
+                                                          |
+      ]])
+    end)
+
     it('highlights multibyte text', function()
       feed(
         [[
@@ -190,6 +215,7 @@ describe(':Man', function()
       '--headless',
       '+autocmd VimLeave * echo "quit works!!"',
       '+Man!',
+      '+tag ls',
       '+call nvim_input("q")',
     }
     matches('quit works!!', fn.system(args, { 'manpage contents' }))

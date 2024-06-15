@@ -1,13 +1,14 @@
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local helpers = require('test.functional.helpers')(after_each)
 
-local clear = helpers.clear
-local exec = helpers.exec
-local exec_lua = helpers.exec_lua
-local eq = helpers.eq
-local fn = helpers.fn
-local api = helpers.api
-local insert = helpers.insert
+local clear = n.clear
+local exec = n.exec
+local exec_lua = n.exec_lua
+local eq = t.eq
+local fn = n.fn
+local api = n.api
+local insert = n.insert
 
 local function html_syntax_match()
   local styles =
@@ -286,7 +287,13 @@ describe(':TOhtml', function()
         0,
         { virt_text = { { 'foo' } }, virt_text_pos = 'overlay' }
       )
-      api.nvim_buf_set_extmark(0, ns, 2, 0, { virt_text = { { 'foo' } }, virt_text_pos = 'inline' })
+      api.nvim_buf_set_extmark(
+        0,
+        ns,
+        2,
+        0,
+        { virt_text = { { 'fo┊o', { 'Conceal', 'Comment' } } }, virt_text_pos = 'inline' }
+      )
       --api.nvim_buf_set_extmark(0,ns,3,0,{virt_text={{'foo'}},virt_text_pos='right_align'})
       run_tohtml_and_assert(screen)
     end)

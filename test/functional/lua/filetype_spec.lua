@@ -1,13 +1,15 @@
-local helpers = require('test.functional.helpers')(after_each)
-local exec_lua = helpers.exec_lua
-local eq = helpers.eq
-local api = helpers.api
-local clear = helpers.clear
-local pathroot = helpers.pathroot
-local command = helpers.command
-local mkdir = helpers.mkdir
-local rmdir = helpers.rmdir
-local write_file = helpers.write_file
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
+local exec_lua = n.exec_lua
+local eq = t.eq
+local api = n.api
+local clear = n.clear
+local pathroot = n.pathroot
+local command = n.command
+local mkdir = t.mkdir
+local rmdir = n.rmdir
+local write_file = t.write_file
 local uv = vim.uv
 
 local root = pathroot()

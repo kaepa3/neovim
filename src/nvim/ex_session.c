@@ -15,6 +15,7 @@
 #include "nvim/autocmd.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
@@ -1138,7 +1139,7 @@ static char *get_view_file(char c)
   }
   *s++ = '=';
   *s++ = c;
-  xstrlcpy(s, ".vim", 5);
+  xmemcpyz(s, S_LEN(".vim"));
 
   xfree(sname);
   return retval;

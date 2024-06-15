@@ -1,17 +1,17 @@
 local uv = vim.uv
-local helpers = require('test.unit.helpers')(after_each)
-local itp = helpers.gen_itp(it)
+local t = require('test.unit.testutil')
+local itp = t.gen_itp(it)
 
-local cimport = helpers.cimport
-local eq = helpers.eq
-local neq = helpers.neq
-local ffi = helpers.ffi
-local cstr = helpers.cstr
-local to_cstr = helpers.to_cstr
-local NULL = helpers.NULL
-local OK = helpers.OK
-local FAIL = helpers.FAIL
-local mkdir = helpers.mkdir
+local cimport = t.cimport
+local eq = t.eq
+local neq = t.neq
+local ffi = t.ffi
+local cstr = t.cstr
+local to_cstr = t.to_cstr
+local NULL = t.NULL
+local OK = t.OK
+local FAIL = t.FAIL
+local mkdir = t.mkdir
 
 cimport('string.h')
 local cimp = cimport('./src/nvim/os/os.h', './src/nvim/path.h')
@@ -22,11 +22,16 @@ local buffer = nil
 
 describe('path.c', function()
   describe('path_full_dir_name', function()
+    local old_dir
+
     setup(function()
+      old_dir = uv.cwd()
       mkdir('unit-test-directory')
+      uv.fs_symlink(old_dir .. '/unit-test-directory', 'unit-test-symlink')
     end)
 
     teardown(function()
+      uv.fs_unlink('unit-test-symlink')
       uv.fs_rmdir('unit-test-directory')
     end)
 
@@ -37,35 +42,64 @@ describe('path.c', function()
 
     before_each(function()
       -- Create empty string buffer which will contain the resulting path.
-      length = string.len(uv.cwd()) + 22
+      length = string.len(old_dir) + 22
       buffer = cstr(length, '')
     end)
 
+    after_each(function()
+      uv.chdir(old_dir)
+    end)
+
     itp('returns the absolute directory name of a given relative one', function()
-      local result = path_full_dir_name('..', buffer, length)
-      eq(OK, result)
-      local old_dir = uv.cwd()
+      eq(OK, path_full_dir_name('..', buffer, length))
       uv.chdir('..')
       local expected = uv.cwd()
       uv.chdir(old_dir)
-      eq(expected, (ffi.string(buffer)))
+      eq(expected, ffi.string(buffer))
     end)
 
     itp('returns the current directory name if the given string is empty', function()
-      eq(OK, (path_full_dir_name('', buffer, length)))
-      eq(uv.cwd(), (ffi.string(buffer)))
+      eq(OK, path_full_dir_name('', buffer, length))
+      eq(old_dir, ffi.string(buffer))
+    end)
+
+    local function test_full_dir_absolute()
+      itp('works with a normal absolute dir', function()
+        eq(OK, path_full_dir_name(old_dir .. '/unit-test-directory', buffer, length))
+        eq(old_dir .. '/unit-test-directory', ffi.string(buffer))
+      end)
+
+      itp('works with a symlinked absolute dir', function()
+        eq(OK, path_full_dir_name(old_dir .. '/unit-test-symlink', buffer, length))
+        eq(old_dir .. '/unit-test-directory', ffi.string(buffer))
+      end)
+    end
+
+    test_full_dir_absolute()
+
+    describe('when cwd does not exist #28786', function()
+      before_each(function()
+        mkdir('dir-to-remove')
+        uv.chdir('dir-to-remove')
+        uv.fs_rmdir(old_dir .. '/dir-to-remove')
+      end)
+
+      test_full_dir_absolute()
     end)
 
     itp('works with a normal relative dir', function()
-      local result = path_full_dir_name('unit-test-directory', buffer, length)
-      eq(uv.cwd() .. '/unit-test-directory', (ffi.string(buffer)))
-      eq(OK, result)
+      eq(OK, path_full_dir_name('unit-test-directory', buffer, length))
+      eq(old_dir .. '/unit-test-directory', ffi.string(buffer))
+    end)
+
+    itp('works with a symlinked relative dir', function()
+      eq(OK, path_full_dir_name('unit-test-symlink', buffer, length))
+      eq(old_dir .. '/unit-test-directory', ffi.string(buffer))
     end)
 
     itp('works with a non-existing relative dir', function()
-      local result = path_full_dir_name('does-not-exist', buffer, length)
-      eq(uv.cwd() .. '/does-not-exist', (ffi.string(buffer)))
-      eq(OK, result)
+      eq(OK, path_full_dir_name('does-not-exist', buffer, length))
+      eq(old_dir .. '/does-not-exist', ffi.string(buffer))
     end)
 
     itp('fails with a non-existing absolute dir', function()
@@ -380,8 +414,8 @@ describe('path.c', function()
       return buf, result
     end
 
-    local function get_buf_len(s, t)
-      return math.max(string.len(s), string.len(t)) + 1
+    local function get_buf_len(s, q)
+      return math.max(string.len(s), string.len(q)) + 1
     end
 
     itp('fails if given filename is NULL', function()
@@ -413,12 +447,15 @@ describe('path.c', function()
     end)
 
     itp('fails and uses filename if given filename contains non-existing directory', function()
-      local filename = 'non_existing_dir/test.file'
-      local buflen = string.len(filename) + 1
-      local do_expand = 1
-      local buf, result = vim_FullName(filename, buflen, do_expand)
-      eq(filename, ffi.string(buf))
-      eq(FAIL, result)
+      -- test with different filename lengths
+      for rep = 1, 10 do
+        local filename = ('non_existing_'):rep(rep) .. 'dir/test.file'
+        local buflen = string.len(filename) + 1
+        local do_expand = 1
+        local buf, result = vim_FullName(filename, buflen, do_expand)
+        eq(filename, ffi.string(buf))
+        eq(FAIL, result)
+      end
     end)
 
     itp('concatenates filename if it does not contain a slash', function()

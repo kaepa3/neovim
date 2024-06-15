@@ -1,12 +1,13 @@
 -- Cmdline-mode tests.
 
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear, insert, fn, eq, feed =
-  helpers.clear, helpers.insert, helpers.fn, helpers.eq, helpers.feed
-local eval = helpers.eval
-local command = helpers.command
-local api = helpers.api
+
+local clear, insert, fn, eq, feed = n.clear, n.insert, n.fn, t.eq, n.feed
+local eval = n.eval
+local command = n.command
+local api = n.api
 
 describe('cmdline', function()
   before_each(clear)
@@ -47,18 +48,14 @@ describe('cmdline', function()
 
   it('redraws statusline when toggling overstrike', function()
     local screen = Screen.new(60, 4)
-    screen:set_default_attr_ids({
-      [0] = { bold = true, foreground = Screen.colors.Blue }, -- NonText
-      [1] = { reverse = true, bold = true }, -- StatusLine
-    })
     screen:attach()
     command('set laststatus=2 statusline=%!mode(1)')
     feed(':')
     screen:expect {
       grid = [[
                                                                   |
-      {0:~                                                           }|
-      {1:c                                                           }|
+      {1:~                                                           }|
+      {3:c                                                           }|
       :^                                                           |
     ]],
     }
@@ -66,8 +63,8 @@ describe('cmdline', function()
     screen:expect {
       grid = [[
                                                                   |
-      {0:~                                                           }|
-      {1:cr                                                          }|
+      {1:~                                                           }|
+      {3:cr                                                          }|
       :^                                                           |
     ]],
     }

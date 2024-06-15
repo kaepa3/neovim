@@ -1,15 +1,17 @@
-local helpers = require('test.functional.helpers')(after_each)
-local eq = helpers.eq
-local eval = helpers.eval
-local clear = helpers.clear
-local source = helpers.source
-local exc_exec = helpers.exc_exec
-local pcall_err = helpers.pcall_err
-local fn = helpers.fn
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local command = helpers.command
-local feed = helpers.feed
-local is_os = helpers.is_os
+
+local eq = t.eq
+local eval = n.eval
+local clear = n.clear
+local source = n.source
+local exc_exec = n.exc_exec
+local pcall_err = t.pcall_err
+local fn = n.fn
+local command = n.command
+local feed = n.feed
+local is_os = t.is_os
 
 describe('execute()', function()
   before_each(clear)

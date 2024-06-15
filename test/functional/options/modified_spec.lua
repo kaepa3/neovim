@@ -1,7 +1,9 @@
-local helpers = require('test.functional.helpers')(after_each)
-local clear = helpers.clear
-local eq = helpers.eq
-local api = helpers.api
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
+local clear = n.clear
+local eq = t.eq
+local api = n.api
 
 describe("'modified'", function()
   before_each(function()

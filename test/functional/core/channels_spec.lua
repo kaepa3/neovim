@@ -1,18 +1,19 @@
-local helpers = require('test.functional.helpers')(after_each)
-local clear, eq, eval, next_msg, ok, source =
-  helpers.clear, helpers.eq, helpers.eval, helpers.next_msg, helpers.ok, helpers.source
-local command, fn, api = helpers.command, helpers.fn, helpers.api
-local matches = helpers.matches
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
+local clear, eq, eval, next_msg, ok, source = n.clear, t.eq, n.eval, n.next_msg, t.ok, n.source
+local command, fn, api = n.command, n.fn, n.api
+local matches = t.matches
 local sleep = vim.uv.sleep
-local spawn, nvim_argv = helpers.spawn, helpers.nvim_argv
-local get_session, set_session = helpers.get_session, helpers.set_session
-local nvim_prog = helpers.nvim_prog
-local is_os = helpers.is_os
-local retry = helpers.retry
-local expect_twostreams = helpers.expect_twostreams
-local assert_alive = helpers.assert_alive
-local pcall_err = helpers.pcall_err
-local skip = helpers.skip
+local spawn, nvim_argv = n.spawn, n.nvim_argv
+local get_session, set_session = n.get_session, n.set_session
+local nvim_prog = n.nvim_prog
+local is_os = t.is_os
+local retry = t.retry
+local expect_twostreams = n.expect_twostreams
+local assert_alive = n.assert_alive
+local pcall_err = t.pcall_err
+local skip = t.skip
 
 describe('channels', function()
   local init = [[

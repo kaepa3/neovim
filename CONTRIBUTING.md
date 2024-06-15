@@ -8,10 +8,11 @@ If you want to help but don't know where to start, here are some
 low-risk/isolated tasks:
 
 - Try a [complexity:low] issue.
-- Fix bugs found by [Clang](#clang-scan-build) or [Coverity](#coverity).
+- Fix bugs found by [Coverity](#coverity).
 - [Merge a Vim patch] (requires strong familiarity with Vim)
   - NOTE: read the above link before sending improvements to "runtime files" (anything in `runtime/`).
-    - Vimscript and documentation files are (mostly) maintained by [Vim](https://github.com/vim/vim), not Nvim.
+    - Vimscript and documentation files are (mostly) maintained by [Vim], not Nvim.
+    - Nvim's [filetype detection](https://github.com/neovim/neovim/blob/master/runtime/lua/vim/filetype.lua) behavior matches Vim, so changes to filetype detection should be submitted to [Vim] first.
     - Lua files are maintained by Nvim.
 
 Reporting problems
@@ -41,10 +42,10 @@ Developer guidelines
   make distclean
   make  # Nvim build system uses ninja automatically, if available.
   ```
-- Install `ccache` for faster rebuilds of Nvim. Nvim will use it automatically
-  if it's found. To disable caching use:
+- Install `ccache` or `sccache` for faster rebuilds of Nvim. Nvim will use one
+  of these automatically if it's found. To disable caching use:
   ```bash
-  CCACHE_DISABLE=true make
+  cmake -B build -D CACHE_PRG=OFF
   ```
 
 Pull requests (PRs)
@@ -82,38 +83,36 @@ a comment.
 ### Commit messages
 
 Follow the [conventional commits guidelines][conventional_commits] to *make reviews easier* and to make
-the VCS/git logs more valuable. The general structure of a commit message is:
+the VCS/git logs more valuable. The structure of a commit message is:
 
-```
-<type>([optional scope]): <description>
+    type(scope): subject
 
-[optional body]
+    Problem:
+    ...
 
-[optional footer(s)]
-```
+    Solution:
+    ...
 
-- Prefix the commit subject with one of these [_types_](https://github.com/commitizen/conventional-commit-types/blob/master/index.json):
-    - `build`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `test`, `vim-patch`
-    - You can **ignore this for "fixup" commits** or any commits you expect to be squashed.
-- Append optional scope to _type_ such as `(lsp)`, `(treesitter)`, `(float)`, …
-- _Description_ shouldn't start with a capital letter or end in a period.
-- Use the _imperative voice_: "Fix bug" rather than "Fixed bug" or "Fixes bug."
-- Try to keep the first line under 72 characters.
-- A blank line must follow the subject.
-- Breaking API changes must be indicated by
-    1. "!" after the type/scope, and
-    2. a "BREAKING CHANGE" footer describing the change.
-       Example:
-       ```
-       refactor(provider)!: drop support for Python 2
+- Commit message **subject** (you can **ignore this for "fixup" commits** or any commits you expect to be squashed):
+    - Prefix with a [_type_](https://github.com/commitizen/conventional-commit-types/blob/master/index.json):
+        - `build ci docs feat fix perf refactor revert test vim-patch`
+    - Append an optional `(scope)` such as `(lsp)`, `(treesitter)`, `(float)`, …
+    - Use the _imperative voice_: "Fix bug" rather than "Fixed bug" or "Fixes bug."
+    - Keep it short (under 72 characters).
+- Commit message **body** (detail):
+    - Concisely describe the Problem/Solution in the commit **body**. [Describing the problem](https://lamport.azurewebsites.net/pubs/state-the-problem.pdf)
+      _independently of the solution_ often leads to a better understanding for you, reviewers, and future readers.
+      ```
+      Problem:
 
-       BREAKING CHANGE: refactor to use Python 3 features since Python 2 is no longer supported.
-       ```
+      Solution:
+      ```
+- Indicate breaking API changes with "!" after the type, and a "BREAKING CHANGE" footer. Example:
+  ```
+  refactor(provider)!: drop support for Python 2
 
-### News
-
-High level release notes are maintained in [news.txt](runtime/doc/news.txt). A PR is not required to add a news item
-but is generally recommended.
+  BREAKING CHANGE: refactor to use Python 3 features since Python 2 is no longer supported.
+  ```
 
 ### Automated builds (CI)
 
@@ -131,21 +130,6 @@ Each pull request must pass the automated builds on [Cirrus CI] and [GitHub Acti
 - CI for FreeBSD runs on [Cirrus CI].
 - To see CI results faster in your PR, you can temporarily set `TEST_FILE` in
   [test.yml](https://github.com/neovim/neovim/blob/e35b9020b16985eee26e942f9a3f6b045bc3809b/.github/workflows/test.yml#L29).
-
-### Clang scan-build
-
-View the [Clang report] to see potential bugs found by the Clang
-[scan-build](https://clang-analyzer.llvm.org/scan-build.html) analyzer.
-
-- Search the Neovim commit history to find examples:
-  ```bash
-  git log --oneline --no-merges --grep clang
-  ```
-- To verify a fix locally, run `scan-build` like this:
-  ```bash
-  rm -rf build/
-  scan-build --use-analyzer=/usr/bin/clang make
-  ```
 
 ### Coverity
 
@@ -334,9 +318,8 @@ check from cmake.
 
 Alternatively, you may point the URL as a local path where the repository is.
 This is convenient when bisecting a problem in a dependency with `git bisect`.
-This requires running `make distclean` the first time once to remove traces of
-the previous build. Hash checking is always skipped in this case regardless of
-`DEPS_IGNORE_SHA`.
+This may require running `make distclean` between each build. Hash checking is
+always skipped in this case regardless of `DEPS_IGNORE_SHA`.
 
 ```bash
 LUAJIT_URL /home/user/luajit
@@ -365,6 +348,7 @@ as context, use the `-W` argument as well.
 [Cirrus CI]: https://cirrus-ci.com/github/neovim/neovim
 [Clang report]: https://neovim.io/doc/reports/clang/
 [GitHub Actions]: https://github.com/neovim/neovim/actions
+[Vim]: https://github.com/vim/vim
 [clangd]: https://clangd.llvm.org
 [Merge a Vim patch]: https://neovim.io/doc/user/dev_vimpatch.html
 [complexity:low]: https://github.com/neovim/neovim/issues?q=is%3Aopen+is%3Aissue+label%3Acomplexity%3Alow

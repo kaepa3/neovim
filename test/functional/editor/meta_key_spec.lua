@@ -1,11 +1,13 @@
-local helpers = require('test.functional.helpers')(after_each)
-local clear, feed, insert = helpers.clear, helpers.feed, helpers.insert
-local command = helpers.command
-local exec_lua = helpers.exec_lua
-local eval = helpers.eval
-local expect = helpers.expect
-local fn = helpers.fn
-local eq = helpers.eq
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
+local clear, feed, insert = n.clear, n.feed, n.insert
+local command = n.command
+local exec_lua = n.exec_lua
+local eval = n.eval
+local expect = n.expect
+local fn = n.fn
+local eq = t.eq
 
 describe('meta-keys #8226 #13042', function()
   before_each(function()

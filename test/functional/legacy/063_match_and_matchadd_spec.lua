@@ -1,10 +1,10 @@
 -- Tests for adjusting window and contents
 
-local helpers = require('test.functional.helpers')(after_each)
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
-local clear, command = helpers.clear, helpers.command
-local insert = helpers.insert
+local clear, command = n.clear, n.command
+local insert = n.insert
 
 describe('063: Test for ":match", "matchadd()" and related functions', function()
   setup(clear)

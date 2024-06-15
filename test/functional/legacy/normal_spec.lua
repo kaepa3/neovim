@@ -1,11 +1,13 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear = helpers.clear
-local exec = helpers.exec
-local feed = helpers.feed
-local api = helpers.api
-local eq = helpers.eq
-local fn = helpers.fn
+
+local clear = n.clear
+local exec = n.exec
+local feed = n.feed
+local api = n.api
+local eq = t.eq
+local fn = n.fn
 
 describe('normal', function()
   local screen
@@ -94,10 +96,9 @@ describe('normal', function()
     feed('ggG<C-D>')
     screen:expect({
       grid = [[
-        foobar one two three                    |*8
+        foobar one two three                    |*16
         ^foobar one two three                    |
         {2:---}                                     |
-        {1:~                                       }|*8
                                                 |
       ]],
     })

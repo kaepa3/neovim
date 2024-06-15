@@ -1,11 +1,13 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear, feed, api = helpers.clear, helpers.feed, helpers.api
-local insert, feed_command = helpers.insert, helpers.feed_command
-local eq, fn = helpers.eq, helpers.fn
-local poke_eventloop = helpers.poke_eventloop
-local command = helpers.command
-local exec = helpers.exec
+
+local clear, feed, api = n.clear, n.feed, n.api
+local insert, feed_command = n.insert, n.feed_command
+local eq, fn = t.eq, n.fn
+local poke_eventloop = n.poke_eventloop
+local command = n.command
+local exec = n.exec
 
 describe('ui/mouse/input', function()
   local screen
@@ -575,7 +577,7 @@ describe('ui/mouse/input', function()
       :tabprevious             |
     ]])
     feed('<LeftMouse><10,0><LeftRelease>') -- go to second tab
-    helpers.poke_eventloop()
+    n.poke_eventloop()
     feed('<LeftMouse><0,1>')
     screen:expect([[
       {tab: + foo }{sel: + bar }{fill:          }{tab:X}|
@@ -1856,8 +1858,8 @@ describe('ui/mouse/input', function()
 
   it('feeding <MouseMove> in Normal mode does not use uninitialized memory #19480', function()
     feed('<MouseMove>')
-    helpers.poke_eventloop()
-    helpers.assert_alive()
+    n.poke_eventloop()
+    n.assert_alive()
   end)
 
   it('mousemodel=popup_setpos', function()

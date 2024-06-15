@@ -1,27 +1,29 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
+
 local clear, curbuf, curbuf_contents, curwin, eq, neq, matches, ok, feed, insert, eval =
-  helpers.clear,
-  helpers.api.nvim_get_current_buf,
-  helpers.curbuf_contents,
-  helpers.api.nvim_get_current_win,
-  helpers.eq,
-  helpers.neq,
-  helpers.matches,
-  helpers.ok,
-  helpers.feed,
-  helpers.insert,
-  helpers.eval
-local poke_eventloop = helpers.poke_eventloop
-local exec = helpers.exec
-local exec_lua = helpers.exec_lua
-local fn = helpers.fn
-local request = helpers.request
+  n.clear,
+  n.api.nvim_get_current_buf,
+  n.curbuf_contents,
+  n.api.nvim_get_current_win,
+  t.eq,
+  t.neq,
+  t.matches,
+  t.ok,
+  n.feed,
+  n.insert,
+  n.eval
+local poke_eventloop = n.poke_eventloop
+local exec = n.exec
+local exec_lua = n.exec_lua
+local fn = n.fn
+local request = n.request
 local NIL = vim.NIL
-local api = helpers.api
-local command = helpers.command
-local pcall_err = helpers.pcall_err
-local assert_alive = helpers.assert_alive
+local api = n.api
+local command = n.command
+local pcall_err = t.pcall_err
+local assert_alive = n.assert_alive
 
 describe('API/win', function()
   before_each(clear)
@@ -111,6 +113,44 @@ describe('API/win', function()
       api.nvim_win_set_buf(new_win, next_buf)
       eq(next_buf, api.nvim_win_get_buf(new_win))
     end)
+
+    describe("with 'autochdir'", function()
+      local topdir
+      local otherbuf
+      local oldwin
+      local newwin
+
+      before_each(function()
+        command('set shellslash')
+        topdir = fn.getcwd()
+        t.mkdir(topdir .. '/Xacd')
+        t.mkdir(topdir .. '/Xacd/foo')
+        otherbuf = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_name(otherbuf, topdir .. '/Xacd/baz.txt')
+
+        command('set autochdir')
+        command('edit Xacd/foo/bar.txt')
+        eq(topdir .. '/Xacd/foo', fn.getcwd())
+
+        oldwin = api.nvim_get_current_win()
+        command('vsplit')
+        newwin = api.nvim_get_current_win()
+      end)
+
+      after_each(function()
+        n.rmdir(topdir .. '/Xacd')
+      end)
+
+      it('does not change cwd with non-current window', function()
+        api.nvim_win_set_buf(oldwin, otherbuf)
+        eq(topdir .. '/Xacd/foo', fn.getcwd())
+      end)
+
+      it('changes cwd with current window', function()
+        api.nvim_win_set_buf(newwin, otherbuf)
+        eq(topdir .. '/Xacd', fn.getcwd())
+      end)
+    end)
   end)
 
   describe('{get,set}_cursor', function()
@@ -130,11 +170,6 @@ describe('API/win', function()
 
     it('updates the screen, and also when the window is unfocused', function()
       local screen = Screen.new(30, 9)
-      screen:set_default_attr_ids({
-        [1] = { bold = true, foreground = Screen.colors.Blue },
-        [2] = { bold = true, reverse = true },
-        [3] = { reverse = true },
-      })
       screen:attach()
 
       insert('prologue')
@@ -181,10 +216,10 @@ describe('API/win', function()
         grid = [[
         ^                              |
         {1:~                             }|*2
-        {2:[No Name]                     }|
+        {3:[No Name]                     }|
         prologue                      |
                                       |*2
-        {3:[No Name] [+]                 }|
+        {2:[No Name] [+]                 }|
                                       |
       ]],
       }
@@ -195,10 +230,10 @@ describe('API/win', function()
         grid = [[
         ^                              |
         {1:~                             }|*2
-        {2:[No Name]                     }|
+        {3:[No Name]                     }|
                                       |*2
         epilogue                      |
-        {3:[No Name] [+]                 }|
+        {2:[No Name] [+]                 }|
                                       |
       ]],
       }
@@ -209,31 +244,16 @@ describe('API/win', function()
         grid = [[
         ^                              |
         {1:~                             }|*2
-        {2:[No Name]                     }|
+        {3:[No Name]                     }|
         prologue                      |
                                       |*2
-        {3:[No Name] [+]                 }|
+        {2:[No Name] [+]                 }|
                                       |
       ]],
       }
 
       -- curwin didn't change back
       neq(win, curwin())
-
-      -- shows updated position after getchar() #20793
-      feed(':call getchar()<CR>')
-      api.nvim_win_set_cursor(win, { 1, 5 })
-      screen:expect {
-        grid = [[
-                                      |
-        {1:~                             }|*2
-        {2:[No Name]                     }|
-        prolo^gue                      |
-                                      |*2
-        {3:[No Name] [+]                 }|
-        :call getchar()               |
-      ]],
-      }
     end)
 
     it('remembers what column it wants to be in', function()
@@ -261,12 +281,6 @@ describe('API/win', function()
 
     it('updates cursorline and statusline ruler in non-current window', function()
       local screen = Screen.new(60, 8)
-      screen:set_default_attr_ids({
-        [1] = { bold = true, foreground = Screen.colors.Blue }, -- NonText
-        [2] = { background = Screen.colors.Grey90 }, -- CursorLine
-        [3] = { bold = true, reverse = true }, -- StatusLine
-        [4] = { reverse = true }, -- StatusLineNC
-      })
       screen:attach()
       command('set ruler')
       command('set cursorline')
@@ -281,31 +295,25 @@ describe('API/win', function()
         aaa                           │aaa                          |
         bbb                           │bbb                          |
         ccc                           │ccc                          |
-        {2:dd^d                           }│{2:ddd                          }|
+        {21:dd^d                           }│{21:ddd                          }|
         {1:~                             }│{1:~                            }|*2
-        {3:[No Name] [+]  4,3         All }{4:[No Name] [+]  4,3        All}|
+        {3:[No Name] [+]  4,3         All }{2:[No Name] [+]  4,3        All}|
                                                                     |
       ]])
       api.nvim_win_set_cursor(oldwin, { 1, 0 })
       screen:expect([[
-        aaa                           │{2:aaa                          }|
+        aaa                           │{21:aaa                          }|
         bbb                           │bbb                          |
         ccc                           │ccc                          |
-        {2:dd^d                           }│ddd                          |
+        {21:dd^d                           }│ddd                          |
         {1:~                             }│{1:~                            }|*2
-        {3:[No Name] [+]  4,3         All }{4:[No Name] [+]  1,1        All}|
+        {3:[No Name] [+]  4,3         All }{2:[No Name] [+]  1,1        All}|
                                                                     |
       ]])
     end)
 
     it('updates cursorcolumn in non-current window', function()
       local screen = Screen.new(60, 8)
-      screen:set_default_attr_ids({
-        [1] = { bold = true, foreground = Screen.colors.Blue }, -- NonText
-        [2] = { background = Screen.colors.Grey90 }, -- CursorColumn
-        [3] = { bold = true, reverse = true }, -- StatusLine
-        [4] = { reverse = true }, -- StatusLineNC
-      })
       screen:attach()
       command('set cursorcolumn')
       insert([[
@@ -316,22 +324,22 @@ describe('API/win', function()
       local oldwin = curwin()
       command('vsplit')
       screen:expect([[
-        aa{2:a}                           │aa{2:a}                          |
-        bb{2:b}                           │bb{2:b}                          |
-        cc{2:c}                           │cc{2:c}                          |
+        aa{21:a}                           │aa{21:a}                          |
+        bb{21:b}                           │bb{21:b}                          |
+        cc{21:c}                           │cc{21:c}                          |
         dd^d                           │ddd                          |
         {1:~                             }│{1:~                            }|*2
-        {3:[No Name] [+]                  }{4:[No Name] [+]                }|
+        {3:[No Name] [+]                  }{2:[No Name] [+]                }|
                                                                     |
       ]])
       api.nvim_win_set_cursor(oldwin, { 2, 0 })
       screen:expect([[
-        aa{2:a}                           │{2:a}aa                          |
-        bb{2:b}                           │bbb                          |
-        cc{2:c}                           │{2:c}cc                          |
-        dd^d                           │{2:d}dd                          |
+        aa{21:a}                           │{21:a}aa                          |
+        bb{21:b}                           │bbb                          |
+        cc{21:c}                           │{21:c}cc                          |
+        dd^d                           │{21:d}dd                          |
         {1:~                             }│{1:~                            }|*2
-        {3:[No Name] [+]                  }{4:[No Name] [+]                }|
+        {3:[No Name] [+]                  }{2:[No Name] [+]                }|
                                                                     |
       ]])
     end)
@@ -849,22 +857,6 @@ describe('API/win', function()
     it('with two diff windows', function()
       local X = api.nvim_get_vvar('maxcol')
       local screen = Screen.new(45, 22)
-      screen:set_default_attr_ids({
-        [0] = { foreground = Screen.colors.Blue1, bold = true },
-        [1] = { foreground = Screen.colors.Blue4, background = Screen.colors.Grey },
-        [2] = { foreground = Screen.colors.Brown },
-        [3] = {
-          foreground = Screen.colors.Blue1,
-          background = Screen.colors.LightCyan1,
-          bold = true,
-        },
-        [4] = { background = Screen.colors.LightBlue },
-        [5] = { foreground = Screen.colors.Blue4, background = Screen.colors.LightGrey },
-        [6] = { background = Screen.colors.Plum1 },
-        [7] = { background = Screen.colors.Red, bold = true },
-        [8] = { reverse = true },
-        [9] = { bold = true, reverse = true },
-      })
       screen:attach()
       exec([[
         set diffopt+=context:2 number
@@ -877,35 +869,35 @@ describe('API/win', function()
       feed('24gg')
       screen:expect {
         grid = [[
-        {1:  }{2:    }{3:----------------}│{1:  }{2:  1 }{4:00000001!       }|
-        {1:  }{2:    }{3:----------------}│{1:  }{2:  2 }{4:00000002!!      }|
-        {1:  }{2:  1 }00000003!!!     │{1:  }{2:  3 }00000003!!!     |
-        {1:  }{2:  2 }00000004!!!!    │{1:  }{2:  4 }00000004!!!!    |
-        {1:+ }{2:  3 }{5:+-- 14 lines: 00}│{1:+ }{2:  5 }{5:+-- 14 lines: 00}|
-        {1:  }{2: 17 }00000019!!!!!!!!│{1:  }{2: 19 }00000019!!!!!!!!|
-        {1:  }{2: 18 }00000020!!!!!!!!│{1:  }{2: 20 }00000020!!!!!!!!|
-        {1:  }{2:    }{3:----------------}│{1:  }{2: 21 }{4:00000025!!!!!!!!}|
-        {1:  }{2:    }{3:----------------}│{1:  }{2: 22 }{4:00000026!!!!!!!!}|
-        {1:  }{2:    }{3:----------------}│{1:  }{2: 23 }{4:00000027!!!!!!!!}|
-        {1:  }{2: 19 }00000028!!!!!!!!│{1:  }{2: 24 }^00000028!!!!!!!!|
-        {1:  }{2: 20 }00000029!!!!!!!!│{1:  }{2: 25 }00000029!!!!!!!!|
-        {1:+ }{2: 21 }{5:+-- 14 lines: 00}│{1:+ }{2: 26 }{5:+-- 14 lines: 00}|
-        {1:  }{2: 35 }00000044!!!!!!!!│{1:  }{2: 40 }00000044!!!!!!!!|
-        {1:  }{2: 36 }00000045!!!!!!!!│{1:  }{2: 41 }00000045!!!!!!!!|
-        {1:  }{2: 37 }{4:00000046!!!!!!!!}│{1:  }{2:    }{3:----------------}|
-        {1:  }{2: 38 }{4:00000047!!!!!!!!}│{1:  }{2:    }{3:----------------}|
-        {1:  }{2: 39 }{4:00000048!!!!!!!!}│{1:  }{2:    }{3:----------------}|
-        {1:  }{2: 40 }{4:00000049!!!!!!!!}│{1:  }{2:    }{3:----------------}|
-        {1:  }{2: 41 }{4:00000050!!!!!!!!}│{1:  }{2:    }{3:----------------}|
-        {8:[No Name] [+]          }{9:[No Name] [+]         }|
+        {7:  }{8:    }{23:----------------}│{7:  }{8:  1 }{22:00000001!       }|
+        {7:  }{8:    }{23:----------------}│{7:  }{8:  2 }{22:00000002!!      }|
+        {7:  }{8:  1 }00000003!!!     │{7:  }{8:  3 }00000003!!!     |
+        {7:  }{8:  2 }00000004!!!!    │{7:  }{8:  4 }00000004!!!!    |
+        {7:+ }{8:  3 }{13:+-- 14 lines: 00}│{7:+ }{8:  5 }{13:+-- 14 lines: 00}|
+        {7:  }{8: 17 }00000019!!!!!!!!│{7:  }{8: 19 }00000019!!!!!!!!|
+        {7:  }{8: 18 }00000020!!!!!!!!│{7:  }{8: 20 }00000020!!!!!!!!|
+        {7:  }{8:    }{23:----------------}│{7:  }{8: 21 }{22:00000025!!!!!!!!}|
+        {7:  }{8:    }{23:----------------}│{7:  }{8: 22 }{22:00000026!!!!!!!!}|
+        {7:  }{8:    }{23:----------------}│{7:  }{8: 23 }{22:00000027!!!!!!!!}|
+        {7:  }{8: 19 }00000028!!!!!!!!│{7:  }{8: 24 }^00000028!!!!!!!!|
+        {7:  }{8: 20 }00000029!!!!!!!!│{7:  }{8: 25 }00000029!!!!!!!!|
+        {7:+ }{8: 21 }{13:+-- 14 lines: 00}│{7:+ }{8: 26 }{13:+-- 14 lines: 00}|
+        {7:  }{8: 35 }00000044!!!!!!!!│{7:  }{8: 40 }00000044!!!!!!!!|
+        {7:  }{8: 36 }00000045!!!!!!!!│{7:  }{8: 41 }00000045!!!!!!!!|
+        {7:  }{8: 37 }{22:00000046!!!!!!!!}│{7:  }{8:    }{23:----------------}|
+        {7:  }{8: 38 }{22:00000047!!!!!!!!}│{7:  }{8:    }{23:----------------}|
+        {7:  }{8: 39 }{22:00000048!!!!!!!!}│{7:  }{8:    }{23:----------------}|
+        {7:  }{8: 40 }{22:00000049!!!!!!!!}│{7:  }{8:    }{23:----------------}|
+        {7:  }{8: 41 }{22:00000050!!!!!!!!}│{7:  }{8:    }{23:----------------}|
+        {2:[No Name] [+]          }{3:[No Name] [+]         }|
                                                      |
       ]],
       }
       screen:try_resize(45, 3)
       screen:expect {
         grid = [[
-        {1:  }{2: 19 }00000028!!!!!!!!│{1:  }{2: 24 }^00000028!!!!!!!!|
-        {8:[No Name] [+]          }{9:[No Name] [+]         }|
+        {7:  }{8: 19 }00000028!!!!!!!!│{7:  }{8: 24 }^00000028!!!!!!!!|
+        {2:[No Name] [+]          }{3:[No Name] [+]         }|
                                                      |
       ]],
       }
@@ -983,11 +975,6 @@ describe('API/win', function()
     it('with wrapped lines', function()
       local X = api.nvim_get_vvar('maxcol')
       local screen = Screen.new(45, 22)
-      screen:set_default_attr_ids({
-        [0] = { foreground = Screen.colors.Blue1, bold = true },
-        [1] = { foreground = Screen.colors.Brown },
-        [2] = { background = Screen.colors.Yellow },
-      })
       screen:attach()
       exec([[
         set number cpoptions+=n
@@ -1010,26 +997,26 @@ describe('API/win', function()
       )
       screen:expect {
         grid = [[
-        {1:  1 }^foobar-foobar-foobar-foobar-foobar-foobar|
+        {8:  1 }^foobar-foobar-foobar-foobar-foobar-foobar|
         -foobar-foobar-foobar-foobar-foobar-foobar-fo|
         obar-foobar-foobar-foobar-foobar-foobar-fooba|
         r-foobar-foobar-foobar-foobar-foobar-foobar-f|
         oobar-foobar-foobar-foobar-foobar-foobar-foob|
         ar-foobar-foobar-foobar-foobar-              |
-        {1:  2 }foobar-foobar-foobar-foobar-foobar-foobar|
+        {8:  2 }foobar-foobar-foobar-foobar-foobar-foobar|
         -foobar-foobar-foobar-foobar-foobar-foobar-fo|
-        obar-foobar-fo{2:???????????????}obar-foobar-foob|
+        obar-foobar-fo{10:???????????????}obar-foobar-foob|
         ar-foobar-foobar-foobar-foobar-foobar-foobar-|
         foobar-foobar-foobar-foobar-foobar-foobar-foo|
         bar-foobar-foobar-foobar-foobar-foobar-foobar|
         -                                            |
-        {1:  3 }foobar-foobar-foobar-foobar-foobar-foobar|
+        {8:  3 }foobar-foobar-foobar-foobar-foobar-foobar|
         -foobar-foobar-foobar-foobar-foobar-foobar-fo|
         obar-foobar-foobar-foobar-foobar-foobar-fooba|
         r-foobar-foobar-foobar-foobar-foobar-foobar-f|
-        oobar-foobar-foobar-foob{2:!!!!!!!!!!!!!!!!!!!!!}|
-        {2:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!}|
-        {2:!!!!!!!!!}ar-foobar-foobar-foobar-foobar-fooba|
+        oobar-foobar-foobar-foob{10:!!!!!!!!!!!!!!!!!!!!!}|
+        {10:!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!}|
+        {10:!!!!!!!!!}ar-foobar-foobar-foobar-foobar-fooba|
         r-foobar-foobar-                             |
                                                      |
       ]],
@@ -1037,7 +1024,7 @@ describe('API/win', function()
       screen:try_resize(45, 2)
       screen:expect {
         grid = [[
-        {1:  1 }^foobar-foobar-foobar-foobar-foobar-foobar|
+        {8:  1 }^foobar-foobar-foobar-foobar-foobar-foobar|
                                                      |
       ]],
       }
@@ -1162,27 +1149,6 @@ describe('API/win', function()
   end)
 
   describe('open_win', function()
-    it('noautocmd option works', function()
-      command('autocmd BufEnter,BufLeave,BufWinEnter * let g:fired = 1')
-      api.nvim_open_win(api.nvim_create_buf(true, true), true, {
-        relative = 'win',
-        row = 3,
-        col = 3,
-        width = 12,
-        height = 3,
-        noautocmd = true,
-      })
-      eq(0, fn.exists('g:fired'))
-      api.nvim_open_win(api.nvim_create_buf(true, true), true, {
-        relative = 'win',
-        row = 3,
-        col = 3,
-        width = 12,
-        height = 3,
-      })
-      eq(1, fn.exists('g:fired'))
-    end)
-
     it('disallowed in cmdwin if enter=true or buf=cmdwin_buf', function()
       local new_buf = api.nvim_create_buf(true, true)
       feed('q:')
@@ -1248,81 +1214,151 @@ describe('API/win', function()
       eq(wins_before, api.nvim_list_wins())
     end)
 
-    it('creates a split window', function()
-      local win = api.nvim_open_win(0, true, {
-        vertical = false,
-      })
-      eq('', api.nvim_win_get_config(win).relative)
-    end)
-
-    it('creates split windows in the correct direction', function()
-      local initial_win = api.nvim_get_current_win()
-      local win = api.nvim_open_win(0, true, {
-        vertical = true,
-      })
-      eq('', api.nvim_win_get_config(win).relative)
-
-      local layout = fn.winlayout()
-
-      eq({
-        'row',
-        {
-          { 'leaf', win },
-          { 'leaf', initial_win },
-        },
-      }, layout)
-    end)
-
-    it("respects the 'split' option", function()
-      local initial_win = api.nvim_get_current_win()
-      local win = api.nvim_open_win(0, true, {
-        split = 'below',
-      })
-      eq('', api.nvim_win_get_config(win).relative)
-
-      local layout = fn.winlayout()
-
-      eq({
-        'col',
-        {
-          { 'leaf', initial_win },
-          { 'leaf', win },
-        },
-      }, layout)
-    end)
-
-    it(
-      "doesn't change tp_curwin when splitting window in non-current tab with enter=false",
-      function()
-        local tab1 = api.nvim_get_current_tabpage()
-        local tab1_win = api.nvim_get_current_win()
-
-        helpers.command('tabnew')
-        local tab2 = api.nvim_get_current_tabpage()
-        local tab2_win = api.nvim_get_current_win()
-
-        eq({ tab1_win, tab2_win }, api.nvim_list_wins())
-        eq({ tab1, tab2 }, api.nvim_list_tabpages())
-
-        api.nvim_set_current_tabpage(tab1)
-        eq(tab1_win, api.nvim_get_current_win())
-
-        local tab2_prevwin = fn.tabpagewinnr(tab2, '#')
-
-        -- split in tab2 whine in tab2, with enter = false
-        local tab2_win2 = api.nvim_open_win(api.nvim_create_buf(false, true), false, {
-          win = tab2_win,
-          split = 'right',
+    describe('creates a split window above', function()
+      local function test_open_win_split_above(key, val)
+        local initial_win = api.nvim_get_current_win()
+        local win = api.nvim_open_win(0, true, {
+          [key] = val,
+          height = 10,
         })
-        eq(tab1_win, api.nvim_get_current_win()) -- we should still be in the first tp
-        eq(tab1_win, api.nvim_tabpage_get_win(tab1))
-
-        eq(tab2_win, api.nvim_tabpage_get_win(tab2)) -- tab2's tp_curwin should not have changed
-        eq(tab2_prevwin, fn.tabpagewinnr(tab2, '#')) -- tab2's tp_prevwin should not have changed
-        eq({ tab1_win, tab2_win, tab2_win2 }, api.nvim_list_wins())
-        eq({ tab2_win, tab2_win2 }, api.nvim_tabpage_list_wins(tab2))
+        eq('', api.nvim_win_get_config(win).relative)
+        eq(10, api.nvim_win_get_height(win))
+        local layout = fn.winlayout()
+        eq({
+          'col',
+          {
+            { 'leaf', win },
+            { 'leaf', initial_win },
+          },
+        }, layout)
       end
-    )
+
+      it("with split = 'above'", function()
+        test_open_win_split_above('split', 'above')
+      end)
+
+      it("with vertical = false and 'nosplitbelow'", function()
+        api.nvim_set_option_value('splitbelow', false, {})
+        test_open_win_split_above('vertical', false)
+      end)
+    end)
+
+    describe('creates a split window below', function()
+      local function test_open_win_split_below(key, val)
+        local initial_win = api.nvim_get_current_win()
+        local win = api.nvim_open_win(0, true, {
+          [key] = val,
+          height = 15,
+        })
+        eq('', api.nvim_win_get_config(win).relative)
+        eq(15, api.nvim_win_get_height(win))
+        local layout = fn.winlayout()
+        eq({
+          'col',
+          {
+            { 'leaf', initial_win },
+            { 'leaf', win },
+          },
+        }, layout)
+      end
+
+      it("with split = 'below'", function()
+        test_open_win_split_below('split', 'below')
+      end)
+
+      it("with vertical = false and 'splitbelow'", function()
+        api.nvim_set_option_value('splitbelow', true, {})
+        test_open_win_split_below('vertical', false)
+      end)
+    end)
+
+    describe('creates a split window to the left', function()
+      local function test_open_win_split_left(key, val)
+        local initial_win = api.nvim_get_current_win()
+        local win = api.nvim_open_win(0, true, {
+          [key] = val,
+          width = 25,
+        })
+        eq('', api.nvim_win_get_config(win).relative)
+        eq(25, api.nvim_win_get_width(win))
+        local layout = fn.winlayout()
+        eq({
+          'row',
+          {
+            { 'leaf', win },
+            { 'leaf', initial_win },
+          },
+        }, layout)
+      end
+
+      it("with split = 'left'", function()
+        test_open_win_split_left('split', 'left')
+      end)
+
+      it("with vertical = true and 'nosplitright'", function()
+        api.nvim_set_option_value('splitright', false, {})
+        test_open_win_split_left('vertical', true)
+      end)
+    end)
+
+    describe('creates a split window to the right', function()
+      local function test_open_win_split_right(key, val)
+        local initial_win = api.nvim_get_current_win()
+        local win = api.nvim_open_win(0, true, {
+          [key] = val,
+          width = 30,
+        })
+        eq('', api.nvim_win_get_config(win).relative)
+        eq(30, api.nvim_win_get_width(win))
+        local layout = fn.winlayout()
+        eq({
+          'row',
+          {
+            { 'leaf', initial_win },
+            { 'leaf', win },
+          },
+        }, layout)
+      end
+
+      it("with split = 'right'", function()
+        test_open_win_split_right('split', 'right')
+      end)
+
+      it("with vertical = true and 'splitright'", function()
+        api.nvim_set_option_value('splitright', true, {})
+        test_open_win_split_right('vertical', true)
+      end)
+    end)
+
+    it("doesn't change tp_curwin when splitting window in another tab with enter=false", function()
+      local tab1 = api.nvim_get_current_tabpage()
+      local tab1_win = api.nvim_get_current_win()
+
+      n.command('tabnew')
+      local tab2 = api.nvim_get_current_tabpage()
+      local tab2_win = api.nvim_get_current_win()
+
+      eq({ tab1_win, tab2_win }, api.nvim_list_wins())
+      eq({ tab1, tab2 }, api.nvim_list_tabpages())
+
+      api.nvim_set_current_tabpage(tab1)
+      eq(tab1_win, api.nvim_get_current_win())
+
+      local tab2_prevwin = fn.tabpagewinnr(tab2, '#')
+
+      -- split in tab2 whine in tab2, with enter = false
+      local tab2_win2 = api.nvim_open_win(api.nvim_create_buf(false, true), false, {
+        win = tab2_win,
+        split = 'right',
+      })
+      eq(tab1_win, api.nvim_get_current_win()) -- we should still be in the first tp
+      eq(tab1_win, api.nvim_tabpage_get_win(tab1))
+
+      eq(tab2_win, api.nvim_tabpage_get_win(tab2)) -- tab2's tp_curwin should not have changed
+      eq(tab2_prevwin, fn.tabpagewinnr(tab2, '#')) -- tab2's tp_prevwin should not have changed
+      eq({ tab1_win, tab2_win, tab2_win2 }, api.nvim_list_wins())
+      eq({ tab2_win, tab2_win2 }, api.nvim_tabpage_list_wins(tab2))
+    end)
 
     it('creates splits in the correct location', function()
       local first_win = api.nvim_get_current_win()
@@ -1380,6 +1416,40 @@ describe('API/win', function()
       }, layout)
     end)
 
+    it('opens floating windows in other tabpages', function()
+      local first_win = api.nvim_get_current_win()
+      local first_tab = api.nvim_get_current_tabpage()
+
+      command('tabnew')
+      local new_tab = api.nvim_get_current_tabpage()
+      local win = api.nvim_open_win(0, false, {
+        relative = 'win',
+        win = first_win,
+        width = 5,
+        height = 5,
+        row = 1,
+        col = 1,
+      })
+      eq(api.nvim_win_get_tabpage(win), first_tab)
+      eq(api.nvim_get_current_tabpage(), new_tab)
+    end)
+
+    it('switches to new windows in non-current tabpages when enter=true', function()
+      local first_win = api.nvim_get_current_win()
+      local first_tab = api.nvim_get_current_tabpage()
+      command('tabnew')
+      local win = api.nvim_open_win(0, true, {
+        relative = 'win',
+        win = first_win,
+        width = 5,
+        height = 5,
+        row = 1,
+        col = 1,
+      })
+      eq(api.nvim_win_get_tabpage(win), first_tab)
+      eq(api.nvim_get_current_tabpage(), first_tab)
+    end)
+
     local function setup_tabbed_autocmd_test()
       local info = {}
       info.orig_buf = api.nvim_get_current_buf()
@@ -1405,6 +1475,24 @@ describe('API/win', function()
       ]=])
       return info
     end
+
+    it('noautocmd option works', function()
+      local info = setup_tabbed_autocmd_test()
+
+      api.nvim_open_win(
+        info.other_buf,
+        true,
+        { split = 'left', win = info.tab2_curwin, noautocmd = true }
+      )
+      eq({}, eval('result'))
+
+      api.nvim_open_win(
+        info.orig_buf,
+        true,
+        { relative = 'editor', row = 0, col = 0, width = 10, height = 10, noautocmd = true }
+      )
+      eq({}, eval('result'))
+    end)
 
     it('fires expected autocmds when creating splits without entering', function()
       local info = setup_tabbed_autocmd_test()
@@ -1680,6 +1768,46 @@ describe('API/win', function()
         'E36: Not enough room$',
         pcall_err(api.nvim_open_win, 0, true, { split = 'below', win = 0 })
       )
+    end)
+
+    describe("with 'autochdir'", function()
+      local topdir
+      local otherbuf
+
+      before_each(function()
+        command('set shellslash')
+        topdir = fn.getcwd()
+        t.mkdir(topdir .. '/Xacd')
+        t.mkdir(topdir .. '/Xacd/foo')
+        otherbuf = api.nvim_create_buf(false, true)
+        api.nvim_buf_set_name(otherbuf, topdir .. '/Xacd/baz.txt')
+
+        command('set autochdir')
+        command('edit Xacd/foo/bar.txt')
+        eq(topdir .. '/Xacd/foo', fn.getcwd())
+      end)
+
+      after_each(function()
+        n.rmdir(topdir .. '/Xacd')
+      end)
+
+      it('does not change cwd with enter=false #15280', function()
+        api.nvim_open_win(
+          otherbuf,
+          false,
+          { relative = 'editor', height = 5, width = 5, row = 5, col = 5 }
+        )
+        eq(topdir .. '/Xacd/foo', fn.getcwd())
+      end)
+
+      it('changes cwd with enter=true', function()
+        api.nvim_open_win(
+          otherbuf,
+          true,
+          { relative = 'editor', height = 5, width = 5, row = 5, col = 5 }
+        )
+        eq(topdir .. '/Xacd', fn.getcwd())
+      end)
     end)
   end)
 
@@ -2397,10 +2525,6 @@ describe('API/win', function()
 
     it('updates statusline when moving bottom split', function()
       local screen = Screen.new(10, 10)
-      screen:set_default_attr_ids({
-        [0] = { bold = true, foreground = Screen.colors.Blue }, -- NonText
-        [1] = { bold = true, reverse = true }, -- StatusLine
-      })
       screen:attach()
       exec([[
         set laststatus=0
@@ -2409,10 +2533,10 @@ describe('API/win', function()
       ]])
       screen:expect([[
         ^            |
-        {0:~           }|*3
-        {1:[No Name]   }|
+        {1:~           }|*3
+        {3:[No Name]   }|
                     |
-        {0:~           }|*3
+        {1:~           }|*3
                     |
       ]])
     end)

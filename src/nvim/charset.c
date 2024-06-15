@@ -1051,7 +1051,7 @@ char *skiptowhite(const char *p)
 ///
 /// @return Pointer to the next whitespace character.
 char *skiptowhite_esc(const char *p)
-  FUNC_ATTR_PURE
+  FUNC_ATTR_NONNULL_ALL FUNC_ATTR_PURE
 {
   while (*p != ' ' && *p != '\t' && *p != NUL) {
     if (((*p == '\\') || (*p == Ctrl_V)) && (*(p + 1) != NUL)) {
@@ -1470,7 +1470,7 @@ start:
         *dst++ = *p++;
       }
     }
-    *dst = '\0';
+    *dst = NUL;
   }
 }
 
@@ -1492,6 +1492,6 @@ char *backslash_halve_save(const char *p)
       *dst++ = *p++;
     }
   }
-  *dst = '\0';
+  *dst = NUL;
   return res;
 }

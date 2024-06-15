@@ -1,26 +1,28 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear, feed = helpers.clear, helpers.feed
-local eval = helpers.eval
-local eq = helpers.eq
-local neq = helpers.neq
-local command = helpers.command
-local set_method_error = helpers.set_method_error
-local api = helpers.api
-local async_meths = helpers.async_meths
-local test_build_dir = helpers.paths.test_build_dir
-local nvim_prog = helpers.nvim_prog
-local testprg = helpers.testprg
-local exec = helpers.exec
-local exec_capture = helpers.exec_capture
-local exc_exec = helpers.exc_exec
-local exec_lua = helpers.exec_lua
-local poke_eventloop = helpers.poke_eventloop
-local assert_alive = helpers.assert_alive
-local retry = helpers.retry
-local is_os = helpers.is_os
-local fn = helpers.fn
-local skip = helpers.skip
+
+local clear, feed = n.clear, n.feed
+local eval = n.eval
+local eq = t.eq
+local neq = t.neq
+local command = n.command
+local set_method_error = n.set_method_error
+local api = n.api
+local async_meths = n.async_meths
+local test_build_dir = t.paths.test_build_dir
+local nvim_prog = n.nvim_prog
+local testprg = n.testprg
+local exec = n.exec
+local exec_capture = n.exec_capture
+local exc_exec = n.exc_exec
+local exec_lua = n.exec_lua
+local poke_eventloop = n.poke_eventloop
+local assert_alive = n.assert_alive
+local retry = t.retry
+local is_os = t.is_os
+local fn = n.fn
+local skip = t.skip
 
 describe('ui/ext_messages', function()
   local screen
@@ -685,7 +687,18 @@ describe('ui/ext_messages', function()
     ]],
       ruler = { { '2,1     All' } },
     }
-    feed('d')
+    feed('<c-v>k2l')
+    screen:expect({
+      grid = [[
+        {17:ab}^cde                    |
+        {17:123}45                    |
+        {1:~                        }|*3
+      ]],
+      showmode = { { '-- VISUAL BLOCK --', 5 } },
+      showcmd = { { '2x3' } },
+      ruler = { { '1,3     All' } },
+    })
+    feed('o<esc>d')
     screen:expect {
       grid = [[
       abcde                    |
@@ -1067,6 +1080,22 @@ stack traceback:
         { content = { { string.format('"%s" [New] 0L, 0B written', fname) } }, kind = '' },
       },
     })
+  end)
+
+  it('does not do showmode unnecessarily #29086', function()
+    local screen_showmode = screen._handle_msg_showmode
+    local showmode = 0
+    screen._handle_msg_showmode = function(...)
+      screen_showmode(...)
+      showmode = showmode + 1
+    end
+    screen:expect({
+      grid = [[
+        ^                         |
+        {1:~                        }|*4
+      ]],
+    })
+    eq(showmode, 1)
   end)
 end)
 
@@ -1535,6 +1564,35 @@ vimComment     xxx match /\s"[^\-:.%#=*].*$/ms=s+1,lc=1  excludenl contains=@vim
       {3:[No Name]                                                   }|
                                                                   |*4
     ]])
+  end)
+
+  it('supports :intro with cmdheight=0 #26505', function()
+    screen:try_resize(80, 24)
+    command('set cmdheight=0')
+    feed(':intro<CR>')
+    screen:expect([[
+                                                                                      |*5
+      {MATCH:.*}|
+                                                                                      |
+                        Nvim is open source and freely distributable                  |
+                                  https://neovim.io/#chat                             |
+                                                                                      |
+                       type  :help nvim{18:<Enter>}       if you are new!                  |
+                       type  :checkhealth{18:<Enter>}     to optimize Nvim                 |
+                       type  :q{18:<Enter>}               to exit                          |
+                       type  :help{18:<Enter>}            for help                         |
+                                                                                      |
+      {MATCH: +}type  :help news{18:<Enter>} to see changes in v{MATCH:%d+%.%d+ +}|
+                                                                                      |
+                               Help poor children in Uganda!                          |
+                       type  :help iccf{18:<Enter>}       for information                  |
+                                                                                      |*2
+      {3:                                                                                }|
+                                                                                      |
+      {6:Press ENTER or type command to continue}^                                         |
+    ]])
+    feed('<CR>')
+    assert_alive()
   end)
 end)
 
@@ -2683,13 +2741,13 @@ end)
 it('pager works in headless mode with UI attached', function()
   skip(is_os('win'))
   clear()
-  local child_server = assert(helpers.new_pipename())
+  local child_server = assert(n.new_pipename())
   fn.jobstart({ nvim_prog, '--clean', '--headless', '--listen', child_server })
   retry(nil, nil, function()
     neq(nil, vim.uv.fs_stat(child_server))
   end)
 
-  local child_session = helpers.connect(child_server)
+  local child_session = n.connect(child_server)
   local child_screen = Screen.new(40, 6)
   child_screen:attach(nil, child_session)
   child_screen._default_attr_ids = nil -- TODO: unskip with new color scheme

@@ -1,14 +1,16 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local feed = helpers.feed
-local source = helpers.source
-local clear = helpers.clear
-local command = helpers.command
-local expect = helpers.expect
-local poke_eventloop = helpers.poke_eventloop
-local api = helpers.api
-local eq = helpers.eq
-local neq = helpers.neq
+
+local feed = n.feed
+local source = n.source
+local clear = n.clear
+local command = n.command
+local expect = n.expect
+local poke_eventloop = n.poke_eventloop
+local api = n.api
+local eq = t.eq
+local neq = t.neq
 
 describe('prompt buffer', function()
   local screen

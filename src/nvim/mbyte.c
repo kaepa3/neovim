@@ -43,6 +43,7 @@
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
+#include "nvim/errors.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
 #include "nvim/getchar.h"
@@ -59,6 +60,7 @@
 #include "nvim/memline.h"
 #include "nvim/memory.h"
 #include "nvim/message.h"
+#include "nvim/move.h"
 #include "nvim/option_vars.h"
 #include "nvim/optionstr.h"
 #include "nvim/os/os.h"
@@ -1544,7 +1546,7 @@ int utf16_to_utf8(const wchar_t *utf16, int utf16len, char **utf8)
     return uv_translate_sys_error(GetLastError());
   }
 
-  (*utf8)[bufsize] = '\0';
+  (*utf8)[bufsize] = NUL;
   return 0;
 }
 
@@ -2878,6 +2880,7 @@ void f_setcellwidths(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   xfree(cw_table_save);
+  changed_window_setting_all();
   redraw_all_later(UPD_NOT_VALID);
 }
 

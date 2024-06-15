@@ -1,38 +1,39 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
-local assert_alive = helpers.assert_alive
-local assert_log = helpers.assert_log
-local clear = helpers.clear
-local command = helpers.command
-local ok = helpers.ok
-local eq = helpers.eq
-local matches = helpers.matches
-local eval = helpers.eval
-local exec = helpers.exec
-local exec_capture = helpers.exec_capture
-local exec_lua = helpers.exec_lua
-local feed = helpers.feed
-local fn = helpers.fn
+local assert_alive = n.assert_alive
+local assert_log = t.assert_log
+local clear = n.clear
+local command = n.command
+local ok = t.ok
+local eq = t.eq
+local matches = t.matches
+local eval = n.eval
+local exec = n.exec
+local exec_capture = n.exec_capture
+local exec_lua = n.exec_lua
+local feed = n.feed
+local fn = n.fn
 local pesc = vim.pesc
-local mkdir = helpers.mkdir
-local mkdir_p = helpers.mkdir_p
-local nvim_prog = helpers.nvim_prog
-local nvim_set = helpers.nvim_set
-local read_file = helpers.read_file
-local retry = helpers.retry
-local rmdir = helpers.rmdir
+local mkdir = t.mkdir
+local mkdir_p = n.mkdir_p
+local nvim_prog = n.nvim_prog
+local nvim_set = n.nvim_set
+local read_file = t.read_file
+local retry = t.retry
+local rmdir = n.rmdir
 local sleep = vim.uv.sleep
 local startswith = vim.startswith
-local write_file = helpers.write_file
-local api = helpers.api
-local alter_slashes = helpers.alter_slashes
-local is_os = helpers.is_os
-local dedent = helpers.dedent
+local write_file = t.write_file
+local api = n.api
+local alter_slashes = n.alter_slashes
+local is_os = t.is_os
+local dedent = t.dedent
 local tbl_map = vim.tbl_map
 local tbl_filter = vim.tbl_filter
 local endswith = vim.endswith
-local check_close = helpers.check_close
+local check_close = n.check_close
 
 local testlog = 'Xtest-startupspec-log'
 
@@ -399,9 +400,6 @@ describe('startup', function()
         read_file('Xtest_startup_ttyout')
       )
     end)
-    if is_os('win') then
-      assert_log('stream write failed. RPC canceled; closing channel', testlog)
-    end
   end)
 
   it('input from pipe: has("ttyin")==0 has("ttyout")==1', function()
@@ -434,9 +432,6 @@ describe('startup', function()
         read_file('Xtest_startup_ttyout')
       )
     end)
-    if is_os('win') then
-      assert_log('stream write failed. RPC canceled; closing channel', testlog)
-    end
   end)
 
   it('input from pipe (implicit) #7679', function()
@@ -467,7 +462,7 @@ describe('startup', function()
                                |
     ]])
     if not is_os('win') then
-      assert_log('Failed to get flags on descriptor 3: Bad file descriptor', testlog)
+      assert_log('Failed to get flags on descriptor 3: Bad file descriptor', testlog, 100)
     end
   end)
 
@@ -994,7 +989,7 @@ describe('sysinit', function()
   local xdgdir = 'Xxdg'
   local vimdir = 'Xvim'
   local xhome = 'Xhome'
-  local pathsep = helpers.get_pathsep()
+  local pathsep = n.get_pathsep()
 
   before_each(function()
     rmdir(xdgdir)
@@ -1055,7 +1050,7 @@ end)
 
 describe('user config init', function()
   local xhome = 'Xhome'
-  local pathsep = helpers.get_pathsep()
+  local pathsep = n.get_pathsep()
   local xconfig = xhome .. pathsep .. 'Xconfig'
   local xdata = xhome .. pathsep .. 'Xdata'
   local init_lua_path = table.concat({ xconfig, 'nvim', 'init.lua' }, pathsep)
@@ -1218,7 +1213,7 @@ end)
 
 describe('runtime:', function()
   local xhome = 'Xhome'
-  local pathsep = helpers.get_pathsep()
+  local pathsep = n.get_pathsep()
   local xconfig = xhome .. pathsep .. 'Xconfig'
   local xdata = xhome .. pathsep .. 'Xdata'
   local xenv = { XDG_CONFIG_HOME = xconfig, XDG_DATA_HOME = xdata }
@@ -1360,7 +1355,7 @@ end)
 
 describe('user session', function()
   local xhome = 'Xhome'
-  local pathsep = helpers.get_pathsep()
+  local pathsep = n.get_pathsep()
   local session_file = table.concat({ xhome, 'session.lua' }, pathsep)
 
   before_each(function()

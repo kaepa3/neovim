@@ -1,9 +1,10 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
-local feed = helpers.feed
-local clear = helpers.clear
-local write_file = helpers.write_file
+local feed = n.feed
+local clear = n.clear
+local write_file = t.write_file
 
 describe('Diff mode screen with 3 diffs open', function()
   local fname = 'Xtest-functional-diff-screen-1'
@@ -1094,10 +1095,10 @@ describe('regressions', function()
     screen = Screen.new(100, 20)
     screen:attach()
     -- line must be greater than MATCH_CHAR_MAX_LEN
-    helpers.api.nvim_buf_set_lines(0, 0, -1, false, { string.rep('a', 1000) .. 'hello' })
-    helpers.exec 'vnew'
-    helpers.api.nvim_buf_set_lines(0, 0, -1, false, { string.rep('a', 1010) .. 'world' })
-    helpers.exec 'windo diffthis'
+    n.api.nvim_buf_set_lines(0, 0, -1, false, { string.rep('a', 1000) .. 'hello' })
+    n.exec 'vnew'
+    n.api.nvim_buf_set_lines(0, 0, -1, false, { string.rep('a', 1010) .. 'world' })
+    n.exec 'windo diffthis'
   end)
 
   it('properly computes filler lines for hunks bigger than linematch limit', function()
@@ -1109,10 +1110,10 @@ describe('regressions', function()
     for i = 0, 29 do
       lines[#lines + 1] = tostring(i)
     end
-    helpers.api.nvim_buf_set_lines(0, 0, -1, false, lines)
-    helpers.exec 'vnew'
-    helpers.api.nvim_buf_set_lines(0, 0, -1, false, { '00', '29' })
-    helpers.exec 'windo diffthis'
+    n.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+    n.exec 'vnew'
+    n.api.nvim_buf_set_lines(0, 0, -1, false, { '00', '29' })
+    n.exec 'windo diffthis'
     feed('<C-e>')
     screen:expect {
       grid = [[

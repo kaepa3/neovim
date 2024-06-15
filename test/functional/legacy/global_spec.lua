@@ -1,9 +1,10 @@
-local helpers = require('test.functional.helpers')(after_each)
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear = helpers.clear
-local exec = helpers.exec
-local feed = helpers.feed
-local poke_eventloop = helpers.poke_eventloop
+
+local clear = n.clear
+local exec = n.exec
+local feed = n.feed
+local poke_eventloop = n.poke_eventloop
 
 before_each(clear)
 

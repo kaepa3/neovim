@@ -1,7 +1,8 @@
-local helpers = require('test.functional.helpers')(after_each)
-local eq = helpers.eq
-local matches = helpers.matches
-local pcall_err = helpers.pcall_err
+local t = require('test.testutil')
+
+local eq = t.eq
+local matches = t.matches
+local pcall_err = t.pcall_err
 
 describe('vim.iter', function()
   it('new() on iterable class instance', function()
@@ -18,12 +19,12 @@ describe('vim.iter', function()
       return v % 2 ~= 0
     end
 
-    local t = { 1, 2, 3, 4, 5 }
-    eq({ 1, 3, 5 }, vim.iter(t):filter(odd):totable())
+    local q = { 1, 2, 3, 4, 5 }
+    eq({ 1, 3, 5 }, vim.iter(q):filter(odd):totable())
     eq(
       { 2, 4 },
       vim
-        .iter(t)
+        .iter(q)
         :filter(function(v)
           return not odd(v)
         end)
@@ -32,7 +33,7 @@ describe('vim.iter', function()
     eq(
       {},
       vim
-        .iter(t)
+        .iter(q)
         :filter(function(v)
           return v > 5
         end)
@@ -40,7 +41,7 @@ describe('vim.iter', function()
     )
 
     do
-      local it = vim.iter(ipairs(t))
+      local it = vim.iter(ipairs(q))
       it:filter(function(i, v)
         return i > 1 and v < 5
       end)
@@ -60,11 +61,11 @@ describe('vim.iter', function()
   end)
 
   it('map()', function()
-    local t = { 1, 2, 3, 4, 5 }
+    local q = { 1, 2, 3, 4, 5 }
     eq(
       { 2, 4, 6, 8, 10 },
       vim
-        .iter(t)
+        .iter(q)
         :map(function(v)
           return 2 * v
         end)
@@ -96,10 +97,10 @@ describe('vim.iter', function()
   end)
 
   it('for loops', function()
-    local t = { 1, 2, 3, 4, 5 }
+    local q = { 1, 2, 3, 4, 5 }
     local acc = 0
     for v in
-      vim.iter(t):map(function(v)
+      vim.iter(q):map(function(v)
         return v * 3
       end)
     do
@@ -115,6 +116,9 @@ describe('vim.iter', function()
       end)
       eq({ { 1, 1 }, { 2, 4 }, { 3, 9 } }, it:totable())
     end
+
+    -- Holes in array-like tables are removed
+    eq({ 1, 2, 3 }, vim.iter({ 1, nil, 2, nil, 3 }):totable())
 
     do
       local it = vim.iter(string.gmatch('1,4,lol,17,blah,2,9,3', '%d+')):map(tonumber)
@@ -141,18 +145,18 @@ describe('vim.iter', function()
     eq({ 3, 2, 1 }, vim.iter({ 1, 2, 3 }):rev():totable())
 
     local it = vim.iter(string.gmatch('abc', '%w'))
-    matches('rev%(%) requires a list%-like table', pcall_err(it.rev, it))
+    matches('rev%(%) requires an array%-like table', pcall_err(it.rev, it))
   end)
 
   it('skip()', function()
     do
-      local t = { 4, 3, 2, 1 }
-      eq(t, vim.iter(t):skip(0):totable())
-      eq({ 3, 2, 1 }, vim.iter(t):skip(1):totable())
-      eq({ 2, 1 }, vim.iter(t):skip(2):totable())
-      eq({ 1 }, vim.iter(t):skip(#t - 1):totable())
-      eq({}, vim.iter(t):skip(#t):totable())
-      eq({}, vim.iter(t):skip(#t + 1):totable())
+      local q = { 4, 3, 2, 1 }
+      eq(q, vim.iter(q):skip(0):totable())
+      eq({ 3, 2, 1 }, vim.iter(q):skip(1):totable())
+      eq({ 2, 1 }, vim.iter(q):skip(2):totable())
+      eq({ 1 }, vim.iter(q):skip(#q - 1):totable())
+      eq({}, vim.iter(q):skip(#q):totable())
+      eq({}, vim.iter(q):skip(#q + 1):totable())
     end
 
     do
@@ -168,44 +172,44 @@ describe('vim.iter', function()
     end
   end)
 
-  it('skipback()', function()
+  it('rskip()', function()
     do
-      local t = { 4, 3, 2, 1 }
-      eq(t, vim.iter(t):skipback(0):totable())
-      eq({ 4, 3, 2 }, vim.iter(t):skipback(1):totable())
-      eq({ 4, 3 }, vim.iter(t):skipback(2):totable())
-      eq({ 4 }, vim.iter(t):skipback(#t - 1):totable())
-      eq({}, vim.iter(t):skipback(#t):totable())
-      eq({}, vim.iter(t):skipback(#t + 1):totable())
+      local q = { 4, 3, 2, 1 }
+      eq(q, vim.iter(q):rskip(0):totable())
+      eq({ 4, 3, 2 }, vim.iter(q):rskip(1):totable())
+      eq({ 4, 3 }, vim.iter(q):rskip(2):totable())
+      eq({ 4 }, vim.iter(q):rskip(#q - 1):totable())
+      eq({}, vim.iter(q):rskip(#q):totable())
+      eq({}, vim.iter(q):rskip(#q + 1):totable())
     end
 
     local it = vim.iter(vim.gsplit('a|b|c|d', '|'))
-    matches('skipback%(%) requires a list%-like table', pcall_err(it.skipback, it, 0))
+    matches('rskip%(%) requires an array%-like table', pcall_err(it.rskip, it, 0))
   end)
 
   it('slice()', function()
-    local t = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }
-    eq({ 3, 4, 5, 6, 7 }, vim.iter(t):slice(3, 7):totable())
-    eq({}, vim.iter(t):slice(6, 5):totable())
-    eq({}, vim.iter(t):slice(0, 0):totable())
-    eq({ 1 }, vim.iter(t):slice(1, 1):totable())
-    eq({ 1, 2 }, vim.iter(t):slice(1, 2):totable())
-    eq({ 10 }, vim.iter(t):slice(10, 10):totable())
-    eq({ 8, 9, 10 }, vim.iter(t):slice(8, 11):totable())
+    local q = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }
+    eq({ 3, 4, 5, 6, 7 }, vim.iter(q):slice(3, 7):totable())
+    eq({}, vim.iter(q):slice(6, 5):totable())
+    eq({}, vim.iter(q):slice(0, 0):totable())
+    eq({ 1 }, vim.iter(q):slice(1, 1):totable())
+    eq({ 1, 2 }, vim.iter(q):slice(1, 2):totable())
+    eq({ 10 }, vim.iter(q):slice(10, 10):totable())
+    eq({ 8, 9, 10 }, vim.iter(q):slice(8, 11):totable())
 
     local it = vim.iter(vim.gsplit('a|b|c|d', '|'))
-    matches('slice%(%) requires a list%-like table', pcall_err(it.slice, it, 1, 3))
+    matches('slice%(%) requires an array%-like table', pcall_err(it.slice, it, 1, 3))
   end)
 
   it('nth()', function()
     do
-      local t = { 4, 3, 2, 1 }
-      eq(nil, vim.iter(t):nth(0))
-      eq(4, vim.iter(t):nth(1))
-      eq(3, vim.iter(t):nth(2))
-      eq(2, vim.iter(t):nth(3))
-      eq(1, vim.iter(t):nth(4))
-      eq(nil, vim.iter(t):nth(5))
+      local q = { 4, 3, 2, 1 }
+      eq(nil, vim.iter(q):nth(0))
+      eq(4, vim.iter(q):nth(1))
+      eq(3, vim.iter(q):nth(2))
+      eq(2, vim.iter(q):nth(3))
+      eq(1, vim.iter(q):nth(4))
+      eq(nil, vim.iter(q):nth(5))
     end
 
     do
@@ -221,41 +225,41 @@ describe('vim.iter', function()
     end
   end)
 
-  it('nthback()', function()
+  it('nth(-x) advances in reverse order starting from end', function()
     do
-      local t = { 4, 3, 2, 1 }
-      eq(nil, vim.iter(t):nthback(0))
-      eq(1, vim.iter(t):nthback(1))
-      eq(2, vim.iter(t):nthback(2))
-      eq(3, vim.iter(t):nthback(3))
-      eq(4, vim.iter(t):nthback(4))
-      eq(nil, vim.iter(t):nthback(5))
+      local q = { 4, 3, 2, 1 }
+      eq(nil, vim.iter(q):nth(0))
+      eq(1, vim.iter(q):nth(-1))
+      eq(2, vim.iter(q):nth(-2))
+      eq(3, vim.iter(q):nth(-3))
+      eq(4, vim.iter(q):nth(-4))
+      eq(nil, vim.iter(q):nth(-5))
     end
 
     local it = vim.iter(vim.gsplit('a|b|c|d', '|'))
-    matches('skipback%(%) requires a list%-like table', pcall_err(it.nthback, it, 1))
+    matches('rskip%(%) requires an array%-like table', pcall_err(it.nth, it, -1))
   end)
 
   it('take()', function()
     do
-      local t = { 4, 3, 2, 1 }
-      eq({}, vim.iter(t):take(0):totable())
-      eq({ 4 }, vim.iter(t):take(1):totable())
-      eq({ 4, 3 }, vim.iter(t):take(2):totable())
-      eq({ 4, 3, 2 }, vim.iter(t):take(3):totable())
-      eq({ 4, 3, 2, 1 }, vim.iter(t):take(4):totable())
-      eq({ 4, 3, 2, 1 }, vim.iter(t):take(5):totable())
+      local q = { 4, 3, 2, 1 }
+      eq({}, vim.iter(q):take(0):totable())
+      eq({ 4 }, vim.iter(q):take(1):totable())
+      eq({ 4, 3 }, vim.iter(q):take(2):totable())
+      eq({ 4, 3, 2 }, vim.iter(q):take(3):totable())
+      eq({ 4, 3, 2, 1 }, vim.iter(q):take(4):totable())
+      eq({ 4, 3, 2, 1 }, vim.iter(q):take(5):totable())
     end
 
     do
-      local t = { 4, 3, 2, 1 }
-      eq({ 1, 2, 3 }, vim.iter(t):rev():take(3):totable())
-      eq({ 2, 3, 4 }, vim.iter(t):take(3):rev():totable())
+      local q = { 4, 3, 2, 1 }
+      eq({ 1, 2, 3 }, vim.iter(q):rev():take(3):totable())
+      eq({ 2, 3, 4 }, vim.iter(q):take(3):rev():totable())
     end
 
     do
-      local t = { 4, 3, 2, 1 }
-      local it = vim.iter(t)
+      local q = { 4, 3, 2, 1 }
+      local it = vim.iter(q)
       eq({ 4, 3 }, it:take(2):totable())
       -- tail is already set from the previous take()
       eq({ 4, 3 }, it:take(3):totable())
@@ -275,13 +279,13 @@ describe('vim.iter', function()
     end
 
     do
-      local t = { 4, 8, 9, 10 }
-      eq(true, vim.iter(t):any(odd))
+      local q = { 4, 8, 9, 10 }
+      eq(true, vim.iter(q):any(odd))
     end
 
     do
-      local t = { 4, 8, 10 }
-      eq(false, vim.iter(t):any(odd))
+      local q = { 4, 8, 10 }
+      eq(false, vim.iter(q):any(odd))
     end
 
     do
@@ -306,13 +310,13 @@ describe('vim.iter', function()
     end
 
     do
-      local t = { 3, 5, 7, 9 }
-      eq(true, vim.iter(t):all(odd))
+      local q = { 3, 5, 7, 9 }
+      eq(true, vim.iter(q):all(odd))
     end
 
     do
-      local t = { 3, 5, 7, 10 }
-      eq(false, vim.iter(t):all(odd))
+      local q = { 3, 5, 7, 10 }
+      eq(false, vim.iter(q):all(odd))
     end
 
     do
@@ -355,23 +359,23 @@ describe('vim.iter', function()
 
     do
       local it = vim.iter(vim.gsplit('hi', ''))
-      matches('peek%(%) requires a list%-like table', pcall_err(it.peek, it))
+      matches('peek%(%) requires an array%-like table', pcall_err(it.peek, it))
     end
   end)
 
   it('find()', function()
-    local t = { 3, 6, 9, 12 }
-    eq(12, vim.iter(t):find(12))
-    eq(nil, vim.iter(t):find(15))
+    local q = { 3, 6, 9, 12 }
+    eq(12, vim.iter(q):find(12))
+    eq(nil, vim.iter(q):find(15))
     eq(
       12,
-      vim.iter(t):find(function(v)
+      vim.iter(q):find(function(v)
         return v % 4 == 0
       end)
     )
 
     do
-      local it = vim.iter(t)
+      local it = vim.iter(q)
       local pred = function(v)
         return v % 3 == 0
       end
@@ -395,16 +399,16 @@ describe('vim.iter', function()
   end)
 
   it('rfind()', function()
-    local t = { 1, 2, 3, 2, 1 }
+    local q = { 1, 2, 3, 2, 1 }
     do
-      local it = vim.iter(t)
+      local it = vim.iter(q)
       eq(1, it:rfind(1))
       eq(1, it:rfind(1))
       eq(nil, it:rfind(1))
     end
 
     do
-      local it = vim.iter(t):enumerate()
+      local it = vim.iter(q):enumerate()
       local pred = function(i)
         return i % 2 ~= 0
       end
@@ -416,52 +420,52 @@ describe('vim.iter', function()
 
     do
       local it = vim.iter(vim.gsplit('AbCdE', ''))
-      matches('rfind%(%) requires a list%-like table', pcall_err(it.rfind, it, 'E'))
+      matches('rfind%(%) requires an array%-like table', pcall_err(it.rfind, it, 'E'))
     end
   end)
 
-  it('nextback()', function()
+  it('pop()', function()
     do
       local it = vim.iter({ 1, 2, 3, 4 })
-      eq(4, it:nextback())
-      eq(3, it:nextback())
-      eq(2, it:nextback())
-      eq(1, it:nextback())
-      eq(nil, it:nextback())
-      eq(nil, it:nextback())
+      eq(4, it:pop())
+      eq(3, it:pop())
+      eq(2, it:pop())
+      eq(1, it:pop())
+      eq(nil, it:pop())
+      eq(nil, it:pop())
     end
 
     do
       local it = vim.iter(vim.gsplit('hi', ''))
-      matches('nextback%(%) requires a list%-like table', pcall_err(it.nextback, it))
+      matches('pop%(%) requires an array%-like table', pcall_err(it.pop, it))
     end
   end)
 
-  it('peekback()', function()
+  it('rpeek()', function()
     do
       local it = vim.iter({ 1, 2, 3, 4 })
-      eq(4, it:peekback())
-      eq(4, it:peekback())
-      eq(4, it:nextback())
+      eq(4, it:rpeek())
+      eq(4, it:rpeek())
+      eq(4, it:pop())
     end
 
     do
       local it = vim.iter(vim.gsplit('hi', ''))
-      matches('peekback%(%) requires a list%-like table', pcall_err(it.peekback, it))
+      matches('rpeek%(%) requires an array%-like table', pcall_err(it.rpeek, it))
     end
   end)
 
   it('fold()', function()
-    local t = { 1, 2, 3, 4, 5 }
+    local q = { 1, 2, 3, 4, 5 }
     eq(
       115,
-      vim.iter(t):fold(100, function(acc, v)
+      vim.iter(q):fold(100, function(acc, v)
         return acc + v
       end)
     )
     eq(
       { 5, 4, 3, 2, 1 },
-      vim.iter(t):fold({}, function(acc, v)
+      vim.iter(q):fold({}, function(acc, v)
         table.insert(acc, 1, v)
         return acc
       end)
@@ -469,30 +473,32 @@ describe('vim.iter', function()
   end)
 
   it('flatten()', function()
-    local t = { { 1, { 2 } }, { { { { 3 } } }, { 4 } }, { 5 } }
+    local q = { { 1, { 2 } }, { { { { 3 } } }, { 4 } }, { 5 } }
 
-    eq(t, vim.iter(t):flatten(-1):totable())
-    eq(t, vim.iter(t):flatten(0):totable())
-    eq({ 1, { 2 }, { { { 3 } } }, { 4 }, 5 }, vim.iter(t):flatten():totable())
-    eq({ 1, 2, { { 3 } }, 4, 5 }, vim.iter(t):flatten(2):totable())
-    eq({ 1, 2, { 3 }, 4, 5 }, vim.iter(t):flatten(3):totable())
-    eq({ 1, 2, 3, 4, 5 }, vim.iter(t):flatten(4):totable())
+    eq(q, vim.iter(q):flatten(-1):totable())
+    eq(q, vim.iter(q):flatten(0):totable())
+    eq({ 1, { 2 }, { { { 3 } } }, { 4 }, 5 }, vim.iter(q):flatten():totable())
+    eq({ 1, 2, { { 3 } }, 4, 5 }, vim.iter(q):flatten(2):totable())
+    eq({ 1, 2, { 3 }, 4, 5 }, vim.iter(q):flatten(3):totable())
+    eq({ 1, 2, 3, 4, 5 }, vim.iter(q):flatten(4):totable())
 
     local m = { a = 1, b = { 2, 3 }, d = { 4 } }
     local it = vim.iter(m)
 
-    local flat_err = 'flatten%(%) requires a list%-like table'
+    local flat_err = 'flatten%(%) requires an array%-like table'
     matches(flat_err, pcall_err(it.flatten, it))
 
     -- cases from the documentation
     local simple_example = { 1, { 2 }, { { 3 } } }
     eq({ 1, 2, { 3 } }, vim.iter(simple_example):flatten():totable())
 
-    local not_list_like = vim.iter({ [2] = 2 })
-    matches(flat_err, pcall_err(not_list_like.flatten, not_list_like))
+    local not_list_like = { [2] = 2 }
+    eq({ 2 }, vim.iter(not_list_like):flatten():totable())
 
-    local also_not_list_like = vim.iter({ nil, 2 })
-    matches(flat_err, pcall_err(not_list_like.flatten, also_not_list_like))
+    local also_not_list_like = { nil, 2 }
+    eq({ 2 }, vim.iter(also_not_list_like):flatten():totable())
+
+    eq({ 1, 2, 3 }, vim.iter({ nil, { 1, nil, 2 }, 3 }):flatten():totable())
 
     local nested_non_lists = vim.iter({ 1, { { a = 2 } }, { { nil } }, { 3 } })
     eq({ 1, { a = 2 }, { nil }, 3 }, nested_non_lists:flatten():totable())
@@ -507,11 +513,11 @@ describe('vim.iter', function()
       end
     end)
 
-    local t = it:fold({}, function(t, k, v)
-      t[k] = v
-      return t
+    local q = it:fold({}, function(q, k, v)
+      q[k] = v
+      return q
     end)
-    eq({ A = 2, C = 6 }, t)
+    eq({ A = 2, C = 6 }, q)
   end)
 
   it('handles table values mid-pipeline', function()

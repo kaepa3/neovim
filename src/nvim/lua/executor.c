@@ -22,6 +22,7 @@
 #include "nvim/cmdexpand_defs.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
+#include "nvim/errors.h"
 #include "nvim/eval.h"
 #include "nvim/eval/funcs.h"
 #include "nvim/eval/typval.h"
@@ -103,7 +104,7 @@ typedef struct {
     if (args[i].v_type == VAR_UNKNOWN) { \
       lua_pushnil(lstate); \
     } else { \
-      nlua_push_typval(lstate, &args[i], special); \
+      nlua_push_typval(lstate, &args[i], (special) ? kNluaPushSpecial : 0); \
     } \
   }
 
@@ -325,7 +326,7 @@ static int nlua_thr_api_nvim__get_runtime(lua_State *lstate)
   }
 
   ArrayOf(String) ret = runtime_get_named_thread(is_lua, pat, all);
-  nlua_push_Array(lstate, ret, true);
+  nlua_push_Array(lstate, ret, kNluaPushSpecial);
   api_free_array(ret);
   api_free_array(pat);
 
@@ -1210,7 +1211,7 @@ int nlua_call(lua_State *lstate)
   });
 
   if (!ERROR_SET(&err)) {
-    nlua_push_typval(lstate, &rettv, false);
+    nlua_push_typval(lstate, &rettv, 0);
   }
   tv_clear(&rettv);
 
@@ -1261,7 +1262,7 @@ static int nlua_rpc(lua_State *lstate, bool request)
     ArenaMem res_mem = NULL;
     Object result = rpc_send_call(chan_id, name, args, &res_mem, &err);
     if (!ERROR_SET(&err)) {
-      nlua_push_Object(lstate, &result, false);
+      nlua_push_Object(lstate, &result, 0);
       arena_mem_free(res_mem);
     }
   } else {
@@ -1487,7 +1488,7 @@ static void nlua_typval_exec(const char *lcmd, size_t lcmd_len, const char *name
   }
 }
 
-int nlua_source_using_linegetter(LineGetter fgetline, void *cookie, char *name)
+void nlua_source_str(const char *code, char *name)
 {
   const sctx_T save_current_sctx = current_sctx;
   current_sctx.sc_sid = SID_STR;
@@ -1495,22 +1496,11 @@ int nlua_source_using_linegetter(LineGetter fgetline, void *cookie, char *name)
   current_sctx.sc_lnum = 0;
   estack_push(ETYPE_SCRIPT, name, 0);
 
-  garray_T ga;
-  char *line = NULL;
-
-  ga_init(&ga, (int)sizeof(char *), 10);
-  while ((line = fgetline(0, cookie, 0, false)) != NULL) {
-    GA_APPEND(char *, &ga, line);
-  }
-  char *code = ga_concat_strings_sep(&ga, "\n");
   size_t len = strlen(code);
   nlua_typval_exec(code, len, name, NULL, 0, false, NULL);
 
   estack_pop();
   current_sctx = save_current_sctx;
-  ga_clear_strings(&ga);
-  xfree(code);
-  return OK;
 }
 
 /// Call a LuaCallable given some typvals
@@ -1564,7 +1554,7 @@ Object nlua_exec(const String str, const Array args, LuaRetMode mode, Arena *are
   }
 
   for (size_t i = 0; i < args.size; i++) {
-    nlua_push_Object(lstate, &args.items[i], false);
+    nlua_push_Object(lstate, &args.items[i], 0);
   }
 
   if (nlua_pcall(lstate, (int)args.size, 1)) {
@@ -1611,7 +1601,7 @@ Object nlua_call_ref(LuaRef ref, const char *name, Array args, LuaRetMode mode, 
     nargs++;
   }
   for (size_t i = 0; i < args.size; i++) {
-    nlua_push_Object(lstate, &args.items[i], false);
+    nlua_push_Object(lstate, &args.items[i], 0);
   }
 
   if (nlua_pcall(lstate, nargs, 1)) {

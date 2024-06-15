@@ -1,40 +1,41 @@
-local helpers = require('test.functional.helpers')(after_each)
-local thelpers = require('test.functional.terminal.helpers')
-
-local clear = helpers.clear
-local eq = helpers.eq
-local eval = helpers.eval
-local exc_exec = helpers.exc_exec
-local feed_command = helpers.feed_command
-local feed = helpers.feed
-local insert = helpers.insert
-local neq = helpers.neq
-local next_msg = helpers.next_msg
-local testprg = helpers.testprg
-local ok = helpers.ok
-local source = helpers.source
-local write_file = helpers.write_file
-local mkdir = helpers.mkdir
-local rmdir = helpers.rmdir
-local assert_alive = helpers.assert_alive
-local command = helpers.command
-local fn = helpers.fn
-local os_kill = helpers.os_kill
-local retry = helpers.retry
-local api = helpers.api
-local NIL = vim.NIL
-local poke_eventloop = helpers.poke_eventloop
-local get_pathsep = helpers.get_pathsep
-local pathroot = helpers.pathroot
-local exec_lua = helpers.exec_lua
-local nvim_set = helpers.nvim_set
-local expect_twostreams = helpers.expect_twostreams
-local expect_msg_seq = helpers.expect_msg_seq
-local pcall_err = helpers.pcall_err
-local matches = helpers.matches
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local skip = helpers.skip
-local is_os = helpers.is_os
+local tt = require('test.functional.terminal.testutil')
+
+local clear = n.clear
+local eq = t.eq
+local eval = n.eval
+local exc_exec = n.exc_exec
+local feed_command = n.feed_command
+local feed = n.feed
+local insert = n.insert
+local neq = t.neq
+local next_msg = n.next_msg
+local testprg = n.testprg
+local ok = t.ok
+local source = n.source
+local write_file = t.write_file
+local mkdir = t.mkdir
+local rmdir = n.rmdir
+local assert_alive = n.assert_alive
+local command = n.command
+local fn = n.fn
+local os_kill = n.os_kill
+local retry = t.retry
+local api = n.api
+local NIL = vim.NIL
+local poke_eventloop = n.poke_eventloop
+local get_pathsep = n.get_pathsep
+local pathroot = n.pathroot
+local exec_lua = n.exec_lua
+local nvim_set = n.nvim_set
+local expect_twostreams = n.expect_twostreams
+local expect_msg_seq = n.expect_msg_seq
+local pcall_err = t.pcall_err
+local matches = t.matches
+local skip = t.skip
+local is_os = t.is_os
 
 describe('jobs', function()
   local channel
@@ -307,7 +308,7 @@ describe('jobs', function()
 
   it('preserves NULs', function()
     -- Make a file with NULs in it.
-    local filename = helpers.tmpname()
+    local filename = t.tmpname()
     write_file(filename, 'abc\0def\n')
 
     command("let j = jobstart(['cat', '" .. filename .. "'], g:job_opts)")
@@ -732,7 +733,7 @@ describe('jobs', function()
   describe('jobwait()', function()
     before_each(function()
       if is_os('win') then
-        helpers.set_shell_powershell()
+        n.set_shell_powershell()
       end
     end)
 
@@ -909,11 +910,6 @@ describe('jobs', function()
 
     it('hides cursor and flushes messages before blocking', function()
       local screen = Screen.new(50, 6)
-      screen:set_default_attr_ids({
-        [0] = { foreground = Screen.colors.Blue, bold = true }, -- NonText
-        [1] = { bold = true, reverse = true }, -- MsgSeparator
-        [2] = { bold = true, foreground = Screen.colors.SeaGreen }, -- MoreMsg
-      })
       screen:attach()
       command([[let g:id = jobstart([v:progpath, '--clean', '--headless'])]])
       source([[
@@ -927,8 +923,8 @@ describe('jobs', function()
       screen:expect {
         grid = [[
                                                           |
-        {0:~                                                 }|*2
-        {1:                                                  }|
+        {1:~                                                 }|*2
+        {3:                                                  }|
         aaa                                               |
         bbb                                               |
       ]],
@@ -937,11 +933,11 @@ describe('jobs', function()
       screen:expect {
         grid = [[
                                                           |
-        {1:                                                  }|
+        {3:                                                  }|
         aaa                                               |
         bbb                                               |
         ccc                                               |
-        {2:Press ENTER or type command to continue}^           |
+        {6:Press ENTER or type command to continue}^           |
       ]],
       }
       feed('<CR>')
@@ -1182,7 +1178,7 @@ describe('jobs', function()
   end)
 
   it('does not close the same handle twice on exit #25086', function()
-    local filename = string.format('%s.lua', helpers.tmpname())
+    local filename = string.format('%s.lua', t.tmpname())
     write_file(
       filename,
       [[
@@ -1195,7 +1191,7 @@ describe('jobs', function()
     ]]
     )
 
-    local screen = thelpers.setup_child_nvim({
+    local screen = tt.setup_child_nvim({
       '--cmd',
       'set notermguicolors',
       '-i',
@@ -1239,7 +1235,7 @@ describe('pty process teardown', function()
     skip(fn.executable('sleep') == 0, 'missing "sleep" command')
     -- Use a nested nvim (in :term) to test without --headless.
     fn.termopen({
-      helpers.nvim_prog,
+      n.nvim_prog,
       '-u',
       'NONE',
       '-i',

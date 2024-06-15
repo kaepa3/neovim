@@ -1,19 +1,20 @@
-local helpers = require('test.functional.helpers')(after_each)
-local lsp_helpers = require('test.functional.plugin.lsp.helpers')
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
+local t_lsp = require('test.functional.plugin.lsp.testutil')
 
-local command = helpers.command
-local dedent = helpers.dedent
-local eq = helpers.eq
-local exec_lua = helpers.exec_lua
-local feed = helpers.feed
-local feed_command = helpers.feed_command
-local insert = helpers.insert
-local matches = helpers.matches
-local api = helpers.api
+local command = n.command
+local dedent = t.dedent
+local eq = t.eq
+local exec_lua = n.exec_lua
+local feed = n.feed
+local feed_command = n.feed_command
+local insert = n.insert
+local matches = t.matches
+local api = n.api
 
-local clear_notrace = lsp_helpers.clear_notrace
-local create_server_definition = lsp_helpers.create_server_definition
+local clear_notrace = t_lsp.clear_notrace
+local create_server_definition = t_lsp.create_server_definition
 
 before_each(function()
   clear_notrace()
@@ -94,11 +95,11 @@ describe('semantic token highlighting', function()
             },
           },
           handlers = {
-            ['textDocument/semanticTokens/full'] = function()
-              return vim.fn.json_decode(response)
+            ['textDocument/semanticTokens/full'] = function(_, _, callback)
+              callback(nil, vim.fn.json_decode(response))
             end,
-            ['textDocument/semanticTokens/full/delta'] = function()
-              return vim.fn.json_decode(edit_response)
+            ['textDocument/semanticTokens/full/delta'] = function(_, _, callback)
+              callback(nil, vim.fn.json_decode(edit_response))
             end,
           }
         })
@@ -110,14 +111,13 @@ describe('semantic token highlighting', function()
     end)
 
     it('buffer is highlighted when attached', function()
+      insert(text)
       exec_lua([[
         bufnr = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_buf(0, bufnr)
         vim.bo[bufnr].filetype = 'some-filetype'
         client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
       ]])
-
-      insert(text)
 
       screen:expect {
         grid = [[
@@ -140,6 +140,7 @@ describe('semantic token highlighting', function()
     end)
 
     it('use LspTokenUpdate and highlight_token', function()
+      insert(text)
       exec_lua([[
         vim.api.nvim_create_autocmd("LspTokenUpdate", {
           callback = function(args)
@@ -155,8 +156,6 @@ describe('semantic token highlighting', function()
         vim.api.nvim_win_set_buf(0, bufnr)
         client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
       ]])
-
-      insert(text)
 
       screen:expect {
         grid = [[
@@ -179,13 +178,16 @@ describe('semantic token highlighting', function()
     end)
 
     it('buffer is unhighlighted when client is detached', function()
+      insert(text)
+
       exec_lua([[
         bufnr = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_buf(0, bufnr)
         client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+        vim.wait(1000, function()
+          return #server.messages > 1
+        end)
       ]])
-
-      insert(text)
 
       exec_lua([[
         vim.notify = function() end
@@ -272,7 +274,7 @@ describe('semantic token highlighting', function()
       end
     )
 
-    it('buffer is re-highlighted when force refreshed', function()
+    it('highlights start and stop when using "0" for current buffer', function()
       exec_lua([[
         bufnr = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_buf(0, bufnr)
@@ -280,6 +282,62 @@ describe('semantic token highlighting', function()
       ]])
 
       insert(text)
+
+      exec_lua([[
+        vim.notify = function() end
+        vim.lsp.semantic_tokens.stop(0, client_id)
+      ]])
+
+      screen:expect {
+        grid = [[
+        #include <iostream>                     |
+                                                |
+        int main()                              |
+        {                                       |
+            int x;                              |
+        #ifdef __cplusplus                      |
+            std::cout << x << "\n";             |
+        #else                                   |
+            printf("%d\n", x);                  |
+        #endif                                  |
+        }                                       |
+        ^}                                       |
+        {1:~                                       }|*3
+                                                |
+      ]],
+      }
+
+      exec_lua([[
+        vim.lsp.semantic_tokens.start(0, client_id)
+      ]])
+
+      screen:expect {
+        grid = [[
+        #include <iostream>                     |
+                                                |
+        int {8:main}()                              |
+        {                                       |
+            int {7:x};                              |
+        #ifdef {5:__cplusplus}                      |
+            {4:std}::{2:cout} << {2:x} << "\n";             |
+        {6:#else}                                   |
+        {6:    printf("%d\n", x);}                  |
+        {6:#endif}                                  |
+        }                                       |
+        ^}                                       |
+        {1:~                                       }|*3
+                                                |
+      ]],
+      }
+    end)
+
+    it('buffer is re-highlighted when force refreshed', function()
+      insert(text)
+      exec_lua([[
+        bufnr = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_buf(0, bufnr)
+        client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
+      ]])
 
       screen:expect {
         grid = [[
@@ -354,13 +412,14 @@ describe('semantic token highlighting', function()
     end)
 
     it('updates highlights with delta request on buffer change', function()
+      insert(text)
+
       exec_lua([[
         bufnr = vim.api.nvim_get_current_buf()
         vim.api.nvim_win_set_buf(0, bufnr)
         client_id = vim.lsp.start({ name = 'dummy', cmd = server.cmd })
       ]])
 
-      insert(text)
       screen:expect {
         grid = [[
         #include <iostream>                     |
@@ -502,11 +561,11 @@ describe('semantic token highlighting', function()
             },
           },
           handlers = {
-            ['textDocument/semanticTokens/full'] = function()
-              return nil
+            ['textDocument/semanticTokens/full'] = function(_, _, callback)
+              callback(nil, nil)
             end,
             ['textDocument/semanticTokens/full/delta'] = function()
-              return nil
+              callback(nil, nil)
             end,
           }
         })
@@ -539,6 +598,7 @@ describe('semantic token highlighting', function()
     end)
 
     it('does not send delta requests if not supported by server', function()
+      insert(text)
       exec_lua(
         [[
         local legend, response, edit_response = ...
@@ -550,11 +610,11 @@ describe('semantic token highlighting', function()
             },
           },
           handlers = {
-            ['textDocument/semanticTokens/full'] = function()
-              return vim.fn.json_decode(response)
+            ['textDocument/semanticTokens/full'] = function(_, _, callback)
+              callback(nil, vim.fn.json_decode(response))
             end,
-            ['textDocument/semanticTokens/full/delta'] = function()
-              return vim.fn.json_decode(edit_response)
+            ['textDocument/semanticTokens/full/delta'] = function(_, _, callback)
+              callback(nil, vim.fn.json_decode(edit_response))
             end,
           }
         })
@@ -567,7 +627,6 @@ describe('semantic token highlighting', function()
         edit_response
       )
 
-      insert(text)
       screen:expect {
         grid = [[
         #include <iostream>                     |
@@ -1017,8 +1076,8 @@ b = "as"]],
               },
             },
             handlers = {
-              ['textDocument/semanticTokens/full'] = function()
-                return vim.fn.json_decode(resp)
+              ['textDocument/semanticTokens/full'] = function(_, _, callback)
+                callback(nil, vim.fn.json_decode(resp))
               end,
             }
           })
@@ -1391,6 +1450,7 @@ int main()
       },
     }) do
       it(test.it, function()
+        insert(test.text1)
         exec_lua(create_server_definition)
         exec_lua(
           [[
@@ -1403,11 +1463,11 @@ int main()
               },
             },
             handlers = {
-              ['textDocument/semanticTokens/full'] = function()
-                return vim.fn.json_decode(resp1)
+              ['textDocument/semanticTokens/full'] = function(_, _, callback)
+                callback(nil, vim.fn.json_decode(resp1))
               end,
-              ['textDocument/semanticTokens/full/delta'] = function()
-                return vim.fn.json_decode(resp2)
+              ['textDocument/semanticTokens/full/delta'] = function(_, _, callback)
+                callback(nil, vim.fn.json_decode(resp2))
               end,
             }
           })
@@ -1426,8 +1486,6 @@ int main()
           test.response1,
           test.response2
         )
-
-        insert(test.text1)
 
         test.expected_screen1()
 

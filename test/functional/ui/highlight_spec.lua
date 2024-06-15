@@ -1,13 +1,15 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 local os = require('os')
-local clear, feed, insert = helpers.clear, helpers.feed, helpers.insert
-local command, exec = helpers.command, helpers.exec
-local eval = helpers.eval
-local feed_command, eq = helpers.feed_command, helpers.eq
-local fn = helpers.fn
-local api = helpers.api
-local exec_lua = helpers.exec_lua
+
+local clear, feed, insert = n.clear, n.feed, n.insert
+local command, exec = n.command, n.exec
+local eval = n.eval
+local feed_command, eq = n.feed_command, t.eq
+local fn = n.fn
+local api = n.api
+local exec_lua = n.exec_lua
 
 describe('colorscheme compatibility', function()
   before_each(function()
@@ -2196,7 +2198,7 @@ describe("'winhighlight' highlight", function()
     ]],
     }
 
-    helpers.assert_alive()
+    n.assert_alive()
   end)
 
   it('can redraw statusline on cursor movement', function()

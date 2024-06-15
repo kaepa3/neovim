@@ -20,6 +20,7 @@
 #include "nvim/diff.h"
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
+#include "nvim/errors.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/window.h"
 #include "nvim/fold.h"
@@ -78,13 +79,14 @@ int adjust_plines_for_skipcol(win_T *wp)
 /// Return how many lines "lnum" will take on the screen, taking into account
 /// whether it is the first line, whether w_skipcol is non-zero and limiting to
 /// the window height.
-static int plines_correct_topline(win_T *wp, linenr_T lnum, linenr_T *nextp, bool *foldedp)
+static int plines_correct_topline(win_T *wp, linenr_T lnum, linenr_T *nextp, bool limit_winheight,
+                                  bool *foldedp)
 {
   int n = plines_win_full(wp, lnum, nextp, foldedp, true, false);
   if (lnum == wp->w_topline) {
     n -= adjust_plines_for_skipcol(wp);
   }
-  if (n > wp->w_height_inner) {
+  if (limit_winheight && n > wp->w_height_inner) {
     return wp->w_height_inner;
   }
   return n;
@@ -111,7 +113,7 @@ static void comp_botline(win_T *wp)
   for (; lnum <= wp->w_buffer->b_ml.ml_line_count; lnum++) {
     linenr_T last = lnum;
     bool folded;
-    int n = plines_correct_topline(wp, lnum, &last, &folded);
+    int n = plines_correct_topline(wp, lnum, &last, true, &folded);
     if (lnum <= wp->w_cursor.lnum && last >= wp->w_cursor.lnum) {
       wp->w_cline_row = done;
       wp->w_cline_height = n;
@@ -190,11 +192,14 @@ static void redraw_for_cursorcolumn(win_T *wp)
 /// Calculates how much the 'listchars' "precedes" or 'smoothscroll' "<<<"
 /// marker overlaps with buffer text for window "wp".
 /// Parameter "extra2" should be the padding on the 2nd line, not the first
-/// line.
+/// line. When "extra2" is -1 calculate the padding.
 /// Returns the number of columns of overlap with buffer text, excluding the
 /// extra padding on the ledge.
 int sms_marker_overlap(win_T *wp, int extra2)
 {
+  if (extra2 == -1) {
+    extra2 = win_col_off(wp) - win_col_off2(wp);
+  }
   // There is no marker overlap when in showbreak mode, thus no need to
   // account for it.  See wlv_put_linebuf().
   if (*get_showbreak_value(wp) != NUL) {
@@ -282,6 +287,7 @@ void update_topline(win_T *wp)
     }
     wp->w_topline = 1;
     wp->w_botline = 2;
+    wp->w_skipcol = 0;
     wp->w_valid |= VALID_BOTLINE|VALID_BOTLINE_AP;
     wp->w_viewport_invalid = true;
     wp->w_scbind_pos = 1;
@@ -295,7 +301,7 @@ void update_topline(win_T *wp)
       // scrolling down is never needed.
       if (wp->w_cursor.lnum < wp->w_topline) {
         check_topline = true;
-      } else if (check_top_offset()) {
+      } else if (check_top_offset(wp)) {
         check_topline = true;
       } else if (wp->w_skipcol > 0 && wp->w_cursor.lnum == wp->w_topline) {
         colnr_T vcol;
@@ -303,7 +309,7 @@ void update_topline(win_T *wp)
         // Check that the cursor position is visible.  Add columns for
         // the marker displayed in the top-left if needed.
         getvvcol(wp, &wp->w_cursor, &vcol, NULL, NULL);
-        int overlap = sms_marker_overlap(wp, win_col_off(wp) - win_col_off2(wp));
+        int overlap = sms_marker_overlap(wp, -1);
         if (wp->w_skipcol + overlap > vcol) {
           check_topline = true;
         }
@@ -345,7 +351,7 @@ void update_topline(win_T *wp)
       if (n >= halfheight) {
         scroll_cursor_halfway(wp, false, false);
       } else {
-        scroll_cursor_top(wp, scrolljump_value(), false);
+        scroll_cursor_top(wp, scrolljump_value(wp), false);
         check_botline = true;
       }
     } else {
@@ -418,7 +424,7 @@ void update_topline(win_T *wp)
           line_count = wp->w_cursor.lnum - wp->w_botline + 1 + (int)(*so_ptr);
         }
         if (line_count <= wp->w_height_inner + 1) {
-          scroll_cursor_bot(wp, scrolljump_value(), false);
+          scroll_cursor_bot(wp, scrolljump_value(wp), false);
         } else {
           scroll_cursor_halfway(wp, false, false);
         }
@@ -451,33 +457,30 @@ void update_topline(win_T *wp)
   *so_ptr = save_so;
 }
 
-// Return the scrolljump value to use for the current window.
-// When 'scrolljump' is positive use it as-is.
-// When 'scrolljump' is negative use it as a percentage of the window height.
-static int scrolljump_value(void)
+/// Return the scrolljump value to use for the window "wp".
+/// When 'scrolljump' is positive use it as-is.
+/// When 'scrolljump' is negative use it as a percentage of the window height.
+static int scrolljump_value(win_T *wp)
 {
-  int result = p_sj >= 0 ? (int)p_sj : (curwin->w_height_inner * (int)(-p_sj)) / 100;
+  int result = p_sj >= 0 ? (int)p_sj : (wp->w_height_inner * (int)(-p_sj)) / 100;
   return result;
 }
 
-// Return true when there are not 'scrolloff' lines above the cursor for the
-// current window.
-static bool check_top_offset(void)
+/// Return true when there are not 'scrolloff' lines above the cursor for window "wp".
+static bool check_top_offset(win_T *wp)
 {
-  int so = get_scrolloff_value(curwin);
-  if (curwin->w_cursor.lnum < curwin->w_topline + so
-      || hasAnyFolding(curwin)) {
+  int so = get_scrolloff_value(wp);
+  if (wp->w_cursor.lnum < wp->w_topline + so || hasAnyFolding(wp)) {
     lineoff_T loff;
-    loff.lnum = curwin->w_cursor.lnum;
+    loff.lnum = wp->w_cursor.lnum;
     loff.fill = 0;
-    int n = curwin->w_topfill;          // always have this context
+    int n = wp->w_topfill;  // always have this context
     // Count the visible screen lines above the cursor line.
     while (n < so) {
-      topline_back(curwin, &loff);
+      topline_back(wp, &loff);
       // Stop when included a line above the window.
-      if (loff.lnum < curwin->w_topline
-          || (loff.lnum == curwin->w_topline
-              && loff.fill > 0)) {
+      if (loff.lnum < wp->w_topline
+          || (loff.lnum == wp->w_topline && loff.fill > 0)) {
         break;
       }
       n += loff.height;
@@ -543,6 +546,14 @@ void changed_window_setting(win_T *wp)
   changed_line_abv_curs_win(wp);
   wp->w_valid &= ~(VALID_BOTLINE|VALID_BOTLINE_AP|VALID_TOPLINE);
   redraw_later(wp, UPD_NOT_VALID);
+}
+
+/// Call changed_window_setting() for every window.
+void changed_window_setting_all(void)
+{
+  FOR_ALL_TAB_WINDOWS(tp, wp) {
+    changed_window_setting(wp);
+  }
 }
 
 // Set wp->w_topline to a certain number.
@@ -667,7 +678,7 @@ static void curs_rows(win_T *wp)
     } else {
       linenr_T last = lnum;
       bool folded;
-      int n = plines_correct_topline(wp, lnum, &last, &folded);
+      int n = plines_correct_topline(wp, lnum, &last, true, &folded);
       lnum = last + 1;
       if (folded && lnum > wp->w_cursor.lnum) {
         break;
@@ -1042,7 +1053,7 @@ void textpos2screenpos(win_T *wp, pos_T *pos, int *rowp, int *scolp, int *ccolp,
   linenr_T lnum = pos->lnum;
   if (lnum >= wp->w_topline && lnum <= wp->w_botline) {
     is_folded = hasFolding(wp, lnum, &lnum, NULL);
-    row = plines_m_win(wp, wp->w_topline, lnum - 1, false);
+    row = plines_m_win(wp, wp->w_topline, lnum - 1, INT_MAX);
     // "row" should be the screen line where line "lnum" begins, which can
     // be negative if "lnum" is "w_topline" and "w_skipcol" is non-zero.
     row -= adjust_plines_for_skipcol(wp);
@@ -1185,6 +1196,122 @@ void f_virtcol2col(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   rettv->vval.v_number = virtcol2col(wp, lnum, screencol);
 }
 
+/// Make sure the cursor is in the visible part of the topline after scrolling
+/// the screen with 'smoothscroll'.
+static void cursor_correct_sms(win_T *wp)
+{
+  if (!wp->w_p_sms || !wp->w_p_wrap || wp->w_cursor.lnum != wp->w_topline) {
+    return;
+  }
+
+  int so = get_scrolloff_value(wp);
+  int width1 = wp->w_width_inner - win_col_off(wp);
+  int width2 = width1 + win_col_off2(wp);
+  int so_cols = so == 0 ? 0 : width1 + (so - 1) * width2;
+  int space_cols = (wp->w_height_inner - 1) * width2;
+  int size = so == 0 ? 0 : win_linetabsize(wp, wp->w_topline,
+                                           ml_get_buf(wp->w_buffer, wp->w_topline),
+                                           (colnr_T)MAXCOL);
+
+  if (wp->w_topline == 1 && wp->w_skipcol == 0) {
+    so_cols = 0;               // Ignore 'scrolloff' at top of buffer.
+  } else if (so_cols > space_cols / 2) {
+    so_cols = space_cols / 2;  // Not enough room: put cursor in the middle.
+  }
+
+  // Not enough screen lines in topline: ignore 'scrolloff'.
+  while (so_cols > size && so_cols - width2 >= width1 && width1 > 0) {
+    so_cols -= width2;
+  }
+  if (so_cols >= width1 && so_cols > size) {
+    so_cols -= width1;
+  }
+
+  // If there is no marker or we have non-zero scrolloff, just ignore it.
+  int overlap = (wp->w_skipcol == 0 || so_cols != 0) ? 0 : sms_marker_overlap(wp, -1);
+  int top = wp->w_skipcol + overlap + so_cols;
+  int bot = wp->w_skipcol + width1 + (wp->w_height_inner - 1) * width2 - so_cols;
+
+  validate_virtcol(wp);
+  colnr_T col = wp->w_virtcol;
+
+  if (col < top) {
+    if (col < width1) {
+      col += width1;
+    }
+    while (width2 > 0 && col < top) {
+      col += width2;
+    }
+  } else {
+    while (width2 > 0 && col >= bot) {
+      col -= width2;
+    }
+  }
+
+  if (col != wp->w_virtcol) {
+    wp->w_curswant = col;
+    coladvance(wp, wp->w_curswant);
+    // validate_virtcol() marked various things as valid, but after
+    // moving the cursor they need to be recomputed
+    wp->w_valid &= ~(VALID_WROW|VALID_WCOL|VALID_CHEIGHT|VALID_CROW|VALID_VIRTCOL);
+  }
+}
+
+/// Scroll "count" lines up or down, and redraw.
+void scroll_redraw(int up, linenr_T count)
+{
+  linenr_T prev_topline = curwin->w_topline;
+  int prev_skipcol = curwin->w_skipcol;
+  int prev_topfill = curwin->w_topfill;
+  linenr_T prev_lnum = curwin->w_cursor.lnum;
+
+  bool moved = up
+               ? scrollup(curwin, count, true)
+               : scrolldown(curwin, count, true);
+
+  if (get_scrolloff_value(curwin) > 0) {
+    // Adjust the cursor position for 'scrolloff'.  Mark w_topline as
+    // valid, otherwise the screen jumps back at the end of the file.
+    cursor_correct(curwin);
+    check_cursor_moved(curwin);
+    curwin->w_valid |= VALID_TOPLINE;
+
+    // If moved back to where we were, at least move the cursor, otherwise
+    // we get stuck at one position.  Don't move the cursor up if the
+    // first line of the buffer is already on the screen
+    while (curwin->w_topline == prev_topline
+           && curwin->w_skipcol == prev_skipcol
+           && curwin->w_topfill == prev_topfill) {
+      if (up) {
+        if (curwin->w_cursor.lnum > prev_lnum
+            || cursor_down(1L, false) == FAIL) {
+          break;
+        }
+      } else {
+        if (curwin->w_cursor.lnum < prev_lnum
+            || prev_topline == 1L
+            || cursor_up(1L, false) == FAIL) {
+          break;
+        }
+      }
+      // Mark w_topline as valid, otherwise the screen jumps back at the
+      // end of the file.
+      check_cursor_moved(curwin);
+      curwin->w_valid |= VALID_TOPLINE;
+    }
+  }
+
+  if (moved) {
+    curwin->w_viewport_invalid = true;
+  }
+
+  cursor_correct_sms(curwin);
+  if (curwin->w_cursor.lnum != prev_lnum) {
+    coladvance(curwin, curwin->w_curswant);
+  }
+  redraw_later(curwin, UPD_VALID);
+}
+
 /// Scroll a window down by "line_count" logical lines.  "CTRL-Y"
 ///
 /// @param line_count number of lines to scroll
@@ -1240,7 +1367,7 @@ bool scrolldown(win_T *wp, linenr_T line_count, int byfold)
         } else {
           if (do_sms) {
             int size = win_linetabsize(wp, wp->w_topline,
-                                       ml_get(wp->w_topline), MAXCOL);
+                                       ml_get_buf(wp->w_buffer, wp->w_topline), MAXCOL);
             if (size > width1) {
               wp->w_skipcol = width1;
               size -= width1;
@@ -1299,27 +1426,10 @@ bool scrolldown(win_T *wp, linenr_T line_count, int byfold)
     foldAdjustCursor(wp);
     coladvance(wp, wp->w_curswant);
   }
-
-  if (wp->w_cursor.lnum == wp->w_topline && do_sms) {
-    int so = get_scrolloff_value(wp);
-    colnr_T scrolloff_cols = so == 0 ? 0 : width1 + (so - 1) * width2;
-
-    // make sure the cursor is in the visible text
-    validate_virtcol(wp);
-    colnr_T col = wp->w_virtcol - wp->w_skipcol + scrolloff_cols;
-    int row = 0;
-    if (col >= width1) {
-      col -= width1;
-      row++;
-    }
-    if (col > width2 && width2 > 0) {
-      row += (int)col / width2;
-    }
-    if (row >= wp->w_height_inner) {
-      wp->w_curswant = wp->w_virtcol - (row - wp->w_height_inner + 1) * width2;
-      coladvance(wp, wp->w_curswant);
-    }
+  if (wp->w_cursor.lnum < wp->w_topline) {
+    wp->w_cursor.lnum = wp->w_topline;
   }
+
   return moved;
 }
 
@@ -1421,46 +1531,6 @@ bool scrollup(win_T *wp, linenr_T line_count, bool byfold)
     coladvance(wp, wp->w_curswant);
   }
 
-  if (wp->w_cursor.lnum == wp->w_topline && do_sms && wp->w_skipcol > 0) {
-    int col_off = win_col_off(wp);
-    int col_off2 = win_col_off2(wp);
-
-    int width1 = wp->w_width_inner - col_off;
-    int width2 = width1 + col_off2;
-    int extra2 = col_off - col_off2;
-    int so = get_scrolloff_value(wp);
-    colnr_T scrolloff_cols = so == 0 ? 0 : width1 + (so - 1) * width2;
-    int space_cols = (wp->w_height_inner - 1) * width2;
-
-    // If we have non-zero scrolloff, just ignore the marker as we are
-    // going past it anyway.
-    int overlap = scrolloff_cols != 0 ? 0 : sms_marker_overlap(wp, extra2);
-
-    // Make sure the cursor is in a visible part of the line, taking
-    // 'scrolloff' into account, but using screen lines.
-    // If there are not enough screen lines put the cursor in the middle.
-    if (scrolloff_cols > space_cols / 2) {
-      scrolloff_cols = space_cols / 2;
-    }
-    validate_virtcol(wp);
-    if (wp->w_virtcol < wp->w_skipcol + overlap + scrolloff_cols) {
-      colnr_T col = wp->w_virtcol;
-
-      if (col < width1) {
-        col += width1;
-      }
-      while (col < wp->w_skipcol + overlap + scrolloff_cols) {
-        col += width2;
-      }
-      wp->w_curswant = col;
-      coladvance(wp, wp->w_curswant);
-
-      // validate_virtcol() marked various things as valid, but after
-      // moving the cursor they need to be recomputed
-      wp->w_valid &= ~(VALID_WROW|VALID_WCOL|VALID_CHEIGHT|VALID_CROW|VALID_VIRTCOL);
-    }
-  }
-
   bool moved = topline != wp->w_topline || botline != wp->w_botline;
 
   return moved;
@@ -1494,7 +1564,7 @@ void adjust_skipcol(void)
   }
 
   validate_virtcol(curwin);
-  int overlap = sms_marker_overlap(curwin, win_col_off(curwin) - win_col_off2(curwin));
+  int overlap = sms_marker_overlap(curwin, -1);
   while (curwin->w_skipcol > 0
          && curwin->w_virtcol < curwin->w_skipcol + overlap + scrolloff_cols) {
     // scroll a screen line down
@@ -1510,8 +1580,20 @@ void adjust_skipcol(void)
     redraw_later(curwin, UPD_NOT_VALID);
     return;  // don't scroll in the other direction now
   }
-  colnr_T col = curwin->w_virtcol - curwin->w_skipcol + scrolloff_cols;
   int row = 0;
+  colnr_T col = curwin->w_virtcol + scrolloff_cols;
+
+  // Avoid adjusting for 'scrolloff' beyond the text line height.
+  if (scrolloff_cols > 0) {
+    int size = win_linetabsize(curwin, curwin->w_topline,
+                               ml_get(curwin->w_topline), (colnr_T)MAXCOL);
+    size = width1 + width2 * ((size - width1 + width2 - 1) / width2);
+    while (col > size) {
+      col -= width2;
+    }
+  }
+  col -= curwin->w_skipcol;
+
   if (col >= width1) {
     col -= width1;
     row++;
@@ -1840,15 +1922,11 @@ void scroll_cursor_bot(win_T *wp, int min_scroll, bool set_topbot)
   bool do_sms = wp->w_p_wrap && wp->w_p_sms;
 
   if (set_topbot) {
-    bool set_skipcol = false;
-
     int used = 0;
     wp->w_botline = cln + 1;
+    loff.lnum = cln + 1;
     loff.fill = 0;
-    for (wp->w_topline = wp->w_botline;
-         wp->w_topline > 1;
-         wp->w_topline = loff.lnum) {
-      loff.lnum = wp->w_topline;
+    while (true) {
       topline_back_winheight(wp, &loff, false);
       if (loff.height == MAXCOL) {
         break;
@@ -1864,22 +1942,23 @@ void scroll_cursor_bot(win_T *wp, int min_scroll, bool set_topbot)
             wp->w_topfill = loff.fill;
             wp->w_topline = loff.lnum;
             wp->w_skipcol = skipcol_from_plines(wp, plines_offset);
-            set_skipcol = true;
           }
         }
         break;
       }
-      used += loff.height;
       wp->w_topfill = loff.fill;
+      wp->w_topline = loff.lnum;
+      used += loff.height;
     }
+
     set_empty_rows(wp, used);
     wp->w_valid |= VALID_BOTLINE|VALID_BOTLINE_AP;
     if (wp->w_topline != old_topline
         || wp->w_topfill != old_topfill
-        || set_skipcol
+        || wp->w_skipcol != old_skipcol
         || wp->w_skipcol != 0) {
       wp->w_valid &= ~(VALID_WROW|VALID_CROW);
-      if (set_skipcol) {
+      if (wp->w_skipcol != old_skipcol) {
         redraw_later(wp, UPD_NOT_VALID);
       } else {
         reset_skipcol(wp);
@@ -1908,11 +1987,13 @@ void scroll_cursor_bot(win_T *wp, int min_scroll, bool set_topbot)
       // need to scroll the additional clipped lines to scroll past the
       // top line before we can move on to the other lines.
       int top_plines = plines_win_nofill(wp, wp->w_topline, false);
-      int skip_lines = 0;
       int width1 = wp->w_width_inner - win_col_off(wp);
+
       if (width1 > 0) {
         int width2 = width1 + win_col_off2(wp);
-        // similar formula is used in curs_columns()
+        int skip_lines = 0;
+
+        // A similar formula is used in curs_columns().
         if (wp->w_skipcol > width1) {
           skip_lines += (wp->w_skipcol - width1) / width2 + 1;
         } else if (wp->w_skipcol > 0) {
@@ -2045,6 +2126,11 @@ void scroll_cursor_bot(win_T *wp, int min_scroll, bool set_topbot)
   }
   wp->w_valid |= VALID_TOPLINE;
   wp->w_viewport_invalid = true;
+
+  // Make sure cursor is still visible after adjusting skipcol for "zb".
+  if (set_topbot) {
+    cursor_correct_sms(wp);
+  }
 }
 
 /// Recompute topline to put the cursor halfway across the window
@@ -2294,12 +2380,13 @@ static int get_scroll_overlap(Direction dir)
   int min_height = curwin->w_height_inner - 2;
 
   validate_botline(curwin);
-  if (dir == FORWARD && curwin->w_botline > curbuf->b_ml.ml_line_count) {
+  if ((dir == BACKWARD && curwin->w_topline == 1)
+      || (dir == FORWARD && curwin->w_botline > curbuf->b_ml.ml_line_count)) {
     return min_height + 2;  // no overlap, still handle 'smoothscroll'
   }
 
   loff.lnum = dir == FORWARD ? curwin->w_botline : curwin->w_topline - 1;
-  loff.fill = win_get_fill(curwin, loff.lnum + dir == BACKWARD)
+  loff.fill = win_get_fill(curwin, loff.lnum + (dir == BACKWARD))
               - (dir == FORWARD ? curwin->w_filler_rows : curwin->w_topfill);
   loff.height = loff.fill > 0 ? 1 : plines_win_nofill(curwin, loff.lnum, true);
 
@@ -2341,15 +2428,56 @@ static int get_scroll_overlap(Direction dir)
   }
 }
 
-/// Move screen "count" pages up ("dir" is BACKWARD) or down ("dir" is FORWARD)
-/// and update the screen.
+/// Scroll "count" lines with 'smoothscroll' in direction "dir". Return true
+/// when scrolling happened. Adjust "curscount" for scrolling different amount
+/// of lines when 'smoothscroll' is disabled.
+static bool scroll_with_sms(Direction dir, int count, int *curscount)
+{
+  int prev_sms = curwin->w_p_sms;
+  colnr_T prev_skipcol = curwin->w_skipcol;
+  linenr_T prev_topline = curwin->w_topline;
+  int prev_topfill = curwin->w_topfill;
+
+  curwin->w_p_sms = true;
+  scroll_redraw(dir == FORWARD, count);
+
+  // Not actually smoothscrolling but ended up with partially visible line.
+  // Continue scrolling until skipcol is zero.
+  if (!prev_sms && curwin->w_skipcol > 0) {
+    int fixdir = dir;
+    // Reverse the scroll direction when topline already changed. One line
+    // extra for scrolling backward so that consuming skipcol is symmetric.
+    if (labs(curwin->w_topline - prev_topline) > (dir == BACKWARD)) {
+      fixdir = dir * -1;
+    }
+    while (curwin->w_skipcol > 0
+           && curwin->w_topline < curbuf->b_ml.ml_line_count) {
+      scroll_redraw(fixdir == FORWARD, 1);
+      *curscount += (fixdir == dir ? 1 : -1);
+    }
+  }
+  curwin->w_p_sms = prev_sms;
+
+  return curwin->w_topline == prev_topline
+         && curwin->w_topfill == prev_topfill
+         && curwin->w_skipcol == prev_skipcol;
+}
+
+/// Move screen "count" (half) pages up ("dir" is BACKWARD) or down ("dir" is
+/// FORWARD) and update the screen. Handle moving the cursor and not scrolling
+/// to reveal end of buffer lines for half-page scrolling with CTRL-D and CTRL-U.
 ///
 /// @return  FAIL for failure, OK otherwise.
 int pagescroll(Direction dir, int count, bool half)
 {
-  int prev_topfill = curwin->w_topfill;
-  linenr_T prev_topline = curwin->w_topline;
-  colnr_T prev_skipcol = curwin->w_skipcol;
+  int nochange = true;
+  int buflen = curbuf->b_ml.ml_line_count;
+  colnr_T prev_col = curwin->w_cursor.col;
+  colnr_T prev_curswant = curwin->w_curswant;
+  linenr_T prev_lnum = curwin->w_cursor.lnum;
+  oparg_T oa = { 0 };
+  cmdarg_T ca = { 0 };
+  ca.oap = &oa;
 
   if (half) {
     // Scroll [count], 'scroll' or current window height lines.
@@ -2357,45 +2485,64 @@ int pagescroll(Direction dir, int count, bool half)
       curwin->w_p_scr = MIN(curwin->w_height_inner, count);
     }
     count = MIN(curwin->w_height_inner, (int)curwin->w_p_scr);
+
+    int curscount = count;
+    // Adjust count so as to not reveal end of buffer lines.
+    if (dir == FORWARD
+        && (curwin->w_topline + curwin->w_height_inner + count > buflen || hasAnyFolding(curwin))) {
+      int n = plines_correct_topline(curwin, curwin->w_topline, NULL, false, NULL);
+      if (n - count < curwin->w_height_inner && curwin->w_topline < buflen) {
+        n += plines_m_win(curwin, curwin->w_topline + 1, buflen, curwin->w_height_inner + count);
+      }
+      if (n < curwin->w_height_inner + count) {
+        count = n - curwin->w_height_inner;
+      }
+    }
+
+    // (Try to) scroll the window unless already at the end of the buffer.
+    if (count > 0) {
+      nochange = scroll_with_sms(dir, count, &curscount);
+      curwin->w_cursor.lnum = prev_lnum;
+      curwin->w_cursor.col = prev_col;
+      curwin->w_curswant = prev_curswant;
+    }
+
+    // Move the cursor the same amount of screen lines.
+    if (curwin->w_p_wrap) {
+      nv_screengo(&oa, dir, curscount);
+    } else if (dir == FORWARD) {
+      cursor_down_inner(curwin, curscount);
+    } else {
+      cursor_up_inner(curwin, curscount);
+    }
   } else {
-    // Scroll 'window' or current window height lines.
+    // Scroll [count] times 'window' or current window height lines.
     count *= ((ONE_WINDOW && p_window > 0 && p_window < Rows - 1)
-              ? (int)p_window - 2 : get_scroll_overlap(dir));
+              ? MAX(1, (int)p_window - 2) : get_scroll_overlap(dir));
+    nochange = scroll_with_sms(dir, count, &count);
+
+    // Place cursor at top or bottom of window.
+    validate_botline(curwin);
+    curwin->w_cursor.lnum = (dir == FORWARD ? curwin->w_topline : curwin->w_botline - 1);
   }
 
-  if (curwin->w_p_sms) {
-    scroll_redraw(dir == FORWARD, count);
-  } else {
-    // Scroll at least one full line without 'smoothscroll'.
-    count -= plines_win_nofill(curwin, curwin->w_topline, false);
-    scroll_redraw(dir == FORWARD, 1);
-
-    // Temporarily set 'smoothscroll' so that scrolling count lines
-    // does not skip over parts of the buffer with wrapped lines.
-    curwin->w_p_sms = true;
-    if (count > 0) {
-      scroll_redraw(dir == FORWARD, count);
-    }
-    curwin->w_p_sms = false;
+  if (get_scrolloff_value(curwin) > 0) {
+    cursor_correct(curwin);
   }
   // Move cursor to first line of closed fold.
   foldAdjustCursor(curwin);
 
-  int nochange = curwin->w_topline == prev_topline
-                 && curwin->w_topfill == prev_topfill
-                 && curwin->w_skipcol == prev_skipcol;
+  nochange = nochange
+             && prev_col == curwin->w_cursor.col
+             && prev_lnum == curwin->w_cursor.lnum;
 
-  // Error if the viewport did not change and the cursor is already
-  // at the boundary.
+  // Error if both the viewport and cursor did not change.
   if (nochange) {
-    int prev_cursor = curwin->w_cursor.lnum;
-    curwin->w_cursor.lnum += (count + 1) * (dir == FORWARD ? 1 : -1);
-    check_cursor(curwin);
-    if (curwin->w_cursor.lnum == prev_cursor) {
-      beep_flush();
-    }
-  } else if (!curwin->w_p_sms || curwin->w_skipcol == prev_skipcol) {
+    beep_flush();
+  } else if (!curwin->w_p_sms) {
     beginline(BL_SOL | BL_FIX);
+  } else if (p_sol) {
+    nv_g_home_m_cmd(&ca);
   }
 
   return nochange;

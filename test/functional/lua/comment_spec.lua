@@ -1,11 +1,12 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 
-local api = helpers.api
-local clear = helpers.clear
-local eq = helpers.eq
-local exec_capture = helpers.exec_capture
-local exec_lua = helpers.exec_lua
-local feed = helpers.feed
+local api = n.api
+local clear = n.clear
+local eq = t.eq
+local exec_capture = n.exec_capture
+local exec_lua = n.exec_lua
+local feed = n.feed
 
 -- Reference text
 -- aa
@@ -300,27 +301,34 @@ describe('commenting', function()
       eq(get_lines(), { 'aa', '', '  ', '\t', 'aa' })
     end)
 
-    it('matches comment parts strictly when detecting comment/uncomment', function()
+    it('correctly matches comment parts during checking and uncommenting', function()
       local validate = function(from, to, ref_lines)
-        set_lines({ '#aa', '# aa', '#  aa' })
+        set_lines({ '/*aa*/', '/* aa */', '/*  aa  */' })
         toggle_lines(from, to)
         eq(get_lines(), ref_lines)
       end
 
-      set_commentstring('#%s')
-      validate(1, 3, { 'aa', ' aa', '  aa' })
-      validate(2, 3, { '#aa', ' aa', '  aa' })
-      validate(3, 3, { '#aa', '# aa', '  aa' })
+      -- Should first try to match 'commentstring' parts exactly with their
+      -- whitespace, with fallback on trimmed parts
+      set_commentstring('/*%s*/')
+      validate(1, 3, { 'aa', ' aa ', '  aa  ' })
+      validate(2, 3, { '/*aa*/', ' aa ', '  aa  ' })
+      validate(3, 3, { '/*aa*/', '/* aa */', '  aa  ' })
 
-      set_commentstring('# %s')
-      validate(1, 3, { '# #aa', '# # aa', '# #  aa' })
-      validate(2, 3, { '#aa', 'aa', ' aa' })
-      validate(3, 3, { '#aa', '# aa', ' aa' })
+      set_commentstring('/* %s */')
+      validate(1, 3, { 'aa', 'aa', ' aa ' })
+      validate(2, 3, { '/*aa*/', 'aa', ' aa ' })
+      validate(3, 3, { '/*aa*/', '/* aa */', ' aa ' })
 
-      set_commentstring('#  %s')
-      validate(1, 3, { '#  #aa', '#  # aa', '#  #  aa' })
-      validate(2, 3, { '#aa', '#  # aa', '#  #  aa' })
-      validate(3, 3, { '#aa', '# aa', 'aa' })
+      set_commentstring('/*  %s  */')
+      validate(1, 3, { 'aa', ' aa ', 'aa' })
+      validate(2, 3, { '/*aa*/', ' aa ', 'aa' })
+      validate(3, 3, { '/*aa*/', '/* aa */', 'aa' })
+
+      set_commentstring(' /*%s*/ ')
+      validate(1, 3, { 'aa', ' aa ', '  aa  ' })
+      validate(2, 3, { '/*aa*/', ' aa ', '  aa  ' })
+      validate(3, 3, { '/*aa*/', '/* aa */', '  aa  ' })
     end)
 
     it('uncomments on inconsistent indent levels', function()
@@ -495,22 +503,21 @@ describe('commenting', function()
     it("recomputes local 'commentstring' based on cursor position", function()
       setup_treesitter()
       local lines = {
+        '  print(1)',
         'lua << EOF',
         '  print(1)',
         'EOF',
       }
       set_lines(lines)
 
-      -- Vimscript's tree-sitter grammar is (currently) written in a way that Lua's
-      -- injection really starts at the first non-blank character
-      set_cursor(2, 1)
+      set_cursor(1, 1)
       feed('gc_')
-      eq(get_lines()[2], '  "print(1)')
+      eq(get_lines()[1], '  "print(1)')
 
       set_lines(lines)
-      set_cursor(2, 2)
+      set_cursor(3, 2)
       feed('.')
-      eq(get_lines()[2], '  -- print(1)')
+      eq(get_lines()[3], '  -- print(1)')
     end)
 
     it('preserves marks', function()

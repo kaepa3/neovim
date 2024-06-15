@@ -1,11 +1,13 @@
 -- Test argument list commands
 
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear, command, eq = helpers.clear, helpers.command, helpers.eq
-local expect_exit = helpers.expect_exit
-local feed = helpers.feed
-local pcall_err = helpers.pcall_err
+
+local clear, command, eq = n.clear, n.command, t.eq
+local expect_exit = n.expect_exit
+local feed = n.feed
+local pcall_err = t.pcall_err
 
 describe('argument list commands', function()
   before_each(clear)

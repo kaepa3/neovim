@@ -1,18 +1,20 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local assert_alive = helpers.assert_alive
-local clear, poke_eventloop = helpers.clear, helpers.poke_eventloop
-local testprg, source, eq = helpers.testprg, helpers.source, helpers.eq
-local feed = helpers.feed
-local feed_command, eval = helpers.feed_command, helpers.eval
-local fn = helpers.fn
-local api = helpers.api
-local retry = helpers.retry
-local ok = helpers.ok
-local command = helpers.command
-local skip = helpers.skip
-local is_os = helpers.is_os
-local is_ci = helpers.is_ci
+
+local assert_alive = n.assert_alive
+local clear, poke_eventloop = n.clear, n.poke_eventloop
+local testprg, source, eq = n.testprg, n.source, t.eq
+local feed = n.feed
+local feed_command, eval = n.feed_command, n.eval
+local fn = n.fn
+local api = n.api
+local retry = t.retry
+local ok = t.ok
+local command = n.command
+local skip = t.skip
+local is_os = t.is_os
+local is_ci = t.is_ci
 
 describe(':terminal', function()
   local screen

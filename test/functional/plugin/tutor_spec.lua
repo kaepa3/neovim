@@ -1,9 +1,11 @@
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local helpers = require('test.functional.helpers')(after_each)
-local clear = helpers.clear
-local command = helpers.command
-local feed = helpers.feed
-local is_os = helpers.is_os
+
+local clear = n.clear
+local command = n.command
+local feed = n.feed
+local is_os = t.is_os
 
 describe(':Tutor', function()
   local screen --- @type test.functional.ui.screen

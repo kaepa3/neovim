@@ -1,11 +1,12 @@
 -- Test for linebreak and list option in utf-8 mode
 
-local helpers = require('test.functional.helpers')(after_each)
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local source = helpers.source
-local feed = helpers.feed
-local exec = helpers.exec
-local clear, expect = helpers.clear, helpers.expect
+
+local source = n.source
+local feed = n.feed
+local exec = n.exec
+local clear, expect = n.clear, n.expect
 
 describe('linebreak', function()
   before_each(clear)

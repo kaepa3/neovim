@@ -120,8 +120,9 @@ function M.dir(path, opts)
     skip = { opts.skip, { 'function' }, true },
   })
 
+  path = M.normalize(path)
   if not opts.depth or opts.depth == 1 then
-    local fs = vim.uv.fs_scandir(M.normalize(path))
+    local fs = vim.uv.fs_scandir(path)
     return function()
       if not fs then
         return
@@ -137,7 +138,7 @@ function M.dir(path, opts)
       --- @type string, integer
       local dir0, level = unpack(table.remove(dirs, 1))
       local dir = level == 1 and dir0 or M.joinpath(path, dir0)
-      local fs = vim.uv.fs_scandir(M.normalize(dir))
+      local fs = vim.uv.fs_scandir(dir)
       while fs do
         local name, t = vim.uv.fs_scandir_next(fs)
         if not name then
@@ -197,13 +198,6 @@ end
 --- Examples:
 ---
 --- ```lua
---- -- location of Cargo.toml from the current buffer's path
---- local cargo = vim.fs.find('Cargo.toml', {
----   upward = true,
----   stop = vim.uv.os_homedir(),
----   path = vim.fs.dirname(vim.api.nvim_buf_get_name(0)),
---- })
----
 --- -- list all test directories under the runtime directory
 --- local test_dirs = vim.fs.find(
 ---   {'test', 'tst', 'testdir'},
@@ -334,30 +328,204 @@ function M.find(names, opts)
   return matches
 end
 
+--- Find the first parent directory containing a specific "marker", relative to a file path or
+--- buffer.
+---
+--- If the buffer is unnamed (has no backing file) or has a non-empty 'buftype' then the search
+--- begins from Nvim's |current-directory|.
+---
+--- Example:
+---
+--- ```lua
+--- -- Find the root of a Python project, starting from file 'main.py'
+--- vim.fs.root(vim.fs.joinpath(vim.env.PWD, 'main.py'), {'pyproject.toml', 'setup.py' })
+---
+--- -- Find the root of a git repository
+--- vim.fs.root(0, '.git')
+---
+--- -- Find the parent directory containing any file with a .csproj extension
+--- vim.fs.root(0, function(name, path)
+---   return name:match('%.csproj$') ~= nil
+--- end)
+--- ```
+---
+--- @param source integer|string Buffer number (0 for current buffer) or file path (absolute or
+---               relative to the |current-directory|) to begin the search from.
+--- @param marker (string|string[]|fun(name: string, path: string): boolean) A marker, or list
+---               of markers, to search for. If a function, the function is called for each
+---               evaluated item and should return true if {name} and {path} are a match.
+--- @return string? # Directory path containing one of the given markers, or nil if no directory was
+---                   found.
+function M.root(source, marker)
+  assert(source, 'missing required argument: source')
+  assert(marker, 'missing required argument: marker')
+
+  local path ---@type string
+  if type(source) == 'string' then
+    path = source
+  elseif type(source) == 'number' then
+    if vim.bo[source].buftype ~= '' then
+      path = assert(vim.uv.cwd())
+    else
+      path = vim.api.nvim_buf_get_name(source)
+    end
+  else
+    error('invalid type for argument "source": expected string or buffer number')
+  end
+
+  local paths = M.find(marker, {
+    upward = true,
+    path = vim.fn.fnamemodify(path, ':p:h'),
+  })
+
+  if #paths == 0 then
+    return nil
+  end
+
+  return vim.fs.dirname(paths[1])
+end
+
+--- Split a Windows path into a prefix and a body, such that the body can be processed like a POSIX
+--- path. The path must use forward slashes as path separator.
+---
+--- Does not check if the path is a valid Windows path. Invalid paths will give invalid results.
+---
+--- Examples:
+--- - `//./C:/foo/bar` -> `//./C:`, `/foo/bar`
+--- - `//?/UNC/server/share/foo/bar` -> `//?/UNC/server/share`, `/foo/bar`
+--- - `//./system07/C$/foo/bar` -> `//./system07`, `/C$/foo/bar`
+--- - `C:/foo/bar` -> `C:`, `/foo/bar`
+--- - `C:foo/bar` -> `C:`, `foo/bar`
+---
+--- @param path string Path to split.
+--- @return string, string, boolean : prefix, body, whether path is invalid.
+local function split_windows_path(path)
+  local prefix = ''
+
+  --- Match pattern. If there is a match, move the matched pattern from the path to the prefix.
+  --- Returns the matched pattern.
+  ---
+  --- @param pattern string Pattern to match.
+  --- @return string|nil Matched pattern
+  local function match_to_prefix(pattern)
+    local match = path:match(pattern)
+
+    if match then
+      prefix = prefix .. match --[[ @as string ]]
+      path = path:sub(#match + 1)
+    end
+
+    return match
+  end
+
+  local function process_unc_path()
+    return match_to_prefix('[^/]+/+[^/]+/+')
+  end
+
+  if match_to_prefix('^//[?.]/') then
+    -- Device paths
+    local device = match_to_prefix('[^/]+/+')
+
+    -- Return early if device pattern doesn't match, or if device is UNC and it's not a valid path
+    if not device or (device:match('^UNC/+$') and not process_unc_path()) then
+      return prefix, path, false
+    end
+  elseif match_to_prefix('^//') then
+    -- Process UNC path, return early if it's invalid
+    if not process_unc_path() then
+      return prefix, path, false
+    end
+  elseif path:match('^%w:') then
+    -- Drive paths
+    prefix, path = path:sub(1, 2), path:sub(3)
+  end
+
+  -- If there are slashes at the end of the prefix, move them to the start of the body. This is to
+  -- ensure that the body is treated as an absolute path. For paths like C:foo/bar, there are no
+  -- slashes at the end of the prefix, so it will be treated as a relative path, as it should be.
+  local trailing_slash = prefix:match('/+$')
+
+  if trailing_slash then
+    prefix = prefix:sub(1, -1 - #trailing_slash)
+    path = trailing_slash .. path --[[ @as string ]]
+  end
+
+  return prefix, path, true
+end
+
+--- Resolve `.` and `..` components in a POSIX-style path. This also removes extraneous slashes.
+--- `..` is not resolved if the path is relative and resolving it requires the path to be absolute.
+--- If a relative path resolves to the current directory, an empty string is returned.
+---
+--- @see M.normalize()
+--- @param path string Path to resolve.
+--- @return string Resolved path.
+local function path_resolve_dot(path)
+  local is_path_absolute = vim.startswith(path, '/')
+  local new_path_components = {}
+
+  for component in vim.gsplit(path, '/') do
+    if component == '.' or component == '' then -- luacheck: ignore 542
+      -- Skip `.` components and empty components
+    elseif component == '..' then
+      if #new_path_components > 0 and new_path_components[#new_path_components] ~= '..' then
+        -- For `..`, remove the last component if we're still inside the current directory, except
+        -- when the last component is `..` itself
+        table.remove(new_path_components)
+      elseif is_path_absolute then -- luacheck: ignore 542
+        -- Reached the root directory in absolute path, do nothing
+      else
+        -- Reached current directory in relative path, add `..` to the path
+        table.insert(new_path_components, component)
+      end
+    else
+      table.insert(new_path_components, component)
+    end
+  end
+
+  return (is_path_absolute and '/' or '') .. table.concat(new_path_components, '/')
+end
+
 --- @class vim.fs.normalize.Opts
 --- @inlinedoc
 ---
 --- Expand environment variables.
 --- (default: `true`)
---- @field expand_env boolean
+--- @field expand_env? boolean
+---
+--- @field package _fast? boolean
+---
+--- Path is a Windows path.
+--- (default: `true` in Windows, `false` otherwise)
+--- @field win? boolean
 
---- Normalize a path to a standard format. A tilde (~) character at the
---- beginning of the path is expanded to the user's home directory and
---- environment variables are also expanded.
+--- Normalize a path to a standard format. A tilde (~) character at the beginning of the path is
+--- expanded to the user's home directory and environment variables are also expanded. "." and ".."
+--- components are also resolved, except when the path is relative and trying to resolve it would
+--- result in an absolute path.
+--- - "." as the only part in a relative path:
+---   - "." => "."
+---   - "././" => "."
+--- - ".." when it leads outside the current directory
+---   - "foo/../../bar" => "../bar"
+---   - "../../foo" => "../../foo"
+--- - ".." in the root directory returns the root directory.
+---   - "/../../" => "/"
 ---
 --- On Windows, backslash (\) characters are converted to forward slashes (/).
 ---
 --- Examples:
----
 --- ```lua
---- vim.fs.normalize('C:\\\\Users\\\\jdoe')
---- -- On Windows: 'C:/Users/jdoe'
----
---- vim.fs.normalize('~/src/neovim')
---- -- '/home/jdoe/src/neovim'
----
---- vim.fs.normalize('$XDG_CONFIG_HOME/nvim/init.vim')
---- -- '/Users/jdoe/.config/nvim/init.vim'
+--- [[C:\Users\jdoe]]                         => "C:/Users/jdoe"
+--- "~/src/neovim"                            => "/home/jdoe/src/neovim"
+--- "$XDG_CONFIG_HOME/nvim/init.vim"          => "/Users/jdoe/.config/nvim/init.vim"
+--- "~/src/nvim/api/../tui/./tui.c"           => "/home/jdoe/src/nvim/tui/tui.c"
+--- "./foo/bar"                               => "foo/bar"
+--- "foo/../../../bar"                        => "../../bar"
+--- "/home/jdoe/../../../bar"                 => "/bar"
+--- "C:foo/../../baz"                         => "C:../baz"
+--- "C:/foo/../../baz"                        => "C:/baz"
+--- [[\\?\UNC\server\share\foo\..\..\..\bar]] => "//?/UNC/server/share/bar"
 --- ```
 ---
 ---@param path (string) Path to normalize
@@ -366,15 +534,26 @@ end
 function M.normalize(path, opts)
   opts = opts or {}
 
-  vim.validate({
-    path = { path, { 'string' } },
-    expand_env = { opts.expand_env, { 'boolean' }, true },
-  })
+  if not opts._fast then
+    vim.validate({
+      path = { path, { 'string' } },
+      expand_env = { opts.expand_env, { 'boolean' }, true },
+      win = { opts.win, { 'boolean' }, true },
+    })
+  end
+
+  local win = opts.win == nil and iswin or not not opts.win
+  local os_sep_local = win and '\\' or '/'
+
+  -- Empty path is already normalized
+  if path == '' then
+    return ''
+  end
 
   -- Expand ~ to users home directory
   if vim.startswith(path, '~') then
     local home = vim.uv.os_homedir() or '~'
-    if home:sub(-1) == os_sep then
+    if home:sub(-1) == os_sep_local then
       home = home:sub(1, -2)
     end
     path = home .. path:sub(2)
@@ -385,25 +564,47 @@ function M.normalize(path, opts)
     path = path:gsub('%$([%w_]+)', vim.uv.os_getenv)
   end
 
-  -- Convert path separator to `/`
-  path = path:gsub(os_sep, '/')
-
-  -- Don't modify leading double slash as those have implementation-defined behavior according to
-  -- POSIX. They are also valid UNC paths. Three or more leading slashes are however collapsed to
-  -- a single slash.
-  if vim.startswith(path, '//') and not vim.startswith(path, '///') then
-    path = '/' .. path:gsub('/+', '/')
-  else
-    path = path:gsub('/+', '/')
+  if win then
+    -- Convert path separator to `/`
+    path = path:gsub(os_sep_local, '/')
   end
 
-  -- Ensure last slash is not truncated from root drive on Windows
-  if iswin and path:match('^%w:/$') then
-    return path
+  -- Check for double slashes at the start of the path because they have special meaning
+  local double_slash = false
+  if not opts._fast then
+    double_slash = vim.startswith(path, '//') and not vim.startswith(path, '///')
   end
 
-  -- Remove trailing slashes
-  path = path:gsub('(.)/$', '%1')
+  local prefix = ''
+
+  if win then
+    local is_valid --- @type boolean
+    -- Split Windows paths into prefix and body to make processing easier
+    prefix, path, is_valid = split_windows_path(path)
+
+    -- If path is not valid, return it as-is
+    if not is_valid then
+      return prefix .. path
+    end
+
+    -- Remove extraneous slashes from the prefix
+    prefix = prefix:gsub('/+', '/')
+  end
+
+  if not opts._fast then
+    -- Resolve `.` and `..` components and remove extraneous slashes from path, then recombine prefix
+    -- and path.
+    path = path_resolve_dot(path)
+  end
+
+  -- Preserve leading double slashes as they indicate UNC paths and DOS device paths in
+  -- Windows and have implementation-defined behavior in POSIX.
+  path = (double_slash and '/' or '') .. prefix .. path
+
+  -- Change empty path to `.`
+  if path == '' then
+    path = '.'
+  end
 
   return path
 end

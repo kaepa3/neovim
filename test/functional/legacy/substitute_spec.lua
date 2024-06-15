@@ -2,12 +2,14 @@
 -- Test for submatch() on substitute().
 -- Test for *:s%* on :substitute.
 
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local feed, insert = helpers.feed, helpers.insert
-local exec = helpers.exec
-local clear, feed_command, expect = helpers.clear, helpers.feed_command, helpers.expect
-local eq, eval = helpers.eq, helpers.eval
+
+local feed, insert = n.feed, n.insert
+local exec = n.exec
+local clear, feed_command, expect = n.clear, n.feed_command, n.expect
+local eq, eval = t.eq, n.eval
 
 describe('substitute()', function()
   before_each(clear)

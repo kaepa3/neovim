@@ -1,24 +1,25 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
 
-local assert_visible = helpers.assert_visible
-local assert_alive = helpers.assert_alive
-local dedent = helpers.dedent
-local eq = helpers.eq
-local neq = helpers.neq
-local eval = helpers.eval
-local feed = helpers.feed
-local clear = helpers.clear
-local matches = helpers.matches
-local api = helpers.api
-local pcall_err = helpers.pcall_err
-local fn = helpers.fn
-local expect = helpers.expect
-local command = helpers.command
-local exc_exec = helpers.exc_exec
-local exec_lua = helpers.exec_lua
-local retry = helpers.retry
-local source = helpers.source
+local assert_visible = n.assert_visible
+local assert_alive = n.assert_alive
+local dedent = t.dedent
+local eq = t.eq
+local neq = t.neq
+local eval = n.eval
+local feed = n.feed
+local clear = n.clear
+local matches = t.matches
+local api = n.api
+local pcall_err = t.pcall_err
+local fn = n.fn
+local expect = n.expect
+local command = n.command
+local exc_exec = n.exc_exec
+local exec_lua = n.exec_lua
+local retry = t.retry
+local source = n.source
 
 describe('autocmd', function()
   before_each(clear)

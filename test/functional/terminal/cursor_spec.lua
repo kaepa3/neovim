@@ -1,26 +1,28 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local thelpers = require('test.functional.terminal.helpers')
-local feed, clear = helpers.feed, helpers.clear
-local testprg, command = helpers.testprg, helpers.command
-local eq, eval = helpers.eq, helpers.eval
-local matches = helpers.matches
-local poke_eventloop = helpers.poke_eventloop
-local hide_cursor = thelpers.hide_cursor
-local show_cursor = thelpers.show_cursor
-local is_os = helpers.is_os
-local skip = helpers.skip
+local tt = require('test.functional.terminal.testutil')
+
+local feed, clear = n.feed, n.clear
+local testprg, command = n.testprg, n.command
+local eq, eval = t.eq, n.eval
+local matches = t.matches
+local poke_eventloop = n.poke_eventloop
+local hide_cursor = tt.hide_cursor
+local show_cursor = tt.show_cursor
+local is_os = t.is_os
+local skip = t.skip
 
 describe(':terminal cursor', function()
   local screen
 
   before_each(function()
     clear()
-    screen = thelpers.screen_setup()
+    screen = tt.screen_setup()
   end)
 
   it('moves the screen cursor when focused', function()
-    thelpers.feed_data('testing cursor')
+    tt.feed_data('testing cursor')
     screen:expect([[
       tty ready                                         |
       testing cursor{1: }                                   |
@@ -66,7 +68,7 @@ describe(':terminal cursor', function()
         :set number                                       |
       ]])
       feed('i')
-      helpers.poke_eventloop()
+      n.poke_eventloop()
       screen:expect([[
         {7:  1 }tty ready                                     |
         {7:  2 }rows: 6, cols: 46                             |
@@ -152,7 +154,7 @@ describe('buffer cursor position is correct in terminal without number column', 
   local screen
 
   local function setup_ex_register(str)
-    screen = thelpers.setup_child_nvim({
+    screen = tt.setup_child_nvim({
       '-u',
       'NONE',
       '-i',
@@ -469,7 +471,7 @@ describe('buffer cursor position is correct in terminal with number column', fun
   local screen
 
   local function setup_ex_register(str)
-    screen = thelpers.setup_child_nvim({
+    screen = tt.setup_child_nvim({
       '-u',
       'NONE',
       '-i',

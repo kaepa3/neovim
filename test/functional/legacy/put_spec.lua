@@ -1,10 +1,12 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear = helpers.clear
-local exec_lua = helpers.exec_lua
-local api = helpers.api
-local source = helpers.source
-local eq = helpers.eq
+
+local clear = n.clear
+local exec_lua = n.exec_lua
+local api = n.api
+local source = n.source
+local eq = t.eq
 
 local function sizeoflong()
   if not exec_lua('return pcall(require, "ffi")') then

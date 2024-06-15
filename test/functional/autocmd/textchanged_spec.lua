@@ -1,13 +1,15 @@
-local helpers = require('test.functional.helpers')(after_each)
-local clear = helpers.clear
-local exec = helpers.exec
-local command = helpers.command
-local feed = helpers.feed
-local eq = helpers.eq
-local neq = helpers.neq
-local eval = helpers.eval
-local poke_eventloop = helpers.poke_eventloop
-local write_file = helpers.write_file
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
+local clear = n.clear
+local exec = n.exec
+local command = n.command
+local feed = n.feed
+local eq = t.eq
+local neq = t.neq
+local eval = n.eval
+local poke_eventloop = n.poke_eventloop
+local write_file = t.write_file
 
 -- oldtest: Test_ChangedP()
 it('TextChangedI and TextChangedP autocommands', function()

@@ -1,10 +1,11 @@
-local helpers = require('test.functional.helpers')(after_each)
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear = helpers.clear
-local exec = helpers.exec
-local exec_lua = helpers.exec_lua
-local command = helpers.command
-local feed = helpers.feed
+
+local clear = n.clear
+local exec = n.exec
+local exec_lua = n.exec_lua
+local command = n.command
+local feed = n.feed
 
 -- oldtest: Test_window_cmd_ls0_split_scrolling()
 it('scrolling with laststatus=0 and :botright split', function()

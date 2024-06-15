@@ -1,9 +1,11 @@
-local helpers = require('test.functional.helpers')(after_each)
-local eq, command, fn = helpers.eq, helpers.command, helpers.fn
-local ok = helpers.ok
-local matches = helpers.matches
-local clear = helpers.clear
-local feed = helpers.feed
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
+
+local eq, command, fn = t.eq, n.command, n.fn
+local ok = t.ok
+local matches = t.matches
+local clear = n.clear
+local feed = n.feed
 
 describe(':edit', function()
   before_each(function()

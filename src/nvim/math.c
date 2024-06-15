@@ -1,14 +1,16 @@
 // uncrustify:off
 #include <math.h>
 // uncrustify:on
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 
-#ifdef _MSC_VER
+#ifdef HAVE_BITSCANFORWARD64
 # include <intrin.h>  // Required for _BitScanForward64
 #endif
 
 #include "nvim/math.h"
+#include "nvim/vim_defs.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "math.c.generated.h"
@@ -73,4 +75,34 @@ int xctz(uint64_t x)
 
   return count;
 #endif
+}
+
+/// Count number of set bits in bit field.
+unsigned xpopcount(uint64_t x)
+{
+  // Use compiler builtin if possible.
+#if defined(__NetBSD__)
+  return popcount64(x);
+#elif defined(__clang__) || defined(__GNUC__)
+  return (unsigned)__builtin_popcountll(x);
+#else
+  unsigned count = 0;
+  for (; x != 0; x >>= 1) {
+    if (x & 1) {
+      count++;
+    }
+  }
+  return count;
+#endif
+}
+
+/// For overflow detection, add a digit safely to an int value.
+int vim_append_digit_int(int *value, int digit)
+{
+  int x = *value;
+  if (x > ((INT_MAX - digit) / 10)) {
+    return FAIL;
+  }
+  *value = x * 10 + digit;
+  return OK;
 }

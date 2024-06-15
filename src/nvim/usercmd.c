@@ -580,7 +580,7 @@ static void uc_list(char *name, size_t name_len)
         IObuff[len++] = ' ';
       } while ((int64_t)len < 25 - over);
 
-      IObuff[len] = '\0';
+      IObuff[len] = NUL;
       msg_outtrans(IObuff, 0);
 
       if (cmd->uc_luaref != LUA_NOREF) {
@@ -831,7 +831,7 @@ invalid_count:
       }
     } else {
       char ch = attr[len];
-      attr[len] = '\0';
+      attr[len] = NUL;
       semsg(_("E181: Invalid attribute: %s"), attr);
       attr[len] = ch;
       return FAIL;
@@ -1274,9 +1274,9 @@ static size_t add_cmd_modifier(char *buf, char *mod_str, bool *multi_mods)
 
   if (buf != NULL) {
     if (*multi_mods) {
-      STRCAT(buf, " ");
+      strcat(buf, " ");
     }
-    STRCAT(buf, mod_str);
+    strcat(buf, mod_str);
   }
 
   *multi_mods = true;
@@ -1364,7 +1364,7 @@ size_t uc_mods(char *buf, const cmdmod_T *cmod, bool quote)
     if (quote) {
       *buf++ = '"';
     }
-    *buf = '\0';
+    *buf = NUL;
   }
 
   // the modifiers that are simple flags
@@ -1724,7 +1724,7 @@ int do_ucmd(exarg_T *eap, bool preview)
     save_current_sctx = current_sctx;
     current_sctx.sc_sid = cmd->uc_script_ctx.sc_sid;
   }
-  do_cmdline(buf, eap->getline, eap->cookie,
+  do_cmdline(buf, eap->ea_getline, eap->cookie,
              DOCMD_VERBOSE|DOCMD_NOWAIT|DOCMD_KEYTYPED);
 
   // Careful: Do not use "cmd" here, it may have become invalid if a user

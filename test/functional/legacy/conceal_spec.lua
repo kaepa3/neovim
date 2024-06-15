@@ -1,13 +1,15 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local clear = helpers.clear
-local command = helpers.command
-local exec = helpers.exec
-local feed = helpers.feed
-local api = helpers.api
+
+local clear = n.clear
+local command = n.command
+local exec = n.exec
+local feed = n.feed
+local api = n.api
 
 local expect_pos = function(row, col)
-  return helpers.eq({ row, col }, helpers.eval('[screenrow(), screencol()]'))
+  return t.eq({ row, col }, n.eval('[screenrow(), screencol()]'))
 end
 
 describe('Conceal', function()

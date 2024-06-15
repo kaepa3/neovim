@@ -1,25 +1,27 @@
-local helpers = require('test.functional.helpers')(after_each)
+local t = require('test.testutil')
+local n = require('test.functional.testnvim')()
 local Screen = require('test.functional.ui.screen')
-local thelpers = require('test.functional.terminal.helpers')
-local assert_alive = helpers.assert_alive
-local feed, clear = helpers.feed, helpers.clear
-local poke_eventloop = helpers.poke_eventloop
-local nvim_prog = helpers.nvim_prog
-local eval, feed_command, source = helpers.eval, helpers.feed_command, helpers.source
-local pcall_err = helpers.pcall_err
-local eq, neq = helpers.eq, helpers.neq
-local api = helpers.api
-local retry = helpers.retry
-local testprg = helpers.testprg
-local write_file = helpers.write_file
-local command = helpers.command
-local exc_exec = helpers.exc_exec
-local matches = helpers.matches
-local exec_lua = helpers.exec_lua
+local tt = require('test.functional.terminal.testutil')
+
+local assert_alive = n.assert_alive
+local feed, clear = n.feed, n.clear
+local poke_eventloop = n.poke_eventloop
+local nvim_prog = n.nvim_prog
+local eval, feed_command, source = n.eval, n.feed_command, n.source
+local pcall_err = t.pcall_err
+local eq, neq = t.eq, t.neq
+local api = n.api
+local retry = t.retry
+local testprg = n.testprg
+local write_file = t.write_file
+local command = n.command
+local exc_exec = n.exc_exec
+local matches = t.matches
+local exec_lua = n.exec_lua
 local sleep = vim.uv.sleep
-local fn = helpers.fn
-local is_os = helpers.is_os
-local skip = helpers.skip
+local fn = n.fn
+local is_os = t.is_os
+local skip = t.skip
 
 describe(':terminal buffer', function()
   local screen
@@ -27,7 +29,7 @@ describe(':terminal buffer', function()
   before_each(function()
     clear()
     command('set modifiable swapfile undolevels=20')
-    screen = thelpers.screen_setup()
+    screen = tt.screen_setup()
   end)
 
   it('terminal-mode forces various options', function()
@@ -197,7 +199,7 @@ describe(':terminal buffer', function()
       {5:==========                                        }|
       rows: 2, cols: 50                                 |
       {2: }                                                 |
-      {1:==========                                        }|
+      {18:==========                                        }|
                                                         |
     ]])
 
@@ -266,7 +268,7 @@ describe(':terminal buffer', function()
   it('does not segfault when pasting empty register #13955', function()
     feed('<c-\\><c-n>')
     feed_command('put a') -- register a is empty
-    helpers.assert_alive()
+    n.assert_alive()
   end)
 
   it([[can use temporary normal mode <c-\><c-o>]], function()
@@ -338,7 +340,7 @@ describe(':terminal buffer', function()
     eq(termbuf, eval('g:termbuf'))
   end)
 
-  it('TermReqeust synchronization #27572', function()
+  it('TermRequest synchronization #27572', function()
     command('autocmd! nvim_terminal TermRequest')
     local term = exec_lua([[
       _G.input = {}
@@ -473,7 +475,7 @@ end)
 describe('terminal input', function()
   it('sends various special keys with modifiers', function()
     clear()
-    local screen = thelpers.setup_child_nvim({
+    local screen = tt.setup_child_nvim({
       '-u',
       'NONE',
       '-i',
@@ -482,18 +484,16 @@ describe('terminal input', function()
       'colorscheme vim',
       '--cmd',
       'set notermguicolors',
-      '--cmd',
-      'startinsert',
+      '-c',
+      'while 1 | redraw | echo keytrans(getcharstr()) | endwhile',
     })
-    screen:expect {
-      grid = [[
+    screen:expect([[
       {1: }                                                 |
       {4:~                                                 }|*3
-      {5:[No Name]                       0,1            All}|
-      {3:-- INSERT --}                                      |
+      {5:[No Name]                       0,0-1          All}|
+                                                        |
       {3:-- TERMINAL --}                                    |
-    ]],
-    }
+    ]])
     for _, key in ipairs({
       '<M-Tab>',
       '<M-CR>',
@@ -543,10 +543,14 @@ describe('terminal input', function()
       '<ScrollWheelLeft>',
       '<ScrollWheelRight>',
     }) do
-      feed('<CR><C-V>' .. key)
-      retry(nil, nil, function()
-        eq(key, api.nvim_get_current_line())
-      end)
+      feed(key)
+      screen:expect(([[
+                                                          |
+        {4:~                                                 }|*3
+        {5:[No Name]                       0,0-1          All}|
+        %s{1: }{MATCH: *}|
+        {3:-- TERMINAL --}                                    |
+      ]]):format(key))
     end
   end)
 end)
@@ -560,7 +564,7 @@ if is_os('win') then
       feed_command('set modifiable swapfile undolevels=20')
       poke_eventloop()
       local cmd = { 'cmd.exe', '/K', 'PROMPT=$g$s' }
-      screen = thelpers.screen_setup(nil, cmd)
+      screen = tt.screen_setup(nil, cmd)
     end)
 
     it('"put" operator sends data normally', function()
