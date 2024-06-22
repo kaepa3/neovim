@@ -4876,6 +4876,9 @@ return {
         between tabs and spaces and for trailing blanks. Further changed by
         the 'listchars' option.
 
+        When 'listchars' does not contain "tab" field, tabs are shown as "^I"
+        or "<09>", like how unprintable characters are displayed.
+
         The cursor is displayed at the start of the space a Tab character
         occupies, not at the end as usual in Normal mode.  To get this cursor
         position while displaying Tabs with spaces, use: >vim
@@ -8037,8 +8040,7 @@ return {
         Some of the items from the 'statusline' format are different for
         'statuscolumn':
 
-        %l	line number of currently drawn line
-        %r	relative line number of currently drawn line
+        %l	line number column for currently drawn line
         %s	sign column for currently drawn line
         %C	fold column for currently drawn line
 
@@ -8065,11 +8067,8 @@ return {
         handler should be written with this in mind.
 
         Examples: >vim
-        	" Relative number with bar separator and click handlers:
-        	set statuscolumn=%@SignCb@%s%=%T%@NumCb@%r│%T
-
-        	" Right aligned relative cursor line number:
-        	let &stc='%=%{v:relnum?v:relnum:v:lnum} '
+        	" Line number with bar separator and click handlers:
+        	set statuscolumn=%@SignCb@%s%=%T%@NumCb@%l│%T
 
         	" Line numbers in hexadecimal for non wrapped part of lines:
         	let &stc='%=%{v:virtnum>0?"":printf("%x",v:lnum)} '
