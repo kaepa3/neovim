@@ -2028,17 +2028,17 @@ garbagecollect([{atexit}])                                    *garbagecollect()*
 		it's safe to perform.  This is when waiting for the user to
 		type a character.
 
-get({list}, {idx} [, {default}])                                         *get()*
+get({list}, {idx} [, {default}])                              *get()* *get()-list*
 		Get item {idx} from |List| {list}.  When this item is not
 		available return {default}.  Return zero when {default} is
 		omitted.
 
-get({blob}, {idx} [, {default}])
+get({blob}, {idx} [, {default}])                                    *get()-blob*
 		Get byte {idx} from |Blob| {blob}.  When this byte is not
 		available return {default}.  Return -1 when {default} is
 		omitted.
 
-get({dict}, {key} [, {default}])
+get({dict}, {key} [, {default}])                                    *get()-dict*
 		Get item with key {key} from |Dictionary| {dict}.  When this
 		item is not available return {default}.  Return zero when
 		{default} is omitted.  Useful example: >vim
@@ -2046,13 +2046,26 @@ get({dict}, {key} [, {default}])
 <		This gets the value of g:var_name if it exists, and uses
 		"default" when it does not exist.
 
-get({func}, {what})
-		Get item {what} from Funcref {func}.  Possible values for
+get({func}, {what})                                                 *get()-func*
+		Get item {what} from |Funcref| {func}.  Possible values for
 		{what} are:
-			"name"	The function name
-			"func"	The function
-			"dict"	The dictionary
-			"args"	The list with arguments
+		  "name"    The function name
+		  "func"    The function
+		  "dict"    The dictionary
+		  "args"    The list with arguments
+		  "arity"   A dictionary with information about the number of
+			    arguments accepted by the function (minus the
+			    {arglist}) with the following fields:
+				required    the number of positional arguments
+				optional    the number of optional arguments,
+					    in addition to the required ones
+				varargs     |TRUE| if the function accepts a
+					    variable number of arguments |...|
+
+				Note: There is no error, if the {arglist} of
+				the Funcref contains more arguments than the
+				Funcref expects, it's not validated.
+
 		Returns zero on error.
 
 getbufinfo([{buf}])                                               *getbufinfo()*
@@ -2399,6 +2412,7 @@ getcompletion({pat}, {type} [, {filtered}])                    *getcompletion()*
 		customlist,{func} custom completion, defined via {func}
 		diff_buffer	|:diffget| and |:diffput| completion
 		dir		directory names
+		dir_in_path	directory names in |'cdpath'|
 		environment	environment variable names
 		event		autocommand events
 		expression	Vim expression
@@ -7063,6 +7077,7 @@ sign_define({list})
 		   icon		full path to the bitmap file for the sign.
 		   linehl	highlight group used for the whole line the
 				sign is placed in.
+		   priority	default priority value of the sign
 		   numhl	highlight group used for the line number where
 				the sign is placed.
 		   text		text that is displayed when there is no icon
@@ -7110,6 +7125,7 @@ sign_getdefined([{name}])                                    *sign_getdefined()*
 		   linehl	highlight group used for the whole line the
 				sign is placed in; not present if not set.
 		   name		name of the sign
+		   priority	default priority value of the sign
 		   numhl	highlight group used for the line number where
 				the sign is placed; not present if not set.
 		   text		text that is displayed when there is no icon
@@ -7282,7 +7298,8 @@ sign_placelist({list})                                        *sign_placelist()*
 		    priority	Priority of the sign. When multiple signs are
 				placed on a line, the sign with the highest
 				priority is used. If not specified, the
-				default value of 10 is used. See
+				default value of 10 is used, unless specified
+				otherwise by the sign definition. See
 				|sign-priority| for more information.
 
 		If {id} refers to an existing sign, then the existing sign is

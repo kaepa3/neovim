@@ -3551,8 +3551,11 @@ vim.go.js = vim.go.joinspaces
 --- 		|alternate-file` or using `mark-motions` try to
 --- 		restore the `mark-view` in which the action occurred.
 ---
+---   unload        Remove unloaded buffers from the jumplist.
+--- 		EXPERIMENTAL: this flag may change in the future.
+---
 --- @type string
-vim.o.jumpoptions = ""
+vim.o.jumpoptions = "unload"
 vim.o.jop = vim.o.jumpoptions
 vim.go.jumpoptions = vim.o.jumpoptions
 vim.go.jop = vim.go.jumpoptions
@@ -4546,6 +4549,20 @@ vim.go.mouset = vim.go.mousetime
 --- 	    (without "unsigned" it would become "9-2019").
 --- 	    Using CTRL-X on "0" or CTRL-A on "18446744073709551615"
 --- 	    (2^64 - 1) has no effect, overflow is prevented.
+--- blank	If included, treat numbers as signed or unsigned based on
+--- 	preceding whitespace. If a number with a leading dash has its
+--- 	dash immediately preceded by a non-whitespace character (i.e.,
+--- 	not a tab or a " "), the negative sign won't be considered as
+--- 	part of the number.  For example:
+--- 	    Using CTRL-A on "14" in "Carbon-14" results in "Carbon-15"
+--- 	    (without "blank" it would become "Carbon-13").
+--- 	    Using CTRL-X on "8" in "Carbon -8" results in "Carbon -9"
+--- 	    (because -8 is preceded by whitespace. If "unsigned" was
+--- 	    set, it would result in "Carbon -7").
+--- 	If this format is included, overflow is prevented as if
+--- 	"unsigned" were set. If both this format and "unsigned" are
+--- 	included, "unsigned" will take precedence.
+---
 --- Numbers which simply begin with a digit in the range 1-9 are always
 --- considered decimal.  This also happens for numbers that are not
 --- recognized as octal or hex.
@@ -6819,6 +6836,22 @@ vim.o.syntax = ""
 vim.o.syn = vim.o.syntax
 vim.bo.syntax = vim.o.syntax
 vim.bo.syn = vim.bo.syntax
+
+--- This option controls the behavior when closing tab pages (e.g., using
+--- `:tabclose`).  When empty Vim goes to the next (right) tab page.
+---
+--- Possible values (comma-separated list):
+---    left		If included, go to the previous tab page instead of
+--- 		the next one.
+---    uselast	If included, go to the previously used tab page if
+--- 		possible.  This option takes precedence over the
+--- 		others.
+---
+--- @type string
+vim.o.tabclose = ""
+vim.o.tcl = vim.o.tabclose
+vim.go.tabclose = vim.o.tabclose
+vim.go.tcl = vim.go.tabclose
 
 --- When non-empty, this option determines the content of the tab pages
 --- line at the top of the Vim window.  When empty Vim will use a default

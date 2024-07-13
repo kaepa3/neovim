@@ -3141,6 +3141,7 @@ M.funcs = {
     name = 'get',
     params = { { 'list', 'any[]' }, { 'idx', 'integer' }, { 'default', 'any' } },
     signature = 'get({list}, {idx} [, {default}])',
+    tags = { 'get()-list' },
   },
   get__1 = {
     args = { 2, 3 },
@@ -3153,6 +3154,7 @@ M.funcs = {
     name = 'get',
     params = { { 'blob', 'string' }, { 'idx', 'integer' }, { 'default', 'any' } },
     signature = 'get({blob}, {idx} [, {default}])',
+    tags = { 'get()-blob' },
   },
   get__2 = {
     args = { 2, 3 },
@@ -3168,23 +3170,38 @@ M.funcs = {
     name = 'get',
     params = { { 'dict', 'table<string,any>' }, { 'key', 'string' }, { 'default', 'any' } },
     signature = 'get({dict}, {key} [, {default}])',
+    tags = { 'get()-dict' },
   },
   get__3 = {
     args = { 2, 3 },
     base = 1,
     desc = [=[
-      Get item {what} from Funcref {func}.  Possible values for
+      Get item {what} from |Funcref| {func}.  Possible values for
       {what} are:
-      	"name"	The function name
-      	"func"	The function
-      	"dict"	The dictionary
-      	"args"	The list with arguments
+        "name"    The function name
+        "func"    The function
+        "dict"    The dictionary
+        "args"    The list with arguments
+        "arity"   A dictionary with information about the number of
+      	    arguments accepted by the function (minus the
+      	    {arglist}) with the following fields:
+      		required    the number of positional arguments
+      		optional    the number of optional arguments,
+      			    in addition to the required ones
+      		varargs     |TRUE| if the function accepts a
+      			    variable number of arguments |...|
+
+      		Note: There is no error, if the {arglist} of
+      		the Funcref contains more arguments than the
+      		Funcref expects, it's not validated.
+
       Returns zero on error.
     ]=],
     name = 'get',
     params = { { 'func', 'function' }, { 'what', 'string' } },
     returns = 'any',
     signature = 'get({func}, {what})',
+    tags = { 'get()-func' },
   },
   getbufinfo = {
     args = { 0, 1 },
@@ -3655,6 +3672,7 @@ M.funcs = {
       customlist,{func} custom completion, defined via {func}
       diff_buffer	|:diffget| and |:diffput| completion
       dir		directory names
+      dir_in_path	directory names in |'cdpath'|
       environment	environment variable names
       event		autocommand events
       expression	Vim expression
@@ -10057,6 +10075,7 @@ M.funcs = {
          icon		full path to the bitmap file for the sign.
          linehl	highlight group used for the whole line the
       		sign is placed in.
+         priority	default priority value of the sign
          numhl	highlight group used for the line number where
       		the sign is placed.
          text		text that is displayed when there is no icon
@@ -10112,6 +10131,7 @@ M.funcs = {
          linehl	highlight group used for the whole line the
       		sign is placed in; not present if not set.
          name		name of the sign
+         priority	default priority value of the sign
          numhl	highlight group used for the line number where
       		the sign is placed; not present if not set.
          text		text that is displayed when there is no icon
@@ -10322,7 +10342,8 @@ M.funcs = {
           priority	Priority of the sign. When multiple signs are
       		placed on a line, the sign with the highest
       		priority is used. If not specified, the
-      		default value of 10 is used. See
+      		default value of 10 is used, unless specified
+      		otherwise by the sign definition. See
       		|sign-priority| for more information.
 
       If {id} refers to an existing sign, then the existing sign is
