@@ -301,6 +301,7 @@ func s:GetFilenameChecks() abort
     \ 'gnash': ['gnashrc', '.gnashrc', 'gnashpluginrc', '.gnashpluginrc'],
     \ 'gnuplot': ['file.gpi', '.gnuplot', 'file.gnuplot', '.gnuplot_history'],
     \ 'go': ['file.go'],
+    \ 'goaccess': ['goaccess.conf'],
     \ 'gomod': ['go.mod'],
     \ 'gosum': ['go.sum', 'go.work.sum'],
     \ 'gowork': ['go.work'],
@@ -862,6 +863,8 @@ func s:GetFilenameChecks() abort
     \ 'z8a': ['file.z8a'],
     \ 'zathurarc': ['zathurarc'],
     \ 'zig': ['file.zig', 'build.zig.zon'],
+    \ 'ziggy': ['file.ziggy'],
+    \ 'ziggy_schema': ['file.ziggy-schema'],
     \ 'zimbu': ['file.zu'],
     \ 'zimbutempl': ['file.zut'],
     \ 'zserio': ['file.zs'],
@@ -1596,6 +1599,38 @@ func Test_html_file()
   call writefile(content, 'Xfile.html', 'D')
   split Xfile.html
   call assert_equal('htmldjango', &filetype)
+  bwipe!
+
+  " Super html layout
+  let content = ['<extend template="base.shtml">',
+        \ '<title id="title" var="$page.title"></title>',
+        \ '<head id="head"></head>',
+        \ '<div id="content">',
+        \ '</div>']
+  call writefile(content, 'Xfile.shtml', 'D')
+  split Xfile.shtml
+  call assert_equal('superhtml', &filetype)
+  bwipe!
+
+  " Super html template
+  let content = ['<!DOCTYPE html>',
+        \ '<html>',
+        \ '  <head id="head">',
+        \ '    <title id="title">',
+        \ '      <super>',
+        \ '      suffix',
+        \ '    </title>',
+        \ '    <super>',
+        \ '  </head>',
+        \ '  <body>',
+        \ '    <div id="content">',
+        \ '      <super>',
+        \ '    </div>',
+        \ '  </body>',
+        \ '</html>']
+  call writefile(content, 'Xfile.shtml', 'D')
+  split Xfile.shtml
+  call assert_equal('superhtml', &filetype)
   bwipe!
 
   " regular HTML
@@ -2637,6 +2672,23 @@ func Test_pl_file()
   call writefile(['%data = (1, 2, 3);'], 'Xfile.pl', 'D')
   split Xfile.pl
   call assert_equal('perl', &filetype)
+
+  filetype off
+endfunc
+
+func Test_make_file()
+  filetype on
+
+  " Microsoft Makefile
+  call writefile(['# Makefile for Windows', '!if "$(VIMDLL)" == "yes"'], 'XMakefile.mak', 'D')
+  split XMakefile.mak
+  call assert_equal(1, get(b:, 'make_microsoft', 0))
+  bwipe!
+
+  call writefile(['# get the list of tests', 'include testdir/Make_all.mak'], 'XMakefile.mak', 'D')
+  split XMakefile.mak
+  call assert_equal(0, get(b:, 'make_microsoft', 0))
+  bwipe!
 
   filetype off
 endfunc
