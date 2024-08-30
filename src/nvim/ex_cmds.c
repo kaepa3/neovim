@@ -204,7 +204,7 @@ void do_ascii(exarg_T *eap)
       IObuff[iobuff_len++] = ' ';
     }
     IObuff[iobuff_len++] = '<';
-    if (utf_iscomposing(c)) {
+    if (utf_iscomposing_first(c)) {
       IObuff[iobuff_len++] = ' ';  // Draw composing char on top of a space.
     }
     iobuff_len += (size_t)utf_char2bytes(c, IObuff + iobuff_len);
@@ -3378,12 +3378,12 @@ static int do_sub(exarg_T *eap, const proftime_T timeout, const int cmdpreview_n
       which_pat = RE_LAST;                  // use last used regexp
       delimiter = (uint8_t)(*cmd++);                   // remember delimiter character
       pat = cmd;                            // remember start of search pat
-      patlen = strlen(pat);
       cmd = skip_regexp_ex(cmd, delimiter, magic_isset(), &eap->arg, NULL, NULL);
       if (cmd[0] == delimiter) {            // end delimiter found
         *cmd++ = NUL;                       // replace it with a NUL
         has_second_delim = true;
       }
+      patlen = strlen(pat);
     }
 
     // Small incompatibility: vi sees '\n' as end of the command, but in

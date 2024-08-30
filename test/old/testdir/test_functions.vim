@@ -810,6 +810,10 @@ func Test_mode()
   call feedkeys("gQ\<Insert>\<F2>vi\<CR>", 'xt')
   call assert_equal("c-cvr", g:current_modes)
 
+  " Commandline mode in Visual mode should return "c-c", never "v-v".
+  call feedkeys("v\<Cmd>call input('')\<CR>\<F2>\<CR>\<Esc>", 'xt')
+  call assert_equal("c-c", g:current_modes)
+
   " Executing commands in Vim Ex mode should return "cv", never "cvr",
   " as Cmdline editing has already ended.
   call feedkeys("gQcall Save_mode()\<CR>vi\<CR>", 'xt')
@@ -3659,7 +3663,7 @@ func Test_string_reverse()
     call assert_equal('', reverse(v:_null_string))
     for [s1, s2] in [['', ''], ['a', 'a'], ['ab', 'ba'], ['abc', 'cba'],
                    \ ['abcd', 'dcba'], ['«-«-»-»', '»-»-«-«'],
-                   \ ['🇦', '🇦'], ['🇦🇧', '🇧🇦'], ['🇦🇧🇨', '🇨🇧🇦'],
+                   \ ['🇦', '🇦'], ['🇦🇧', '🇦🇧'], ['🇦🇧🇨', '🇨🇦🇧'],
                    \ ['🇦«🇧-🇨»🇩', '🇩»🇨-🇧«🇦']]
       call assert_equal(s2, reverse(s1))
     endfor
