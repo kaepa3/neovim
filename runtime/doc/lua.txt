@@ -67,7 +67,7 @@ See https://luajit.org/ext_profiler.html or the `p.lua` source for details: >
 ==============================================================================
 LUA CONCEPTS AND IDIOMS                                         *lua-concepts*
 
-Lua is very simple: this means that, while there are some quirks, once you
+Lua is very simple, and _consistent_: while there are some quirks, once you
 internalize those quirks, everything works the same everywhere. Scopes
 (closures) in particular are very consistent, unlike JavaScript or most other
 languages.
@@ -85,6 +85,36 @@ https://www.lua.org/doc/cacm2018.pdf
 - Stackful coroutines enable cooperative multithreading, generators, and
   versatile control for both Lua and its host (Nvim).
 
+                                                          *lua-error-handling*
+Lua functions may throw |lua-errors| for exceptional (unexpected) failures,
+which you can handle with |pcall()|.
+                                                       *lua-result-or-message*
+When failure is normal and expected, it's idiomatic to return `nil` which
+signals to the caller that failure is not "exceptional" and must be handled.
+This "result-or-message" pattern is expressed as the multi-value return type
+`any|nil,nil|string`, or in LuaLS notation: >
+
+    ---@return any|nil    # result on success, nil on failure.
+    ---@return nil|string # nil on success, error message on failure.
+<
+Examples of the "result-or-message" pattern:
+- |vim.ui.open()|
+- |io.open()|
+- |luv-error-handling|
+
+When a caller can't proceed on failure, it's idiomatic to `assert()` the
+"result-or-message" result: >lua
+
+    local value = assert(fn())
+
+Guidance: use the "result-or-message" pattern for...
+- Functions where failure is expected, especially when communicating with the
+  external world. E.g. HTTP requests or LSP requests often fail because of
+  server problems, even if the caller did everything right.
+- Functions that return a value, e.g. Foo:new().
+- When there is a list of known error codes which can be returned as a third
+  value (like |luv-error-handling|).
+<
                                                                     *iterator*
 An iterator is just a function that can be called repeatedly to get the "next"
 value of a collection (or any other |iterable|). This interface is expected by
@@ -352,16 +382,14 @@ Example: >vim
 <
                                                          *lua-table-ambiguous*
 Lua tables are used as both dictionaries and lists, so it is impossible to
-determine whether empty table is meant to be empty list or empty dictionary.
-Additionally Lua does not have integer numbers. To distinguish between these
-cases there is the following agreement:
+decide whether empty table is a list or a dict. Also Lua does not have integer
+numbers. To disambiguate these cases, we define:
                                                                     *lua-list*
-0. Empty table is empty list.
-1. Table with N consecutive integer indices starting from 1 and ending with
-   N is considered a list. See also |list-iterator|.
+0. Empty table is a list. Use |vim.empty_dict()| to represent empty dict.
+1. Table with N consecutive (no `nil` values, aka "holes") integer keys 1…N is
+   a list. See also |list-iterator|.
                                                                     *lua-dict*
-2. Table with string keys, none of which contains NUL byte, is considered to
-   be a dictionary.
+2. Table with string keys, none of which contains NUL byte, is a dict.
 3. Table with string keys, at least one of which contains NUL byte, is also
    considered to be a dictionary, but this time it is converted to
    a |msgpack-special-map|.
@@ -1668,8 +1696,11 @@ vim.on_key({fn}, {ns_id})                                       *vim.on_key()*
         callbacks if on_key() is called without arguments.
 
 vim.paste({lines}, {phase})                                      *vim.paste()*
-    Paste handler, invoked by |nvim_paste()| when a conforming UI (such as the
-    |TUI|) pastes text into the editor.
+    Paste handler, invoked by |nvim_paste()|.
+
+    Note: This is provided only as a "hook", don't call it directly; call
+    |nvim_paste()| instead, which arranges redo (dot-repeat) and invokes
+    `vim.paste`.
 
     Example: To remove ANSI color codes when pasting: >lua
         vim.paste = (function(overridden)
@@ -2232,6 +2263,12 @@ vim.tbl_count({t})                                           *vim.tbl_count()*
 vim.tbl_deep_extend({behavior}, {...})                 *vim.tbl_deep_extend()*
     Merges recursively two or more tables.
 
+    Only values that are empty tables or tables that are not |lua-list|s
+    (indexed by consecutive integers starting from 1) are merged recursively.
+    This is useful for merging nested tables like default and user
+    configurations where lists should be treated as literals (i.e., are
+    overwritten instead of merged).
+
     Parameters: ~
       • {behavior}  (`'error'|'keep'|'force'`) Decides what to do if a key is
                     found in more than one map:
@@ -2555,7 +2592,7 @@ vim.ui.input({opts}, {on_confirm})                            *vim.ui.input()*
                       typed (it might be an empty string if nothing was
                       entered), or `nil` if the user aborted the dialog.
 
-vim.ui.open({path})                                            *vim.ui.open()*
+vim.ui.open({path}, {opt})                                     *vim.ui.open()*
     Opens `path` with the system default handler (macOS `open`, Windows
     `explorer.exe`, Linux `xdg-open`, …), or returns (but does not show) an
     error message on failure.
@@ -2566,6 +2603,8 @@ vim.ui.open({path})                                            *vim.ui.open()*
         -- Asynchronous.
         vim.ui.open("https://neovim.io/")
         vim.ui.open("~/path/to/file")
+        -- Use the "osurl" command to handle the path or URL.
+        vim.ui.open("gh#neovim/neovim!29490", { cmd = { 'osurl' } })
         -- Synchronous (wait until the process exits).
         local cmd, err = vim.ui.open("$VIMRUNTIME")
         if cmd then
@@ -2575,6 +2614,8 @@ vim.ui.open({path})                                            *vim.ui.open()*
 
     Parameters: ~
       • {path}  (`string`) Path or URL to open
+      • {opt}   (`{ cmd?: string[] }?`) Options
+                • cmd string[]|nil Command used to open the path or URL.
 
     Return (multiple): ~
         (`vim.SystemObj?`) Command object, or nil if not found.
@@ -2806,24 +2847,24 @@ vim.keymap.del({modes}, {lhs}, {opts})                      *vim.keymap.del()*
       • |vim.keymap.set()|
 
 vim.keymap.set({mode}, {lhs}, {rhs}, {opts})                *vim.keymap.set()*
-    Adds a new |mapping|. Examples: >lua
-        -- Map to a Lua function:
-        vim.keymap.set('n', 'lhs', function() print("real lua function") end)
-        -- Map to multiple modes:
-        vim.keymap.set({'n', 'v'}, '<leader>lr', vim.lsp.buf.references, { buffer = true })
-        -- Buffer-local mapping:
-        vim.keymap.set('n', '<leader>w', "<cmd>w<cr>", { silent = true, buffer = 5 })
-        -- Expr mapping:
+    Defines a |mapping| of |keycodes| to a function or keycodes.
+
+    Examples: >lua
+        -- Map "x" to a Lua function:
+        vim.keymap.set('n', 'x', function() print("real lua function") end)
+        -- Map "<leader>x" to multiple modes for the current buffer:
+        vim.keymap.set({'n', 'v'}, '<leader>x', vim.lsp.buf.references, { buffer = true })
+        -- Map <Tab> to an expression (|:map-<expr>|):
         vim.keymap.set('i', '<Tab>', function()
           return vim.fn.pumvisible() == 1 and "<C-n>" or "<Tab>"
         end, { expr = true })
-        -- <Plug> mapping:
+        -- Map "[%%" to a <Plug> mapping:
         vim.keymap.set('n', '[%%', '<Plug>(MatchitNormalMultiBackward)')
 <
 
     Parameters: ~
-      • {mode}  (`string|string[]`) Mode short-name, see |nvim_set_keymap()|.
-                Can also be list of modes to create mapping on multiple modes.
+      • {mode}  (`string|string[]`) Mode "short-name" (see
+                |nvim_set_keymap()|), or a list thereof.
       • {lhs}   (`string`) Left-hand side |{lhs}| of the mapping.
       • {rhs}   (`string|function`) Right-hand side |{rhs}| of the mapping,
                 can be a Lua function.
@@ -3012,6 +3053,16 @@ vim.fs.parents({start})                                     *vim.fs.parents()*
         (`fun(_, dir: string): string?`) Iterator
         (`nil`)
         (`string?`)
+
+vim.fs.rm({path}, {opts})                                        *vim.fs.rm()*
+    Remove files or directories
+
+    Parameters: ~
+      • {path}  (`string`) Path to remove
+      • {opts}  (`table?`) A table with the following fields:
+                • {recursive}? (`boolean`) Remove directories and their
+                  contents recursively
+                • {force}? (`boolean`) Ignore nonexistent files and arguments
 
 vim.fs.root({source}, {marker})                                *vim.fs.root()*
     Find the first parent directory containing a specific "marker", relative
@@ -3839,10 +3890,12 @@ argument into an *Iter* object with methods (such as |Iter:filter()| and
 chained to create iterator "pipelines": the output of each pipeline stage is
 input to the next stage. The first stage depends on the type passed to
 `vim.iter()`:
-• List tables (arrays, |lua-list|) yield only the value of each element.
-  • Holes (nil values) are allowed.
+• Lists or arrays (|lua-list|) yield only the value of each element.
+  • Holes (nil values) are allowed (but discarded).
+  • Use pairs() to treat array/list tables as dicts (preserve holes and
+    non-contiguous integer keys): `vim.iter(pairs(…))`.
   • Use |Iter:enumerate()| to also pass the index to the next stage.
-  • Or initialize with ipairs(): `vim.iter(ipairs(…))`.
+    • Or initialize with ipairs(): `vim.iter(ipairs(…))`.
 • Non-list tables (|lua-dict|) yield both the key and value of each element.
 • Function |iterator|s yield all values returned by the underlying function.
 • Tables with a |__call()| metamethod are treated as function iterators.

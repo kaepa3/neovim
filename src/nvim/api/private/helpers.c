@@ -198,7 +198,7 @@ dictitem_T *dict_check_writable(dict_T *dict, String key, bool del, Error *err)
       api_set_error(err, kErrorTypeException, "Key is fixed: %s", key.data);
     }
   } else if (dict->dv_lock) {
-    api_set_error(err, kErrorTypeException, "Dictionary is locked");
+    api_set_error(err, kErrorTypeException, "Dict is locked");
   } else if (key.size == 0) {
     api_set_error(err, kErrorTypeValidation, "Key name is empty");
   } else if (key.size > INT_MAX) {
@@ -528,21 +528,15 @@ String buf_get_text(buf_T *buf, int64_t lnum, int64_t start_col, int64_t end_col
   start_col = start_col < 0 ? line_length + start_col + 1 : start_col;
   end_col = end_col < 0 ? line_length + end_col + 1 : end_col;
 
-  if (start_col >= MAXCOL || end_col >= MAXCOL) {
-    api_set_error(err, kErrorTypeValidation, "Column index is too high");
-    return rv;
-  }
+  start_col = MIN(MAX(0, start_col), line_length);
+  end_col = MIN(MAX(0, end_col), line_length);
 
   if (start_col > end_col) {
-    api_set_error(err, kErrorTypeValidation, "start_col must be less than end_col");
+    api_set_error(err, kErrorTypeValidation, "start_col must be less than or equal to end_col");
     return rv;
   }
 
-  if (start_col >= line_length) {
-    return rv;
-  }
-
-  return cstrn_as_string(&bufstr[start_col], (size_t)(end_col - start_col));
+  return cbuf_as_string(bufstr + start_col, (size_t)(end_col - start_col));
 }
 
 void api_free_string(String value)
@@ -557,9 +551,9 @@ Array arena_array(Arena *arena, size_t max_size)
   return arr;
 }
 
-Dictionary arena_dict(Arena *arena, size_t max_size)
+Dict arena_dict(Arena *arena, size_t max_size)
 {
-  Dictionary dict = ARRAY_DICT_INIT;
+  Dict dict = ARRAY_DICT_INIT;
   kv_fixsize_arena(arena, dict, max_size);
   return dict;
 }
@@ -602,8 +596,8 @@ void api_free_object(Object value)
     api_free_array(value.data.array);
     break;
 
-  case kObjectTypeDictionary:
-    api_free_dictionary(value.data.dictionary);
+  case kObjectTypeDict:
+    api_free_dict(value.data.dict);
     break;
 
   case kObjectTypeLuaRef:
@@ -621,7 +615,7 @@ void api_free_array(Array value)
   xfree(value.items);
 }
 
-void api_free_dictionary(Dictionary value)
+void api_free_dict(Dict value)
 {
   for (size_t i = 0; i < value.size; i++) {
     api_free_string(value.items[i].key);
@@ -654,7 +648,7 @@ Object api_metadata(void)
     Arena arena = ARENA_EMPTY;
     Error err = ERROR_INIT;
     metadata = unpack((char *)packed_api_metadata, sizeof(packed_api_metadata), &arena, &err);
-    if (ERROR_SET(&err) || metadata.type != kObjectTypeDictionary) {
+    if (ERROR_SET(&err) || metadata.type != kObjectTypeDict) {
       abort();
     }
     mem_for_metadata = arena_finish(&arena);
@@ -690,9 +684,9 @@ Array copy_array(Array array, Arena *arena)
   return rv;
 }
 
-Dictionary copy_dictionary(Dictionary dict, Arena *arena)
+Dict copy_dict(Dict dict, Arena *arena)
 {
-  Dictionary rv = arena_dict(arena, dict.size);
+  Dict rv = arena_dict(arena, dict.size);
   for (size_t i = 0; i < dict.size; i++) {
     KeyValuePair item = dict.items[i];
     PUT_C(rv, copy_string(item.key, arena).data, copy_object(item.value, arena));
@@ -719,8 +713,8 @@ Object copy_object(Object obj, Arena *arena)
   case kObjectTypeArray:
     return ARRAY_OBJ(copy_array(obj.data.array, arena));
 
-  case kObjectTypeDictionary:
-    return DICTIONARY_OBJ(copy_dictionary(obj.data.dictionary, arena));
+  case kObjectTypeDict:
+    return DICT_OBJ(copy_dict(obj.data.dict, arena));
 
   case kObjectTypeLuaRef:
     return LUAREF_OBJ(api_new_luaref(obj.data.luaref));
@@ -797,7 +791,7 @@ char *api_typename(ObjectType t)
     return "String";
   case kObjectTypeArray:
     return "Array";
-  case kObjectTypeDictionary:
+  case kObjectTypeDict:
     return "Dict";
   case kObjectTypeLuaRef:
     return "Function";
@@ -850,7 +844,7 @@ free_exit:
 }
 
 // see also nlua_pop_keydict for the lua specific implementation
-bool api_dict_to_keydict(void *retval, FieldHashfn hashy, Dictionary dict, Error *err)
+bool api_dict_to_keydict(void *retval, FieldHashfn hashy, Dict dict, Error *err)
 {
   for (size_t i = 0; i < dict.size; i++) {
     String k = dict.items[i].key;
@@ -914,13 +908,13 @@ bool api_dict_to_keydict(void *retval, FieldHashfn hashy, Dictionary dict, Error
         return false;
       });
       *(Array *)mem = value->data.array;
-    } else if (field->type == kObjectTypeDictionary) {
-      Dictionary *val = (Dictionary *)mem;
+    } else if (field->type == kObjectTypeDict) {
+      Dict *val = (Dict *)mem;
       // allow empty array as empty dict for lua (directly or via lua-client RPC)
       if (value->type == kObjectTypeArray && value->data.array.size == 0) {
-        *val = (Dictionary)ARRAY_DICT_INIT;
-      } else if (value->type == kObjectTypeDictionary) {
-        *val = value->data.dictionary;
+        *val = (Dict)ARRAY_DICT_INIT;
+      } else if (value->type == kObjectTypeDict) {
+        *val = value->data.dict;
       } else {
         api_err_exp(err, field->str, api_typename((ObjectType)field->type),
                     api_typename(value->type));
@@ -947,9 +941,9 @@ bool api_dict_to_keydict(void *retval, FieldHashfn hashy, Dictionary dict, Error
   return true;
 }
 
-Dictionary api_keydict_to_dict(void *value, KeySetLink *table, size_t max_size, Arena *arena)
+Dict api_keydict_to_dict(void *value, KeySetLink *table, size_t max_size, Arena *arena)
 {
-  Dictionary rv = arena_dict(arena, max_size);
+  Dict rv = arena_dict(arena, max_size);
   for (size_t i = 0; table[i].str; i++) {
     KeySetLink *field = &table[i];
     bool is_set = true;
@@ -977,8 +971,8 @@ Dictionary api_keydict_to_dict(void *value, KeySetLink *table, size_t max_size, 
       val = STRING_OBJ(*(String *)mem);
     } else if (field->type == kObjectTypeArray) {
       val = ARRAY_OBJ(*(Array *)mem);
-    } else if (field->type == kObjectTypeDictionary) {
-      val = DICTIONARY_OBJ(*(Dictionary *)mem);
+    } else if (field->type == kObjectTypeDict) {
+      val = DICT_OBJ(*(Dict *)mem);
     } else if (field->type == kObjectTypeBuffer || field->type == kObjectTypeWindow
                || field->type == kObjectTypeTabpage) {
       val.data.integer = *(handle_T *)mem;
@@ -1008,8 +1002,8 @@ void api_luarefs_free_object(Object value)
     api_luarefs_free_array(value.data.array);
     break;
 
-  case kObjectTypeDictionary:
-    api_luarefs_free_dict(value.data.dictionary);
+  case kObjectTypeDict:
+    api_luarefs_free_dict(value.data.dict);
     break;
 
   default:
@@ -1025,8 +1019,8 @@ void api_luarefs_free_keydict(void *dict, KeySetLink *table)
       api_luarefs_free_object(*(Object *)mem);
     } else if (table[i].type == kObjectTypeLuaRef) {
       api_free_luaref(*(LuaRef *)mem);
-    } else if (table[i].type == kObjectTypeDictionary) {
-      api_luarefs_free_dict(*(Dictionary *)mem);
+    } else if (table[i].type == kObjectTypeDict) {
+      api_luarefs_free_dict(*(Dict *)mem);
     }
   }
 }
@@ -1038,7 +1032,7 @@ void api_luarefs_free_array(Array value)
   }
 }
 
-void api_luarefs_free_dict(Dictionary value)
+void api_luarefs_free_dict(Dict value)
 {
   for (size_t i = 0; i < value.size; i++) {
     api_luarefs_free_object(value.items[i].value);

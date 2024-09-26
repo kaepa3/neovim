@@ -3,7 +3,7 @@ local log = require('vim.lsp.log')
 local protocol = require('vim.lsp.protocol')
 local validate, schedule, schedule_wrap = vim.validate, vim.schedule, vim.schedule_wrap
 
-local is_win = uv.os_uname().version:find('Windows')
+local is_win = vim.fn.has('win32') == 1
 
 --- Checks whether a given path exists and is a directory.
 ---@param filename string path to check
@@ -703,7 +703,9 @@ function M.connect(host_or_path, port)
     if port == nil then
       handle:connect(host_or_path, on_connect)
     else
-      handle:connect(host_or_path, port, on_connect)
+      local info = uv.getaddrinfo(host_or_path, nil)
+      local resolved_host = info and info[1] and info[1].addr or host_or_path
+      handle:connect(resolved_host, port, on_connect)
     end
 
     return public_client(client)

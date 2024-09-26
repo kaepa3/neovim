@@ -147,7 +147,7 @@ CharSize charsize_regular(CharsizeArg *csarg, char *const cur, colnr_T const vco
     size = kInvalidByteCells;
   } else {
     size = ptr2cells(cur);
-    is_doublewidth = size == 2 && cur_char > 0x80;
+    is_doublewidth = size == 2 && cur_char >= 0x80;
   }
 
   if (csarg->virt_row >= 0) {
@@ -516,7 +516,7 @@ static int virt_text_cursor_off(const CharsizeArg *csarg, bool on_NUL)
 void getvcol(win_T *wp, pos_T *pos, colnr_T *start, colnr_T *cursor, colnr_T *end)
 {
   char *const line = ml_get_buf(wp->w_buffer, pos->lnum);  // start of the line
-  int const end_col = pos->col;
+  colnr_T const end_col = pos->col;
 
   CharsizeArg csarg;
   bool on_NUL = false;
@@ -558,6 +558,10 @@ void getvcol(win_T *wp, pos_T *pos, colnr_T *start, colnr_T *cursor, colnr_T *en
       ci = next;
       vcol += char_size.width;
     }
+  }
+
+  if (*ci.ptr == NUL && end_col < MAXCOL && end_col > ci.ptr - line) {
+    pos->col = (colnr_T)(ci.ptr - line);
   }
 
   int head = char_size.head;

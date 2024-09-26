@@ -20,6 +20,8 @@
 --- @field signature? string
 --- @field desc? string
 --- @field params [string, string, string][]
+--- @field notes? string[]
+--- @field see? string[]
 --- @field lua? false Do not render type information
 --- @field tags? string[] Extra tags
 --- @field data? string Used by gen_eval.lua
@@ -3592,8 +3594,8 @@ M.funcs = {
       Only works when the command line is being edited, thus
       requires use of |c_CTRL-\_e| or |c_CTRL-R_=|.
       See |:command-completion| for the return string.
-      Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()| and
-      |setcmdline()|.
+      Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()|,
+      |getcmdprompt()| and |setcmdline()|.
       Returns an empty string when completion is not defined.
     ]=],
     name = 'getcmdcompltype',
@@ -3603,13 +3605,13 @@ M.funcs = {
   },
   getcmdline = {
     desc = [=[
-      Return the current command-line.  Only works when the command
-      line is being edited, thus requires use of |c_CTRL-\_e| or
-      |c_CTRL-R_=|.
+      Return the current command-line input.  Only works when the
+      command line is being edited, thus requires use of
+      |c_CTRL-\_e| or |c_CTRL-R_=|.
       Example: >vim
       	cmap <F7> <C-\>eescape(getcmdline(), ' \')<CR>
-      <Also see |getcmdtype()|, |getcmdpos()|, |setcmdpos()| and
-      |setcmdline()|.
+      <Also see |getcmdtype()|, |getcmdpos()|, |setcmdpos()|,
+      |getcmdprompt()| and |setcmdline()|.
       Returns an empty string when entering a password or using
       |inputsecret()|.
     ]=],
@@ -3625,13 +3627,27 @@ M.funcs = {
       Only works when editing the command line, thus requires use of
       |c_CTRL-\_e| or |c_CTRL-R_=| or an expression mapping.
       Returns 0 otherwise.
-      Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()| and
-      |setcmdline()|.
+      Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()|,
+      |getcmdprompt()| and |setcmdline()|.
     ]=],
     name = 'getcmdpos',
     params = {},
     returns = 'integer',
     signature = 'getcmdpos()',
+  },
+  getcmdprompt = {
+    desc = [=[
+      Return the current command-line prompt when using functions
+      like |input()| or |confirm()|.
+      Only works when the command line is being edited, thus
+      requires use of |c_CTRL-\_e| or |c_CTRL-R_=|.
+      Also see |getcmdtype()|, |getcmdline()|, |getcmdpos()|,
+      |setcmdpos()| and |setcmdline()|.
+    ]=],
+    name = 'getcmdprompt',
+    params = {},
+    returns = 'string',
+    signature = 'getcmdprompt()',
   },
   getcmdscreenpos = {
     desc = [=[
@@ -6442,6 +6458,7 @@ M.funcs = {
         "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
       	      form, only present when it differs from "lhsraw"
         "rhs"	     The {rhs} of the mapping as typed.
+        "callback" Lua function, if RHS was defined as such.
         "silent"   1 for a |:map-silent| mapping, else 0.
         "noremap"  1 if the {rhs} of the mapping is not remappable.
         "script"   1 if mapping was defined with <script>.
@@ -8043,7 +8060,7 @@ M.funcs = {
 
     ]=],
     name = 'prompt_getprompt',
-    params = { { 'buf', 'any' } },
+    params = { { 'buf', 'integer|string' } },
     signature = 'prompt_getprompt({buf})',
   },
   prompt_setcallback = {
@@ -8083,7 +8100,7 @@ M.funcs = {
 
     ]=],
     name = 'prompt_setcallback',
-    params = { { 'buf', 'any' }, { 'expr', 'any' } },
+    params = { { 'buf', 'integer|string' }, { 'expr', 'string|function' } },
     signature = 'prompt_setcallback({buf}, {expr})',
   },
   prompt_setinterrupt = {
@@ -8100,7 +8117,7 @@ M.funcs = {
 
     ]=],
     name = 'prompt_setinterrupt',
-    params = { { 'buf', 'any' }, { 'expr', 'any' } },
+    params = { { 'buf', 'integer|string' }, { 'expr', 'string|function' } },
     signature = 'prompt_setinterrupt({buf}, {expr})',
   },
   prompt_setprompt = {
@@ -8115,7 +8132,7 @@ M.funcs = {
       <
     ]=],
     name = 'prompt_setprompt',
-    params = { { 'buf', 'any' }, { 'text', 'any' } },
+    params = { { 'buf', 'integer|string' }, { 'text', 'string' } },
     signature = 'prompt_setprompt({buf}, {text})',
   },
   pum_getpos = {
@@ -8925,6 +8942,9 @@ M.funcs = {
       {timeout} is 500 the search stops after half a second.
       The value must not be negative.  A zero value is like not
       giving the argument.
+
+      Note: the timeout is only considered when searching, not
+      while evaluating the {skip} expression.
 
       If the {skip} expression is given it is evaluated with the
       cursor positioned on the start of a match.  If it evaluates to

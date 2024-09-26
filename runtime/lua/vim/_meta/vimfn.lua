@@ -2883,20 +2883,20 @@ function vim.fn.getcharstr(expr) end
 --- Only works when the command line is being edited, thus
 --- requires use of |c_CTRL-\_e| or |c_CTRL-R_=|.
 --- See |:command-completion| for the return string.
---- Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()| and
---- |setcmdline()|.
+--- Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()|,
+--- |getcmdprompt()| and |setcmdline()|.
 --- Returns an empty string when completion is not defined.
 ---
 --- @return string
 function vim.fn.getcmdcompltype() end
 
---- Return the current command-line.  Only works when the command
---- line is being edited, thus requires use of |c_CTRL-\_e| or
---- |c_CTRL-R_=|.
+--- Return the current command-line input.  Only works when the
+--- command line is being edited, thus requires use of
+--- |c_CTRL-\_e| or |c_CTRL-R_=|.
 --- Example: >vim
 ---   cmap <F7> <C-\>eescape(getcmdline(), ' \')<CR>
---- <Also see |getcmdtype()|, |getcmdpos()|, |setcmdpos()| and
---- |setcmdline()|.
+--- <Also see |getcmdtype()|, |getcmdpos()|, |setcmdpos()|,
+--- |getcmdprompt()| and |setcmdline()|.
 --- Returns an empty string when entering a password or using
 --- |inputsecret()|.
 ---
@@ -2908,11 +2908,21 @@ function vim.fn.getcmdline() end
 --- Only works when editing the command line, thus requires use of
 --- |c_CTRL-\_e| or |c_CTRL-R_=| or an expression mapping.
 --- Returns 0 otherwise.
---- Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()| and
---- |setcmdline()|.
+--- Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()|,
+--- |getcmdprompt()| and |setcmdline()|.
 ---
 --- @return integer
 function vim.fn.getcmdpos() end
+
+--- Return the current command-line prompt when using functions
+--- like |input()| or |confirm()|.
+--- Only works when the command line is being edited, thus
+--- requires use of |c_CTRL-\_e| or |c_CTRL-R_=|.
+--- Also see |getcmdtype()|, |getcmdline()|, |getcmdpos()|,
+--- |setcmdpos()| and |setcmdline()|.
+---
+--- @return string
+function vim.fn.getcmdprompt() end
 
 --- Return the screen position of the cursor in the command line
 --- as a byte count.  The first column is 1.
@@ -5262,6 +5272,7 @@ function vim.fn.map(expr1, expr2) end
 ---   "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
 ---         form, only present when it differs from "lhsraw"
 ---   "rhs"       The {rhs} of the mapping as typed.
+---   "callback" Lua function, if RHS was defined as such.
 ---   "silent"   1 for a |:map-silent| mapping, else 0.
 ---   "noremap"  1 if the {rhs} of the mapping is not remappable.
 ---   "script"   1 if mapping was defined with <script>.
@@ -6702,7 +6713,7 @@ function vim.fn.printf(fmt, expr1) end
 --- If the buffer doesn't exist or isn't a prompt buffer, an empty
 --- string is returned.
 ---
---- @param buf any
+--- @param buf integer|string
 --- @return any
 function vim.fn.prompt_getprompt(buf) end
 
@@ -6737,8 +6748,8 @@ function vim.fn.prompt_getprompt(buf) end
 ---    endfunc
 ---    call prompt_setcallback(bufnr(), function('s:TextEntered'))
 ---
---- @param buf any
---- @param expr any
+--- @param buf integer|string
+--- @param expr string|function
 --- @return any
 function vim.fn.prompt_setcallback(buf, expr) end
 
@@ -6750,8 +6761,8 @@ function vim.fn.prompt_setcallback(buf, expr) end
 --- mode.  Without setting a callback Vim will exit Insert mode,
 --- as in any buffer.
 ---
---- @param buf any
---- @param expr any
+--- @param buf integer|string
+--- @param expr string|function
 --- @return any
 function vim.fn.prompt_setinterrupt(buf, expr) end
 
@@ -6762,8 +6773,8 @@ function vim.fn.prompt_setinterrupt(buf, expr) end
 ---   call prompt_setprompt(bufnr(''), 'command: ')
 --- <
 ---
---- @param buf any
---- @param text any
+--- @param buf integer|string
+--- @param text string
 --- @return any
 function vim.fn.prompt_setprompt(buf, text) end
 
@@ -7419,6 +7430,9 @@ function vim.fn.screenstring(row, col) end
 --- {timeout} is 500 the search stops after half a second.
 --- The value must not be negative.  A zero value is like not
 --- giving the argument.
+---
+--- Note: the timeout is only considered when searching, not
+--- while evaluating the {skip} expression.
 ---
 --- If the {skip} expression is given it is evaluated with the
 --- cursor positioned on the start of a match.  If it evaluates to
