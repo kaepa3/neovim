@@ -41,7 +41,7 @@ local function guess_query_lang(buf)
   local filename = api.nvim_buf_get_name(buf)
   if filename ~= '' then
     local resolved_filename = vim.F.npcall(vim.fn.fnamemodify, filename, ':p:h:t')
-    return resolved_filename and vim.treesitter.language.get_lang(resolved_filename) or nil
+    return resolved_filename and vim.treesitter.language.get_lang(resolved_filename)
   end
 end
 
@@ -177,7 +177,7 @@ function M.lint(buf, opts)
       is_first_lang = i == 1,
     }
 
-    local parser = assert(vim.treesitter._get_parser(buf), 'query parser not found.')
+    local parser = assert(vim.treesitter.get_parser(buf, nil, { error = false }))
     parser:parse()
     parser:for_each_tree(function(tree, ltree)
       if ltree:lang() == 'query' then
@@ -240,8 +240,12 @@ function M.omnifunc(findstart, base)
       table.insert(items, text)
     end
   end
-  for _, s in pairs(parser_info.symbols) do
-    local text = s[2] and s[1] or string.format('%q', s[1]):gsub('\n', 'n') ---@type string
+  for text, named in
+    pairs(parser_info.symbols --[[@as table<string, boolean>]])
+  do
+    if not named then
+      text = string.format('%q', text:sub(2, -2)):gsub('\n', 'n') ---@type string
+    end
     if text:find(base, 1, true) then
       table.insert(items, text)
     end

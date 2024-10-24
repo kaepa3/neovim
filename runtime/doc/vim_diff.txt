@@ -150,12 +150,18 @@ of these in your config by simply removing the mapping, e.g. ":unmap Y".
   - |grn|
   - |grr|
   - |gra|
+  - |gri|
 - <C-S> |i_CTRL-S|
 - ]d |]d-default|
 - [d |[d-default|
 - [D |[D-default|
 - ]D |]D-default|
 - <C-W>d |CTRL-W_d-default|
+- |[q|, |]q|, |[Q|, |]Q|, |[CTRL-Q|, |]CTRL-Q|
+- |[l|, |]l|, |[L|, |]L|, |[CTRL-L|, |]CTRL-L|
+- |[t|, |]t|, |[T|, |]T|, |[CTRL-T|, |]CTRL-T|
+- |[a|, |]a|, |[A|, |]A|
+- |[b|, |]b|, |[B|, |]B|
 - Nvim LSP client defaults |lsp-defaults|
   - K |K-lsp-default|
 
@@ -243,7 +249,7 @@ backwards-compatibility cost. Some examples:
 
 Some features are built in that otherwise required external plugins:
 
-- Highlighting the yanked region, see |vim.highlight|.
+- Highlighting the yanked region, see |vim.hl|.
 
 ARCHITECTURE
 
@@ -556,6 +562,9 @@ Highlight groups:
     the regexp `[a-zA-Z0-9_.@-]*` (see |group-name|).
 - |hl-StatusLineTerm| |hl-StatusLineTermNC| are implemented as 'winhighlight'
   window-local highlights which are set by the default |TermOpen| handler.
+- The |ins-completion-menu| has cascading highlight styles. |hl-PmenuSel| and
+  |hl-PmenuMatch| both inherit from |hl-Pmenu|, and |hl-PmenuMatchSel|
+  inherits highlights from both |hl-PmenuSel| and |hl-PmenuMatch|.
 
 Macro (|recording|) behavior:
 - Replay of a macro recorded during :lmap produces the same actions as when it
@@ -614,7 +623,12 @@ These legacy Vim features are not yet implemented:
 
 - *:gui*
 - *:gvim*
+- *'browsedir'* *'bsdir'*
 - *'completepopup'*
+- *'guioptions'* *'go'*
+- *'guitablabel'* *'gtl'*
+- *'guitabtooltip'* *'gtt'*
+- *'mouseshape'* *'mouses'*
 - *'previewpopup'*
 
 ==============================================================================
@@ -721,6 +735,8 @@ Options:
   CMD-v (macOS), middle-click, …).
 - *'imactivatefunc'* *'imaf'*
 - *'imactivatekey'* *'imak'*
+- *'imcmdline'* *'imc'* *'noimcmdline'* *'noimc'*
+- *'imdisable'* *'imd'* *'noimdisable'* *'noimd'*
 - *'imstatusfunc'* *'imsf'*
 - *'insertmode'* *'im'* Use the following script to emulate 'insertmode': >vim
     autocmd BufWinEnter * startinsert
@@ -758,6 +774,7 @@ Options:
     6 composing chars only.
 - *'maxmem'* Nvim delegates memory-management to the OS.
 - *'maxmemtot'* Nvim delegates memory-management to the OS.
+- *'opendevice'* *'odev'* *'noopendevice'* *'noodev'*
 - printoptions
 - *'printdevice'*
 - *'printencoding'*
@@ -792,6 +809,10 @@ Plugins:
 - logiPat
 - rrhelper
 - *vimball*
+- macmap.vim
+- tools/check_colors.vim
+- macros/{justify,matchit,shellmenu,swapmous}.vim: use `packadd! justify` etc.
+  directly
 
 Providers:
 

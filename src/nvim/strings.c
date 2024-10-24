@@ -496,6 +496,20 @@ char *vim_strchr(const char *const string, const int c)
   }
 }
 
+// Sized version of strchr that can handle embedded NULs.
+// Adjusts n to the new size.
+char *strnchr(const char *p, size_t *n, int c)
+{
+  while (*n > 0) {
+    if (*p == c) {
+      return (char *)p;
+    }
+    p++;
+    (*n)--;
+  }
+  return NULL;
+}
+
 // Sort an array of strings.
 
 static int sort_compare(const void *s1, const void *s2)
@@ -2824,10 +2838,10 @@ void f_strpart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   }
 
   if (argvars[2].v_type != VAR_UNKNOWN && argvars[3].v_type != VAR_UNKNOWN) {
-    int off;
+    int64_t off;
 
     // length in characters
-    for (off = (int)n; off < (int)slen && len > 0; len--) {
+    for (off = n; off < (int64_t)slen && len > 0; len--) {
       off += utfc_ptr2len(p + off);
     }
     len = off - n;

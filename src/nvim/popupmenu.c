@@ -480,12 +480,18 @@ static int *pum_compute_text_attrs(char *text, hlf_T hlf, int user_hlattr)
       for (int i = 0; i < ga->ga_len; i++) {
         if (char_pos == ((uint32_t *)ga->ga_data)[i]) {
           new_attr = win_hl_attr(curwin, hlf == HLF_PSI ? HLF_PMSI : HLF_PMNI);
+          new_attr = hl_combine_attr(win_hl_attr(curwin, HLF_PMNI), new_attr);
+          new_attr = hl_combine_attr(win_hl_attr(curwin, (int)hlf), new_attr);
           break;
         }
       }
     } else if (matched_start && ptr < text + leader_len) {
       new_attr = win_hl_attr(curwin, hlf == HLF_PSI ? HLF_PMSI : HLF_PMNI);
+      new_attr = hl_combine_attr(win_hl_attr(curwin, HLF_PMNI), new_attr);
+      new_attr = hl_combine_attr(win_hl_attr(curwin, (int)hlf), new_attr);
     }
+
+    new_attr = hl_combine_attr(win_hl_attr(curwin, HLF_PNI), new_attr);
 
     if (user_hlattr > 0) {
       new_attr = hl_combine_attr(new_attr, user_hlattr);
@@ -523,6 +529,27 @@ static void pum_grid_puts_with_attrs(int col, int cells, const char *text, int t
     col += utf_ptr2cells(ptr);
     ptr += char_len;
   }
+}
+
+static inline void pum_align_order(int *order)
+{
+  bool is_default = cia_flags == 0;
+  order[0] = is_default ? CPT_ABBR : cia_flags / 100;
+  order[1] = is_default ? CPT_KIND : (cia_flags / 10) % 10;
+  order[2] = is_default ? CPT_MENU : cia_flags % 10;
+}
+
+static inline char *pum_get_item(int index, int type)
+{
+  switch (type) {
+  case CPT_ABBR:
+    return pum_array[index].pum_text;
+  case CPT_KIND:
+    return pum_array[index].pum_kind;
+  case CPT_MENU:
+    return pum_array[index].pum_extra;
+  }
+  return NULL;
 }
 
 /// Redraw the popup menu, using "pum_first" and "pum_selected".
@@ -608,6 +635,7 @@ void pum_redraw(void)
     const hlf_T *const hlfs = (idx == pum_selected) ? hlfsSel : hlfsNorm;
     hlf_T hlf = hlfs[0];  // start with "word" highlight
     int attr = win_hl_attr(curwin, (int)hlf);
+    attr = hl_combine_attr(win_hl_attr(curwin, HLF_PNI), attr);
 
     grid_line_start(&pum_grid, row);
 
@@ -621,34 +649,31 @@ void pum_redraw(void)
     }
 
     // Display each entry, use two spaces for a Tab.
-    // Do this 3 times:
-    // 0 - main text
-    // 1 - kind
-    // 2 - extra info
+    // Do this 3 times and order from p_cia
     int grid_col = col_off;
     int totwidth = 0;
-
-    for (int round = 0; round < 3; round++) {
-      hlf = hlfs[round];
+    int order[3];
+    int items_width_array[3] = { pum_base_width, pum_kind_width, pum_extra_width };
+    pum_align_order(order);
+    int basic_width = items_width_array[order[0]];  // first item width
+    bool last_isabbr = order[2] == CPT_ABBR;
+    for (int j = 0; j < 3; j++) {
+      int item_type = order[j];
+      hlf = hlfs[item_type];
       attr = win_hl_attr(curwin, (int)hlf);
-      if (pum_array[idx].pum_user_hlattr > 0) {
-        attr = hl_combine_attr(attr, pum_array[idx].pum_user_hlattr);
+      int orig_attr = attr;
+      int user_abbr_hlattr = pum_array[idx].pum_user_abbr_hlattr;
+      int user_kind_hlattr = pum_array[idx].pum_user_kind_hlattr;
+      if (item_type == CPT_ABBR && user_abbr_hlattr > 0) {
+        attr = hl_combine_attr(attr, user_abbr_hlattr);
       }
-      if (round == 1 && pum_array[idx].pum_user_kind_hlattr > 0) {
-        attr = hl_combine_attr(attr, pum_array[idx].pum_user_kind_hlattr);
+      if (item_type == CPT_KIND && user_kind_hlattr > 0) {
+        attr = hl_combine_attr(attr, user_kind_hlattr);
       }
+      attr = hl_combine_attr(win_hl_attr(curwin, HLF_PNI), attr);
       int width = 0;
       char *s = NULL;
-
-      switch (round) {
-      case 0:
-        p = pum_array[idx].pum_text; break;
-      case 1:
-        p = pum_array[idx].pum_kind; break;
-      case 2:
-        p = pum_array[idx].pum_extra; break;
-      }
-
+      p = pum_get_item(idx, item_type);
       if (p != NULL) {
         for (;; MB_PTR_ADV(p)) {
           if (s == NULL) {
@@ -670,8 +695,10 @@ void pum_redraw(void)
               *p = saved;
             }
 
-            int user_hlattr = pum_array[idx].pum_user_hlattr;
-            int *attrs = pum_compute_text_attrs(st, hlf, user_hlattr);
+            int *attrs = NULL;
+            if (item_type == CPT_ABBR) {
+              attrs = pum_compute_text_attrs(st, hlf, user_abbr_hlattr);
+            }
 
             if (pum_rl) {
               char *rt = reverse_text(st);
@@ -713,7 +740,9 @@ void pum_redraw(void)
               grid_col += width;
             }
 
-            xfree(attrs);
+            if (attrs != NULL) {
+              XFREE_CLEAR(attrs);
+            }
 
             if (*p != TAB) {
               break;
@@ -737,31 +766,33 @@ void pum_redraw(void)
         }
       }
 
-      if (round > 0) {
-        n = pum_kind_width + 1;
+      if (j > 0) {
+        n = items_width_array[order[1]] + (last_isabbr ? 0 : 1);
       } else {
-        n = 1;
+        n = order[j] == CPT_ABBR ? 1 : 0;
       }
 
+      bool next_isempty = false;
+      if (j + 1 < 3) {
+        next_isempty = pum_get_item(idx, order[j + 1]) == NULL;
+      }
       // Stop when there is nothing more to display.
-      if ((round == 2)
-          || ((round == 1)
-              && (pum_array[idx].pum_extra == NULL))
-          || ((round == 0)
-              && (pum_array[idx].pum_kind == NULL)
-              && (pum_array[idx].pum_extra == NULL))
-          || (pum_base_width + n >= pum_width)) {
+      if ((j == 2)
+          || (next_isempty && (j == 1 || (j == 0 && pum_get_item(idx, order[j + 2]) == NULL)))
+          || (basic_width + n >= pum_width)) {
         break;
       }
 
       if (pum_rl) {
-        grid_line_fill(col_off - pum_base_width - n + 1, grid_col + 1, schar_from_ascii(' '), attr);
-        grid_col = col_off - pum_base_width - n;
+        grid_line_fill(col_off - basic_width - n + 1, grid_col + 1,
+                       schar_from_ascii(' '), orig_attr);
+        grid_col = col_off - basic_width - n;
       } else {
-        grid_line_fill(grid_col, col_off + pum_base_width + n, schar_from_ascii(' '), attr);
-        grid_col = col_off + pum_base_width + n;
+        grid_line_fill(grid_col, col_off + basic_width + n,
+                       schar_from_ascii(' '), orig_attr);
+        grid_col = col_off + basic_width + n;
       }
-      totwidth = pum_base_width + n;
+      totwidth = basic_width + n;
     }
 
     if (pum_rl) {

@@ -86,7 +86,7 @@ lsp._request_name_to_capability = {
 ---@param bufnr (integer|nil) Buffer number to resolve. Defaults to current buffer
 ---@return integer bufnr
 local function resolve_bufnr(bufnr)
-  validate({ bufnr = { bufnr, 'n', true } })
+  validate('bufnr', bufnr, 'number', true)
   if bufnr == nil or bufnr == 0 then
     return api.nvim_get_current_buf()
   end
@@ -235,9 +235,9 @@ end
 --- - `name` arbitrary name for the LSP client. Should be unique per language server.
 --- - `cmd` command string[] or function, described at |vim.lsp.start_client()|.
 --- - `root_dir` path to the project root. By default this is used to decide if an existing client
----   should be re-used. The example above uses |vim.fs.root()| and |vim.fs.dirname()| to detect
----   the root by traversing the file system upwards starting from the current directory until
----   either a `pyproject.toml` or `setup.py` file is found.
+---   should be re-used. The example above uses |vim.fs.root()| to detect the root by traversing
+---   the file system upwards starting from the current directory until either a `pyproject.toml`
+---   or `setup.py` file is found.
 --- - `workspace_folders` list of `{ uri:string, name: string }` tables specifying the project root
 ---   folders used by the language server. If `nil` the property is derived from `root_dir` for
 ---   convenience.
@@ -630,10 +630,8 @@ end
 ---@param client_id (integer) Client id
 ---@return boolean success `true` if client was attached successfully; `false` otherwise
 function lsp.buf_attach_client(bufnr, client_id)
-  validate({
-    bufnr = { bufnr, 'n', true },
-    client_id = { client_id, 'n' },
-  })
+  validate('bufnr', bufnr, 'number', true)
+  validate('client_id', client_id, 'number')
   bufnr = resolve_bufnr(bufnr)
   if not api.nvim_buf_is_loaded(bufnr) then
     log.warn(string.format('buf_attach_client called on unloaded buffer (id: %d): ', bufnr))
@@ -669,10 +667,8 @@ end
 ---@param bufnr integer Buffer handle, or 0 for current
 ---@param client_id integer Client id
 function lsp.buf_detach_client(bufnr, client_id)
-  validate({
-    bufnr = { bufnr, 'n', true },
-    client_id = { client_id, 'n' },
-  })
+  validate('bufnr', bufnr, 'number', true)
+  validate('client_id', client_id, 'number')
   bufnr = resolve_bufnr(bufnr)
 
   local client = all_clients[client_id]
@@ -773,7 +769,7 @@ end
 ---@param filter? vim.lsp.get_clients.Filter
 ---@return vim.lsp.Client[]: List of |vim.lsp.Client| objects
 function lsp.get_clients(filter)
-  validate({ filter = { filter, 't', true } })
+  validate('filter', filter, 'table', true)
 
   filter = filter or {}
 
@@ -858,7 +854,7 @@ api.nvim_create_autocmd('VimLeavePre', {
 ---
 ---@param bufnr (integer) Buffer handle, or 0 for current.
 ---@param method (string) LSP method name
----@param params table|nil Parameters to send to the server
+---@param params? table|(fun(client: vim.lsp.Client, bufnr: integer): table?) Parameters to send to the server
 ---@param handler? lsp.Handler See |lsp-handler|
 ---       If nil, follows resolution strategy defined in |lsp-handler-configuration|
 ---@param on_unsupported? fun()
@@ -870,12 +866,10 @@ api.nvim_create_autocmd('VimLeavePre', {
 ---cancel all the requests. You could instead
 ---iterate all clients and call their `cancel_request()` methods.
 function lsp.buf_request(bufnr, method, params, handler, on_unsupported)
-  validate({
-    bufnr = { bufnr, 'n', true },
-    method = { method, 's' },
-    handler = { handler, 'f', true },
-    on_unsupported = { on_unsupported, 'f', true },
-  })
+  validate('bufnr', bufnr, 'number', true)
+  validate('method', method, 'string')
+  validate('handler', handler, 'function', true)
+  validate('on_unsupported', on_unsupported, 'function', true)
 
   bufnr = resolve_bufnr(bufnr)
   local method_supported = false
@@ -885,7 +879,8 @@ function lsp.buf_request(bufnr, method, params, handler, on_unsupported)
     if client.supports_method(method, { bufnr = bufnr }) then
       method_supported = true
 
-      local request_success, request_id = client.request(method, params, handler, bufnr)
+      local cparams = type(params) == 'function' and params(client, bufnr) or params --[[@as table?]]
+      local request_success, request_id = client.request(method, cparams, handler, bufnr)
       -- This could only fail if the client shut down in the time since we looked
       -- it up and we did the request, which should be rare.
       if request_success then
@@ -992,10 +987,8 @@ end
 ---
 ---@return boolean success true if any client returns true; false otherwise
 function lsp.buf_notify(bufnr, method, params)
-  validate({
-    bufnr = { bufnr, 'n', true },
-    method = { method, 's' },
-  })
+  validate('bufnr', bufnr, 'number', true)
+  validate('method', method, 'string')
   local resp = false
   for _, client in ipairs(lsp.get_clients({ bufnr = bufnr })) do
     if client.rpc.notify(method, params) then

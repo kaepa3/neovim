@@ -246,7 +246,7 @@ static void set_init_default_backupskip(void)
       // note: the value (and therefore plen) may already include a path separator
       size_t itemsize = plen + (has_trailing_path_sep ? 0 : 1) + 2;
       char *item = xmalloc(itemsize);
-      // add a preceeding comma as a separator after the first item
+      // add a preceding comma as a separator after the first item
       size_t itemseplen = (ga.ga_len == 0) ? 0 : 1;
 
       size_t itemlen = (size_t)vim_snprintf(item, itemsize, "%s%s*", p,
@@ -1216,8 +1216,9 @@ static OptVal get_option_newval(OptIndex opt_idx, int opt_flags, set_prefix_T pr
     // Different ways to set a number option:
     // &            set to default value
     // <            set to global value
-    // <xx>         accept special key codes for 'wildchar'
-    // c            accept any non-digit for 'wildchar'
+    // <xx>         accept special key codes for 'wildchar' or 'wildcharm'
+    // ^x           accept ctrl key codes for 'wildchar' or 'wildcharm'
+    // c            accept any non-digit for 'wildchar' or 'wildcharm'
     // [-]0-9       set number
     // other        error
     arg++;
@@ -1239,7 +1240,7 @@ static OptVal get_option_newval(OptIndex opt_idx, int opt_flags, set_prefix_T pr
                    || (*arg != NUL && (!arg[1] || ascii_iswhite(arg[1]))
                        && !ascii_isdigit(*arg)))) {
       newval_num = string_to_key(arg);
-      if (newval_num == 0 && (OptInt *)varp != &p_wcm) {
+      if (newval_num == 0) {
         *errmsg = e_invarg;
         return newval;
       }
@@ -1524,7 +1525,9 @@ static int find_key_len(const char *arg_arg, size_t len, bool has_lt)
   // Don't use get_special_key_code() for t_xx, we don't want it to call
   // add_termcap_entry().
   if (len >= 4 && arg[0] == 't' && arg[1] == '_') {
-    key = TERMCAP2KEY((uint8_t)arg[2], (uint8_t)arg[3]);
+    if (!has_lt || arg[4] == '>') {
+      key = TERMCAP2KEY((uint8_t)arg[2], (uint8_t)arg[3]);
+    }
   } else if (has_lt) {
     arg--;  // put arg at the '<'
     int modifiers = 0;
@@ -1538,14 +1541,18 @@ static int find_key_len(const char *arg_arg, size_t len, bool has_lt)
 }
 
 /// Convert a key name or string into a key value.
-/// Used for 'wildchar' and 'cedit' options.
+/// Used for 'cedit', 'wildchar' and 'wildcharm' options.
 int string_to_key(char *arg)
 {
-  if (*arg == '<') {
+  if (*arg == '<' && arg[1]) {
     return find_key_len(arg + 1, strlen(arg), true);
   }
-  if (*arg == '^') {
-    return CTRL_CHR((uint8_t)arg[1]);
+  if (*arg == '^' && arg[1]) {
+    int key = CTRL_CHR((uint8_t)arg[1]);
+    if (key == 0) {  // ^@ is <Nul>
+      key = K_ZERO;
+    }
+    return key;
   }
   return (uint8_t)(*arg);
 }
@@ -1698,7 +1705,7 @@ static void didset_options(void)
   spell_check_msm();
   spell_check_sps();
   compile_cap_prog(curwin->w_s);
-  did_set_spell_option(true);
+  did_set_spell_option();
   // set cedit_key
   did_set_cedit(NULL);
   // initialize the table for 'breakat'.
@@ -1809,12 +1816,22 @@ void check_blending(win_T *wp)
 }
 
 /// Handle setting `winhighlight' in window "wp"
-bool parse_winhl_opt(win_T *wp)
+///
+/// @param winhl  when NULL: use "wp->w_p_winhl"
+/// @param wp     when NULL: only parse "winhl"
+///
+/// @return  whether the option value is valid.
+bool parse_winhl_opt(const char *winhl, win_T *wp)
 {
-  const char *p = wp->w_p_winhl;
+  const char *p = empty_string_option;
+  if (winhl != NULL) {
+    p = winhl;
+  } else if (wp != NULL) {
+    p = wp->w_p_winhl;
+  }
 
   if (!*p) {
-    if (wp->w_ns_hl_winhl && wp->w_ns_hl == wp->w_ns_hl_winhl) {
+    if (wp != NULL && wp->w_ns_hl_winhl && wp->w_ns_hl == wp->w_ns_hl_winhl) {
       wp->w_ns_hl = 0;
       wp->w_hl_needs_update = true;
     }
@@ -1822,39 +1839,49 @@ bool parse_winhl_opt(win_T *wp)
     return true;
   }
 
-  if (wp->w_ns_hl_winhl == 0) {
-    wp->w_ns_hl_winhl = (int)nvim_create_namespace(NULL_STRING);
-  } else {
-    // namespace already exist. invalidate existing items
-    DecorProvider *dp = get_decor_provider(wp->w_ns_hl_winhl, true);
-    dp->hl_valid++;
+  int ns_hl = 0;
+  if (wp != NULL) {
+    if (wp->w_ns_hl_winhl == 0) {
+      wp->w_ns_hl_winhl = (int)nvim_create_namespace(NULL_STRING);
+    } else {
+      // Namespace already exists. Invalidate existing items.
+      DecorProvider *dp = get_decor_provider(wp->w_ns_hl_winhl, true);
+      dp->hl_valid++;
+    }
+    wp->w_ns_hl = wp->w_ns_hl_winhl;
+    ns_hl = wp->w_ns_hl;
   }
-  wp->w_ns_hl = wp->w_ns_hl_winhl;
-  int ns_hl = wp->w_ns_hl;
 
   while (*p) {
-    char *colon = strchr(p, ':');
+    const char *colon = strchr(p, ':');
     if (!colon) {
       return false;
     }
     size_t nlen = (size_t)(colon - p);
-    char *hi = colon + 1;
-    char *commap = xstrchrnul(hi, ',');
+    const char *hi = colon + 1;
+    const char *commap = xstrchrnul(hi, ',');
     size_t len = (size_t)(commap - hi);
     int hl_id = len ? syn_check_group(hi, len) : -1;
     if (hl_id == 0) {
       return false;
     }
     int hl_id_link = nlen ? syn_check_group(p, nlen) : 0;
+    if (hl_id_link == 0) {
+      return false;
+    }
 
-    HlAttrs attrs = HLATTRS_INIT;
-    attrs.rgb_ae_attr |= HL_GLOBAL;
-    ns_hl_def(ns_hl, hl_id_link, attrs, hl_id, NULL);
+    if (wp != NULL) {
+      HlAttrs attrs = HLATTRS_INIT;
+      attrs.rgb_ae_attr |= HL_GLOBAL;
+      ns_hl_def(ns_hl, hl_id_link, attrs, hl_id, NULL);
+    }
 
     p = *commap ? commap + 1 : "";
   }
 
-  wp->w_hl_needs_update = true;
+  if (wp != NULL) {
+    wp->w_hl_needs_update = true;
+  }
   return true;
 }
 
@@ -2271,7 +2298,7 @@ static const char *did_set_number_relativenumber(optset_T *args)
     // When 'relativenumber'/'number' is changed and 'statuscolumn' is set, reset width.
     win->w_nrwidth_line_count = 0;
   }
-  check_signcolumn(win);
+  check_signcolumn(NULL, win);
   return NULL;
 }
 
@@ -2582,7 +2609,7 @@ static const char *did_set_swapfile(optset_T *args)
 static const char *did_set_textwidth(optset_T *args FUNC_ATTR_UNUSED)
 {
   FOR_ALL_TAB_WINDOWS(tp, wp) {
-    check_colorcolumn(wp);
+    check_colorcolumn(NULL, wp);
   }
 
   return NULL;
@@ -5095,15 +5122,21 @@ void clear_winopt(winopt_T *wop)
 
 void didset_window_options(win_T *wp, bool valid_cursor)
 {
-  check_colorcolumn(wp);
-  briopt_check(wp);
+  // Set w_leftcol or w_skipcol to zero.
+  if (wp->w_p_wrap) {
+    wp->w_leftcol = 0;
+  } else {
+    wp->w_skipcol = 0;
+  }
+  check_colorcolumn(NULL, wp);
+  briopt_check(NULL, wp);
   fill_culopt_flags(NULL, wp);
   set_chars_option(wp, wp->w_p_fcs, kFillchars, true, NULL, 0);
   set_chars_option(wp, wp->w_p_lcs, kListchars, true, NULL, 0);
-  parse_winhl_opt(wp);  // sets w_hl_needs_update also for w_p_winbl
+  parse_winhl_opt(NULL, wp);  // sets w_hl_needs_update also for w_p_winbl
   check_blending(wp);
   set_winbar_win(wp, false, valid_cursor);
-  check_signcolumn(wp);
+  check_signcolumn(NULL, wp);
   wp->w_grid_alloc.blending = wp->w_p_winbl > 0;
 }
 
@@ -5312,6 +5345,7 @@ void buf_copy_options(buf_T *buf, int flags)
       COPY_OPT_SCTX(buf, BV_SPL);
       buf->b_s.b_p_spo = xstrdup(p_spo);
       COPY_OPT_SCTX(buf, BV_SPO);
+      buf->b_s.b_p_spo_flags = spo_flags;
       buf->b_p_inde = xstrdup(p_inde);
       COPY_OPT_SCTX(buf, BV_INDE);
       buf->b_p_indk = xstrdup(p_indk);

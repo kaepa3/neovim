@@ -1691,6 +1691,7 @@ describe("'winhighlight' highlight", function()
       [29] = { foreground = Screen.colors.Blue1, background = Screen.colors.Red, bold = true },
       [30] = { background = tonumber('0xff8800') },
       [31] = { background = tonumber('0xff8800'), bold = true, foreground = Screen.colors.Blue },
+      [32] = { bold = true, reverse = true, background = Screen.colors.DarkGreen },
     }
     command('hi Background1 guibg=DarkBlue')
     command('hi Background2 guibg=DarkGreen')
@@ -2253,10 +2254,10 @@ describe("'winhighlight' highlight", function()
       some text                               |
       more tex^t                               |
       {0:~                                       }|
-      {3:[No Name]                        }{1:2,9 All}|
+      {3:[No Name]                        }{11:2,9 All}|
       some text                               |
       more text                               |
-      {4:[No Name]                        }{1:1,1 All}|
+      {4:[No Name]                        }{14:1,1 All}|
                                               |
     ]],
     }
@@ -2267,10 +2268,10 @@ describe("'winhighlight' highlight", function()
       some text                               |
       more tex^t                               |
       {0:~                                       }|
-      {3:[No Name]                        }{5:2,9 All}|
+      {3:[No Name]                        }{32:2,9 All}|
       some text                               |
       more text                               |
-      {4:[No Name]                        }{1:1,1 All}|
+      {4:[No Name]                        }{14:1,1 All}|
                                               |
     ]],
     }
@@ -2281,10 +2282,10 @@ describe("'winhighlight' highlight", function()
       some tex^t                               |
       more text                               |
       {0:~                                       }|
-      {3:[No Name]                        }{5:1,9 All}|
+      {3:[No Name]                        }{32:1,9 All}|
       some text                               |
       more text                               |
-      {4:[No Name]                        }{1:1,1 All}|
+      {4:[No Name]                        }{14:1,1 All}|
                                               |
     ]],
     }
@@ -2425,16 +2426,24 @@ describe('highlight namespaces', function()
   end)
 
   it('winhl does not accept invalid value #24586', function()
-    local res = exec_lua([[
-      local curwin = vim.api.nvim_get_current_win()
-      vim.api.nvim_command("set winhl=Normal:Visual")
-      local _, msg = pcall(vim.api.nvim_command,"set winhl='Normal:Wrong'")
-      return { msg, vim.wo[curwin].winhl }
-    ]])
-    eq({
-      'Vim(set):E5248: Invalid character in group name',
-      'Normal:Visual',
-    }, res)
+    command('set winhl=Normal:Visual')
+    for _, cmd in ipairs({
+      [[set winhl='Normal:Wrong']],
+      [[set winhl=Normal:Wrong']],
+      [[set winhl='Normal:Wrong]],
+    }) do
+      local res = exec_lua(
+        [[
+          local _, msg = pcall(vim.api.nvim_command, ...)
+          return { msg, vim.wo.winhl }
+        ]],
+        cmd
+      )
+      eq({
+        'Vim(set):E5248: Invalid character in group name',
+        'Normal:Visual',
+      }, res)
+    end
   end)
 
   it('Normal in set_hl #25474', function()

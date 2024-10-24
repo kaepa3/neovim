@@ -32,7 +32,7 @@ for k, v in pairs({
   func = true,
   F = true,
   lsp = true,
-  highlight = true,
+  hl = true,
   diagnostic = true,
   keymap = true,
   ui = true,
@@ -66,6 +66,12 @@ vim.log = {
     ERROR = 4,
     OFF = 5,
   },
+}
+
+local utfs = {
+  ['utf-8'] = true,
+  ['utf-16'] = true,
+  ['utf-32'] = true,
 }
 
 -- TODO(lewis6991): document that the signature is system({cmd}, [{opts},] {on_exit})
@@ -222,7 +228,7 @@ do
   ---       -- Scrub ANSI color codes from paste input.
   ---       lines[i] = line:gsub('\27%[[0-9;mK]+', '')
   ---     end
-  ---     overridden(lines, phase)
+  ---     return overridden(lines, phase)
   ---   end
   --- end)(vim.paste)
   --- ```
@@ -467,15 +473,11 @@ vim.cmd = setmetatable({}, {
 
 -- These are the vim.env/v/g/o/bo/wo variable magic accessors.
 do
-  local validate = vim.validate
-
   --- @param scope string
   --- @param handle? false|integer
   --- @return vim.var_accessor
   local function make_dict_accessor(scope, handle)
-    validate({
-      scope = { scope, 's' },
-    })
+    vim.validate('scope', scope, 'string')
     local mt = {}
     function mt:__newindex(k, v)
       return vim._setvar(scope, handle or 0, k, v)
@@ -591,7 +593,7 @@ end
 ---@param timeout integer Number of milliseconds to wait before calling `fn`
 ---@return table timer luv timer object
 function vim.defer_fn(fn, timeout)
-  vim.validate({ fn = { fn, 'c', true } })
+  vim.validate('fn', fn, 'callable', true)
   local timer = assert(vim.uv.new_timer())
   timer:start(
     timeout,
@@ -658,17 +660,22 @@ local on_key_cbs = {} --- @type table<integer,function>
 --- and cannot be toggled dynamically.
 ---
 ---@note {fn} will be removed on error.
+---@note {fn} won't be invoked recursively, i.e. if {fn} itself consumes input,
+---           it won't be invoked for those keys.
 ---@note {fn} will not be cleared by |nvim_buf_clear_namespace()|
 ---
----@param fn fun(key: string, typed: string)?
----                   Function invoked on every key press. |i_CTRL-V|
----                   {key} is the key after mappings have been applied, and
----                   {typed} is the key(s) before mappings are applied, which
----                   may be empty if {key} is produced by non-typed keys.
----                   When {fn} is nil and {ns_id} is specified, the callback
----                   associated with namespace {ns_id} is removed.
+---@param fn fun(key: string, typed: string)? Function invoked for every input key,
+---          after mappings have been applied but before further processing. Arguments
+---          {key} and {typed} are raw keycodes, where {key} is the key after mappings
+---          are applied, and {typed} is the key(s) before mappings are applied.
+---          {typed} may be empty if {key} is produced by non-typed key(s) or by the
+---          same typed key(s) that produced a previous {key}.
+---          When {fn} is `nil` and {ns_id} is specified, the callback associated with
+---          namespace {ns_id} is removed.
 ---@param ns_id integer? Namespace ID. If nil or 0, generates and returns a
----                     new |nvim_create_namespace()| id.
+---                      new |nvim_create_namespace()| id.
+---
+---@see |keytrans()|
 ---
 ---@return integer Namespace id associated with {fn}. Or count of all callbacks
 ---if on_key() is called without arguments.
@@ -677,10 +684,8 @@ function vim.on_key(fn, ns_id)
     return vim.tbl_count(on_key_cbs)
   end
 
-  vim.validate({
-    fn = { fn, 'c', true },
-    ns_id = { ns_id, 'n', true },
-  })
+  vim.validate('fn', fn, 'callable', true)
+  vim.validate('ns_id', ns_id, 'number', true)
 
   if ns_id == nil or ns_id == 0 then
     ns_id = vim.api.nvim_create_namespace('')
@@ -715,7 +720,127 @@ function vim._on_key(buf, typed_buf)
   end
 end
 
---- Generates a list of possible completions for the string.
+--- Convert UTF-32, UTF-16 or UTF-8 {index} to byte index.
+--- If {strict_indexing} is false
+--- then then an out of range index will return byte length
+--- instead of throwing an error.
+---
+--- Invalid UTF-8 and NUL is treated like in |vim.str_utfindex()|.
+--- An {index} in the middle of a UTF-16 sequence is rounded upwards to
+--- the end of that sequence.
+---@param s string
+---@param encoding "utf-8"|"utf-16"|"utf-32"
+---@param index integer
+---@param strict_indexing? boolean # default: true
+---@return integer
+function vim.str_byteindex(s, encoding, index, strict_indexing)
+  if type(encoding) == 'number' then
+    -- Legacy support for old API
+    -- Parameters: ~
+    --   • {str}        (`string`)
+    --   • {index}      (`integer`)
+    --   • {use_utf16}  (`boolean?`)
+    local old_index = encoding
+    local use_utf16 = index or false
+    return vim.__str_byteindex(s, old_index, use_utf16) or error('index out of range')
+  end
+
+  vim.validate('s', s, 'string')
+  vim.validate('index', index, 'number')
+
+  local len = #s
+
+  if index == 0 or len == 0 then
+    return 0
+  end
+
+  vim.validate('encoding', encoding, function(v)
+    return utfs[v], 'invalid encoding'
+  end)
+
+  vim.validate('strict_indexing', strict_indexing, 'boolean', true)
+  if strict_indexing == nil then
+    strict_indexing = true
+  end
+
+  if encoding == 'utf-8' then
+    if index > len then
+      return strict_indexing and error('index out of range') or len
+    end
+    return index
+  end
+  return vim.__str_byteindex(s, index, encoding == 'utf-16')
+    or strict_indexing and error('index out of range')
+    or len
+end
+
+--- Convert byte index to UTF-32, UTF-16 or UTF-8 indices. If {index} is not
+--- supplied, the length of the string is used. All indices are zero-based.
+---
+--- If {strict_indexing} is false then an out of range index will return string
+--- length instead of throwing an error.
+--- Invalid UTF-8 bytes, and embedded surrogates are counted as one code point
+--- each. An {index} in the middle of a UTF-8 sequence is rounded upwards to the end of
+--- that sequence.
+---@param s string
+---@param encoding "utf-8"|"utf-16"|"utf-32"
+---@param index? integer
+---@param strict_indexing? boolean # default: true
+---@return integer
+function vim.str_utfindex(s, encoding, index, strict_indexing)
+  if encoding == nil or type(encoding) == 'number' then
+    -- Legacy support for old API
+    -- Parameters: ~
+    --   • {str}    (`string`)
+    --   • {index}  (`integer?`)
+    local old_index = encoding
+    local col32, col16 = vim.__str_utfindex(s, old_index) --[[@as integer,integer]]
+    if not col32 or not col16 then
+      error('index out of range')
+    end
+    -- Return (multiple): ~
+    --     (`integer`) UTF-32 index
+    --     (`integer`) UTF-16 index
+    return col32, col16
+  end
+
+  vim.validate('s', s, 'string')
+  vim.validate('index', index, 'number', true)
+  if not index then
+    index = math.huge
+    strict_indexing = false
+  end
+
+  if index == 0 then
+    return 0
+  end
+
+  vim.validate('encoding', encoding, function(v)
+    return utfs[v], 'invalid encoding'
+  end)
+
+  vim.validate('strict_indexing', strict_indexing, 'boolean', true)
+  if strict_indexing == nil then
+    strict_indexing = true
+  end
+
+  if encoding == 'utf-8' then
+    local len = #s
+    return index <= len and index or (strict_indexing and error('index out of range') or len)
+  end
+  local col32, col16 = vim.__str_utfindex(s, index) --[[@as integer?,integer?]]
+  local col = encoding == 'utf-16' and col16 or col32
+  if col then
+    return col
+  end
+  if strict_indexing then
+    error('index out of range')
+  end
+  local max32, max16 = vim.__str_utfindex(s)--[[@as integer integer]]
+  return encoding == 'utf-16' and max16 or max32
+end
+
+--- Generates a list of possible completions for the str
 --- String has the pattern.
 ---
 --- 1. Can we get it to just return things in the global namespace with that name prefix
@@ -787,7 +912,7 @@ function vim._expand_pat(pat, env)
       if mt and type(mt.__index) == 'table' then
         field = rawget(mt.__index, key)
       elseif final_env == vim and (vim._submodules[key] or vim._extra[key]) then
-        field = vim[key]
+        field = vim[key] --- @type any
       end
     end
     final_env = field
@@ -798,13 +923,23 @@ function vim._expand_pat(pat, env)
   end
 
   local keys = {} --- @type table<string,true>
+
   --- @param obj table<any,any>
   local function insert_keys(obj)
     for k, _ in pairs(obj) do
-      if type(k) == 'string' and string.sub(k, 1, string.len(match_part)) == match_part then
+      if
+        type(k) == 'string'
+        and string.sub(k, 1, string.len(match_part)) == match_part
+        and k:match('^[_%w]+$') ~= nil -- filter out invalid identifiers for field, e.g. 'foo#bar'
+      then
         keys[k] = true
       end
     end
+  end
+  ---@param acc table<string,any>
+  local function _fold_to_map(acc, k, v)
+    acc[k] = (v or true)
+    return acc
   end
 
   if type(final_env) == 'table' then
@@ -814,9 +949,59 @@ function vim._expand_pat(pat, env)
   if mt and type(mt.__index) == 'table' then
     insert_keys(mt.__index)
   end
+
   if final_env == vim then
     insert_keys(vim._submodules)
     insert_keys(vim._extra)
+  end
+
+  -- Completion for dict accessors (special vim variables and vim.fn)
+  if mt and vim.tbl_contains({ vim.g, vim.t, vim.w, vim.b, vim.v, vim.fn }, final_env) then
+    local prefix, type = unpack(
+      vim.fn == final_env and { '', 'function' }
+        or vim.g == final_env and { 'g:', 'var' }
+        or vim.t == final_env and { 't:', 'var' }
+        or vim.w == final_env and { 'w:', 'var' }
+        or vim.b == final_env and { 'b:', 'var' }
+        or vim.v == final_env and { 'v:', 'var' }
+        or { nil, nil }
+    )
+    assert(prefix, "Can't resolve final_env")
+    local vars = vim.fn.getcompletion(prefix .. match_part, type) --- @type string[]
+    insert_keys(vim
+      .iter(vars)
+      :map(function(s) ---@param s string
+        s = s:gsub('[()]+$', '') -- strip '(' and ')' for function completions
+        return s:sub(#prefix + 1) -- strip the prefix, e.g., 'g:foo' => 'foo'
+      end)
+      :fold({}, _fold_to_map))
+  end
+
+  -- Completion for option accessors (full names only)
+  if
+    mt
+    and vim.tbl_contains(
+      { vim.o, vim.go, vim.bo, vim.wo, vim.opt, vim.opt_local, vim.opt_global },
+      final_env
+    )
+  then
+    --- @type fun(option_name: string, option: vim.api.keyset.get_option_info): boolean
+    local filter = function(_, _)
+      return true
+    end
+    if vim.bo == final_env then
+      filter = function(_, option)
+        return option.scope == 'buf'
+      end
+    elseif vim.wo == final_env then
+      filter = function(_, option)
+        return option.scope == 'win'
+      end
+    end
+
+    --- @type table<string, vim.api.keyset.get_option_info>
+    local options = vim.api.nvim_get_all_options_info()
+    insert_keys(vim.iter(options):filter(filter):fold({}, _fold_to_map))
   end
 
   keys = vim.tbl_keys(keys)
@@ -1086,16 +1271,22 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
   if plugin == 'Nvim' then
     require('vim.deprecated.health').add(name, version, traceback(), alternative)
 
-    -- Only issue warning if feature is hard-deprecated as specified by MAINTAIN.md.
-    -- Example: if removal_version is 0.12 (soft-deprecated since 0.10-dev), show warnings starting at
-    -- 0.11, including 0.11-dev
+    -- Show a warning only if feature is hard-deprecated (see MAINTAIN.md).
+    -- Example: if removal `version` is 0.12 (soft-deprecated since 0.10-dev), show warnings
+    -- starting at 0.11, including 0.11-dev.
     local major, minor = version:match('(%d+)%.(%d+)')
     major, minor = tonumber(major), tonumber(minor)
+    local nvim_major = 0 --- Current Nvim major version.
+
+    -- We can't "subtract" from a major version, so:
+    --  * Always treat `major > nvim_major` as soft-deprecation.
+    --  * Compare `minor - 1` if `major == nvim_major`.
+    if major > nvim_major then
+      return -- Always soft-deprecation (see MAINTAIN.md).
+    end
 
     local hard_deprecated_since = string.format('nvim-%d.%d', major, minor - 1)
-    -- Assume there will be no next minor version before bumping up the major version
-    local is_hard_deprecated = minor == 0 or vim.fn.has(hard_deprecated_since) == 1
-    if not is_hard_deprecated then
+    if major == nvim_major and vim.fn.has(hard_deprecated_since) == 0 then
       return
     end
 
@@ -1106,12 +1297,10 @@ function vim.deprecate(name, alternative, version, plugin, backtrace)
     local displayed = vim._truncated_echo_once(msg)
     return displayed and msg or nil
   else
-    vim.validate {
-      name = { name, 'string' },
-      alternative = { alternative, 'string', true },
-      version = { version, 'string', true },
-      plugin = { plugin, 'string', true },
-    }
+    vim.validate('name', name, 'string')
+    vim.validate('alternative', alternative, 'string', true)
+    vim.validate('version', version, 'string', true)
+    vim.validate('plugin', plugin, 'string', true)
 
     local msg = ('%s is deprecated'):format(name)
     msg = alternative and ('%s, use %s instead.'):format(msg, alternative) or (msg .. '.')
@@ -1129,5 +1318,8 @@ require('vim._options')
 -- Remove at Nvim 1.0
 ---@deprecated
 vim.loop = vim.uv
+
+-- Deprecated. Remove at Nvim 2.0
+vim.highlight = vim._defer_deprecated_module('vim.highlight', 'vim.hl')
 
 return vim

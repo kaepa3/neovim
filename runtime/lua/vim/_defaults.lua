@@ -157,7 +157,7 @@ do
   --- client is attached. If no client is attached, or if a server does not support a capability, an
   --- error message is displayed rather than exhibiting different behavior.
   ---
-  --- See |grr|, |grn|, |gra|, |i_CTRL-S|.
+  --- See |grr|, |grn|, |gra|, |gri|, |i_CTRL-S|.
   do
     vim.keymap.set('n', 'grn', function()
       vim.lsp.buf.rename()
@@ -170,6 +170,10 @@ do
     vim.keymap.set('n', 'grr', function()
       vim.lsp.buf.references()
     end, { desc = 'vim.lsp.buf.references()' })
+
+    vim.keymap.set('n', 'gri', function()
+      vim.lsp.buf.implementation()
+    end, { desc = 'vim.lsp.buf.implementation()' })
 
     vim.keymap.set('i', '<C-S>', function()
       vim.lsp.buf.signature_help()
@@ -207,6 +211,130 @@ do
       '<C-W>d',
       { remap = true, desc = 'Show diagnostics under the cursor' }
     )
+  end
+
+  --- vim-unimpaired style mappings. See: https://github.com/tpope/vim-unimpaired
+  do
+    ---@param lhs string
+    ---@param rhs function
+    ---@param desc string
+    local function create_unimpaired_mapping(lhs, rhs, desc)
+      vim.keymap.set('n', lhs, function()
+        local _, err = pcall(rhs) ---@type any, string
+        if err then
+          vim.api.nvim_err_writeln(err)
+        end
+      end, { desc = desc })
+    end
+
+    -- Quickfix mappings
+    create_unimpaired_mapping('[q', function()
+      vim.cmd.cprevious({ count = vim.v.count1 })
+    end, ':cprevious')
+    create_unimpaired_mapping(']q', function()
+      vim.cmd.cnext({ count = vim.v.count1 })
+    end, ':cnext')
+    create_unimpaired_mapping('[<C-Q>', function()
+      vim.cmd.cpfile({ count = vim.v.count1 })
+    end, ':cpfile')
+    create_unimpaired_mapping(']<C-Q>', function()
+      vim.cmd.cnfile({ count = vim.v.count1 })
+    end, ':cnfile')
+
+    -- Location list mappings
+    create_unimpaired_mapping('[l', function()
+      vim.cmd.lprevious({ count = vim.v.count1 })
+    end, ':lprevious')
+    create_unimpaired_mapping(']l', function()
+      vim.cmd.lnext({ count = vim.v.count1 })
+    end, ':lnext')
+    create_unimpaired_mapping('[L', function()
+      vim.cmd.lrewind({ count = vim.v.count ~= 0 and vim.v.count or nil })
+    end, ':lrewind')
+    create_unimpaired_mapping(']L', function()
+      vim.cmd.llast({ count = vim.v.count ~= 0 and vim.v.count or nil })
+    end, ':llast')
+    create_unimpaired_mapping('[<C-L>', function()
+      vim.cmd.lpfile({ count = vim.v.count1 })
+    end, ':lpfile')
+    create_unimpaired_mapping(']<C-L>', function()
+      vim.cmd.lnfile({ count = vim.v.count1 })
+    end, ':lnfile')
+
+    -- Argument list
+    create_unimpaired_mapping('[a', function()
+      vim.cmd.previous({ count = vim.v.count1 })
+    end, ':previous')
+    create_unimpaired_mapping(']a', function()
+      -- count doesn't work with :next, must use range. See #30641.
+      vim.cmd.next({ range = { vim.v.count1 } })
+    end, ':next')
+    create_unimpaired_mapping('[A', function()
+      if vim.v.count ~= 0 then
+        vim.cmd.argument({ count = vim.v.count })
+      else
+        vim.cmd.rewind()
+      end
+    end, ':rewind')
+    create_unimpaired_mapping(']A', function()
+      if vim.v.count ~= 0 then
+        vim.cmd.argument({ count = vim.v.count })
+      else
+        vim.cmd.last()
+      end
+    end, ':last')
+
+    -- Tags
+    create_unimpaired_mapping('[t', function()
+      -- count doesn't work with :tprevious, must use range. See #30641.
+      vim.cmd.tprevious({ range = { vim.v.count1 } })
+    end, ':tprevious')
+    create_unimpaired_mapping(']t', function()
+      -- count doesn't work with :tnext, must use range. See #30641.
+      vim.cmd.tnext({ range = { vim.v.count1 } })
+    end, ':tnext')
+    create_unimpaired_mapping('[T', function()
+      -- count doesn't work with :trewind, must use range. See #30641.
+      vim.cmd.trewind({ range = vim.v.count ~= 0 and { vim.v.count } or nil })
+    end, ':trewind')
+    create_unimpaired_mapping(']T', function()
+      -- :tlast does not accept a count, so use :trewind if count given
+      if vim.v.count ~= 0 then
+        vim.cmd.trewind({ range = { vim.v.count } })
+      else
+        vim.cmd.tlast()
+      end
+    end, ':tlast')
+    create_unimpaired_mapping('[<C-T>', function()
+      -- count doesn't work with :ptprevious, must use range. See #30641.
+      vim.cmd.ptprevious({ range = { vim.v.count1 } })
+    end, ' :ptprevious')
+    create_unimpaired_mapping(']<C-T>', function()
+      -- count doesn't work with :ptnext, must use range. See #30641.
+      vim.cmd.ptnext({ range = { vim.v.count1 } })
+    end, ':ptnext')
+
+    -- Buffers
+    create_unimpaired_mapping('[b', function()
+      vim.cmd.bprevious({ count = vim.v.count1 })
+    end, ':bprevious')
+    create_unimpaired_mapping(']b', function()
+      vim.cmd.bnext({ count = vim.v.count1 })
+    end, ':bnext')
+    create_unimpaired_mapping('[B', function()
+      if vim.v.count ~= 0 then
+        vim.cmd.buffer({ count = vim.v.count })
+      else
+        vim.cmd.brewind()
+      end
+    end, ':brewind')
+    create_unimpaired_mapping(']B', function()
+      if vim.v.count ~= 0 then
+        vim.cmd.buffer({ count = vim.v.count })
+      else
+        vim.cmd.blast()
+      end
+    end, ':blast')
   end
 end
 

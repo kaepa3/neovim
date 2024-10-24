@@ -194,7 +194,11 @@ static void call_click_def_func(StlClickDefinition *click_defs, int col, int whi
                         ? "r"
                         : (which_button == MOUSE_MIDDLE
                            ? "m"
-                           : "?")))
+                           : (which_button == MOUSE_X1
+                              ? "x1"
+                              : (which_button == MOUSE_X2
+                                 ? "x2"
+                                 : "?")))))
       },
     },
     {
@@ -1736,7 +1740,7 @@ static win_T *mouse_find_grid_win(int *gridp, int *rowp, int *colp)
   } else if (*gridp > 1) {
     win_T *wp = get_win_by_grid_handle(*gridp);
     if (wp && wp->w_grid_alloc.chars
-        && !(wp->w_floating && !wp->w_config.focusable)) {
+        && !(wp->w_floating && !wp->w_config.mouse)) {
       *rowp = MIN(*rowp - wp->w_grid.row_offset, wp->w_grid.rows - 1);
       *colp = MIN(*colp - wp->w_grid.col_offset, wp->w_grid.cols - 1);
       return wp;

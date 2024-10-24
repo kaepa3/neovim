@@ -578,6 +578,7 @@ local extension = {
   stm = detect.html,
   htt = 'httest',
   htb = 'httest',
+  http = 'http',
   hurl = 'hurl',
   hw = detect.hw,
   module = detect.hw,
@@ -751,6 +752,7 @@ local extension = {
   mib = 'mib',
   mix = 'mix',
   mixal = 'mix',
+  mlir = 'mlir',
   mm = detect.mm,
   nb = 'mma',
   wl = 'mma',
@@ -1066,6 +1068,9 @@ local extension = {
   envrc = detect.sh,
   ksh = detect.ksh,
   sh = detect.sh,
+  lo = 'sh',
+  la = 'sh',
+  lai = 'sh',
   mdd = 'sh',
   sieve = 'sieve',
   siv = 'sieve',
@@ -1302,6 +1307,7 @@ local extension = {
   xpfm = 'xml',
   spfm = 'xml',
   bxml = 'xml',
+  mmi = 'xml',
   xcu = 'xml',
   xlb = 'xml',
   xlc = 'xml',
@@ -1581,7 +1587,9 @@ local filename = {
   ['ipf.conf'] = 'ipfilter',
   ['ipf6.conf'] = 'ipfilter',
   ['ipf.rules'] = 'ipfilter',
+  ['.bun_repl_history'] = 'javascript',
   ['.node_repl_history'] = 'javascript',
+  ['deno_history.txt'] = 'javascript',
   ['Pipfile.lock'] = 'json',
   ['.firebaserc'] = 'json',
   ['.prettierrc'] = 'json',
@@ -1607,6 +1615,7 @@ local filename = {
   ['ldaprc'] = 'ldapconf',
   ['.ldaprc'] = 'ldapconf',
   ['ldap.conf'] = 'ldapconf',
+  ['lfrc'] = 'lf',
   ['lftp.conf'] = 'lftp',
   ['.lftprc'] = 'lftp',
   ['/.libao'] = 'libao',
@@ -2103,12 +2112,15 @@ local pattern = {
     ['/build/conf/.*%.conf$'] = 'bitbake',
     ['/meta%-.*/conf/.*%.conf$'] = 'bitbake',
     ['/meta/conf/.*%.conf$'] = 'bitbake',
+    ['/project%-spec/configs/.*%.conf$'] = 'bitbake',
     ['/%.cabal/config$'] = 'cabalconfig',
     ['/cabal/config$'] = 'cabalconfig',
     ['/%.aws/config$'] = 'confini',
     ['/bpython/config$'] = 'dosini',
     ['/flatpak/repo/config$'] = 'dosini',
     ['/mypy/config$'] = 'dosini',
+    ['^${HOME}/%.config/notmuch/.*/config$'] = 'dosini',
+    ['^${XDG_CONFIG_HOME}/notmuch/.*/config$'] = 'dosini',
     ['^${XDG_CONFIG_HOME}/git/config$'] = 'gitconfig',
     ['%.git/config%.worktree$'] = 'gitconfig',
     ['%.git/config$'] = 'gitconfig',
@@ -2179,6 +2191,8 @@ local pattern = {
     ['^apache%.conf'] = detect_apache_dotconf,
     ['^apache2%.conf'] = detect_apache_dotconf,
     ['^httpd%.conf'] = detect_apache_dotconf,
+    ['^httpd%-.*%.conf'] = detect_apache_dotconf,
+    ['^proxy%-html%.conf'] = detect_apache_dotconf,
     ['^srm%.conf'] = detect_apache_dotconf,
     ['asterisk/.*%.conf'] = starsetf('asterisk'),
     ['asterisk.*/.*voicemail%.conf'] = starsetf('asteriskvm'),
@@ -2255,10 +2269,12 @@ local pattern = {
     ['^%.?neomuttrc'] = detect_neomuttrc,
     ['/%.neomutt/neomuttrc'] = detect_neomuttrc,
     ['^Neomuttrc'] = detect_neomuttrc,
+    ['%.neomuttdebug'] = 'neomuttlog',
   },
   ['^%.'] = {
     ['^%.cshrc'] = detect.csh,
     ['^%.login'] = detect.csh,
+    ['^%.notmuch%-config%.'] = 'dosini',
     ['^%.gitsendemail%.msg%.......$'] = 'gitsendemail',
     ['^%.kshrc'] = detect.ksh,
     ['^%.article%.%d+$'] = 'mail',
@@ -2287,6 +2303,8 @@ local pattern = {
     ['^crontab%.'] = starsetf('crontab'),
     ['^cvs%d+$'] = 'cvs',
     ['^php%.ini%-'] = 'dosini',
+    ['^php%-fpm%.conf'] = 'dosini',
+    ['^www%.conf'] = 'dosini',
     ['^drac%.'] = starsetf('dracula'),
     ['/dtrace/.*%.d$'] = 'dtrace',
     ['esmtprc$'] = 'esmtprc',
@@ -2723,9 +2741,7 @@ end
 ---                     filetype specific buffer variables). The function accepts a buffer number as
 ---                     its only argument.
 function M.match(args)
-  vim.validate({
-    arg = { args, 't' },
-  })
+  vim.validate('arg', args, 'table')
 
   if not (args.buf or args.filename or args.contents) then
     error('At least one of "buf", "filename", or "contents" must be given')
@@ -2833,6 +2849,7 @@ end
 --- Note: this uses |nvim_get_option_value()| but caches the result.
 --- This means |ftplugin| and |FileType| autocommands are only
 --- triggered once and may not reflect later changes.
+--- @since 11
 --- @param filetype string Filetype
 --- @param option string Option name
 --- @return string|boolean|integer: Option value

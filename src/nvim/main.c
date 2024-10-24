@@ -678,11 +678,13 @@ void os_exit(int r)
   } else {
     ui_flush();
     ui_call_stop();
-    ml_close_all(true);           // remove all memfiles
   }
 
   if (!event_teardown() && r == 0) {
     r = 1;  // Exit with error if main_loop did not teardown gracefully.
+  }
+  if (!ui_client_channel_id) {
+    ml_close_all(true);  // remove all memfiles
   }
   if (used_stdin) {
     stream_set_blocking(STDIN_FILENO, true);  // normalize stream (#2598)
@@ -775,7 +777,11 @@ void getout(int exitval)
     }
   }
 
-  if (p_shada && *p_shada != NUL) {
+  if (
+#ifdef EXITFREE
+      !entered_free_all_mem &&
+#endif
+      p_shada && *p_shada != NUL) {
     // Write out the registers, history, marks etc, to the ShaDa file
     shada_write_file(NULL, false);
   }
@@ -1448,7 +1454,7 @@ scripterror:
         p = r;
       }
 
-#ifdef USE_FNAME_CASE
+#ifdef CASE_INSENSITIVE_FILENAME
       // Make the case of the file name match the actual file.
       path_fix_case(p);
 #endif

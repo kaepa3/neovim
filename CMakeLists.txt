@@ -46,6 +46,7 @@ set(DEPS_IGNORE_SHA FALSE)
 #-------------------------------------------------------------------------------
 set(FUNCS_DATA ${PROJECT_BINARY_DIR}/funcs_data.mpack)
 set(TOUCHES_DIR ${PROJECT_BINARY_DIR}/touches)
+set(VTERM_TEST_FILE ${PROJECT_BINARY_DIR}/test/vterm_test_output)
 
 file(GLOB DOCFILES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/runtime/doc/*.txt)
 
@@ -111,10 +112,8 @@ if(APPLE)
 endif()
 
 if(WIN32 OR APPLE)
-  # Ignore case when comparing filenames on Windows and Mac.
+  # Handle case-insensitive filenames for Windows and Mac.
   set(CASE_INSENSITIVE_FILENAME TRUE)
-  # Enable fixing case-insensitive filenames for Windows and Mac.
-  set(USE_FNAME_CASE TRUE)
 endif()
 
 if (MINGW)
@@ -133,8 +132,8 @@ message(STATUS "CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}")
 set_default_buildtype(Debug)
 get_property(isMultiConfig GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(NOT isMultiConfig)
-  # Unlike build dependencies in cmake.deps, we assume we want dev dependencies
-  # such as Uncrustify to always be built with Release.
+  # Unlike build dependencies in cmake.deps, we want dev dependencies such as
+  # Uncrustify to always be built with Release.
   list(APPEND DEPS_CMAKE_ARGS -D CMAKE_BUILD_TYPE=Release)
 endif()
 
@@ -146,9 +145,9 @@ set(NVIM_VERSION_PATCH 0)
 set(NVIM_VERSION_PRERELEASE "-dev") # for package maintainers
 
 # API level
-set(NVIM_API_LEVEL 12)        # Bump this after any API change.
+set(NVIM_API_LEVEL 13)        # Bump this after any API/stdlib change.
 set(NVIM_API_LEVEL_COMPAT 0)  # Adjust this after a _breaking_ API change.
-set(NVIM_API_PRERELEASE false)
+set(NVIM_API_PRERELEASE true)
 
 # Build-type: RelWithDebInfo
 # /Og means something different in MSVC

@@ -359,13 +359,13 @@ newwindow:
             wp = lastwin;  // wrap around
           }
           while (wp != NULL && wp->w_floating
-                 && !wp->w_config.focusable) {
+                 && (wp->w_config.hide || !wp->w_config.focusable)) {
             wp = wp->w_prev;
           }
         } else {  // go to next window
           wp = curwin->w_next;
           while (wp != NULL && wp->w_floating
-                 && !wp->w_config.focusable) {
+                 && (wp->w_config.hide || !wp->w_config.focusable)) {
             wp = wp->w_next;
           }
           if (wp == NULL) {
@@ -798,6 +798,19 @@ int win_fdccol_count(win_T *wp)
   return fdc[0] - '0';
 }
 
+/// Merges two window configs, freeing replaced fields if necessary.
+void merge_win_config(WinConfig *dst, const WinConfig src)
+  FUNC_ATTR_NONNULL_ALL
+{
+  if (dst->title_chunks.items != src.title_chunks.items) {
+    clear_virttext(&dst->title_chunks);
+  }
+  if (dst->footer_chunks.items != src.footer_chunks.items) {
+    clear_virttext(&dst->footer_chunks);
+  }
+  *dst = src;
+}
+
 void ui_ext_win_position(win_T *wp, bool validate)
 {
   wp->w_pos_changed = false;
@@ -844,7 +857,7 @@ void ui_ext_win_position(win_T *wp, bool validate)
       String anchor = cstr_as_string(float_anchor_str[c.anchor]);
       if (!c.hide) {
         ui_call_win_float_pos(wp->w_grid_alloc.handle, wp->handle, anchor,
-                              grid->handle, row, col, c.focusable,
+                              grid->handle, row, col, c.mouse,
                               wp->w_grid_alloc.zindex);
       } else {
         ui_call_win_hide(wp->w_grid_alloc.handle);
@@ -876,7 +889,7 @@ void ui_ext_win_position(win_T *wp, bool validate)
         ui_comp_put_grid(&wp->w_grid_alloc, comp_row, comp_col,
                          wp->w_height_outer, wp->w_width_outer, valid, false);
         ui_check_cursor_grid(wp->w_grid_alloc.handle);
-        wp->w_grid_alloc.focusable = wp->w_config.focusable;
+        wp->w_grid_alloc.mouse_enabled = wp->w_config.mouse;
         if (!valid) {
           wp->w_grid_alloc.valid = false;
           redraw_later(wp, UPD_NOT_VALID);
@@ -1288,7 +1301,7 @@ win_T *win_split_ins(int size, int flags, win_T *new_wp, int dir, frame_T *to_fl
     new_frame(wp);
 
     // non-floating window doesn't store float config or have a border.
-    wp->w_config = WIN_CONFIG_INIT;
+    merge_win_config(&wp->w_config, WIN_CONFIG_INIT);
     CLEAR_FIELD(wp->w_border_adj);
   }
 
@@ -2851,7 +2864,7 @@ int win_close(win_T *win, bool free_buf, bool force)
           break;
         }
         if (!wp->w_p_pvw && !bt_quickfix(wp->w_buffer)
-            && !(wp->w_floating && !wp->w_config.focusable)) {
+            && !(wp->w_floating && (wp->w_config.hide || !wp->w_config.focusable))) {
           curwin = wp;
           break;
         }
@@ -4031,6 +4044,7 @@ void win_alloc_aucmd_win(int idx)
   fconfig.width = Columns;
   fconfig.height = 5;
   fconfig.focusable = false;
+  fconfig.mouse = false;
   aucmd_win[idx].auc_win = win_new_float(NULL, true, fconfig, &err);
   aucmd_win[idx].auc_win->w_buffer->b_nwindows--;
   RESET_BINDING(aucmd_win[idx].auc_win);
@@ -7357,18 +7371,37 @@ static int int_cmp(const void *pa, const void *pb)
   return a == b ? 0 : a < b ? -1 : 1;
 }
 
-/// Handle setting 'colorcolumn' or 'textwidth' in window "wp".
+/// Check "cc" as 'colorcolumn' and update the members of "wp".
+/// This is called when 'colorcolumn' or 'textwidth' is changed.
+///
+/// @param cc  when NULL: use "wp->w_p_cc"
+/// @param wp  when NULL: only parse "cc"
 ///
 /// @return error message, NULL if it's OK.
-const char *check_colorcolumn(win_T *wp)
+const char *check_colorcolumn(char *cc, win_T *wp)
 {
-  if (wp->w_buffer == NULL) {
+  if (wp != NULL && wp->w_buffer == NULL) {
     return NULL;      // buffer was closed
+  }
+
+  char *s = empty_string_option;
+  if (cc != NULL) {
+    s = cc;
+  } else if (wp != NULL) {
+    s = wp->w_p_cc;
+  }
+
+  OptInt tw;
+  if (wp != NULL) {
+    tw = wp->w_buffer->b_p_tw;
+  } else {
+    // buffer-local value not set, assume zero
+    tw = 0;
   }
 
   unsigned count = 0;
   int color_cols[256];
-  for (char *s = wp->w_p_cc; *s != NUL && count < 255;) {
+  while (*s != NUL && count < 255) {
     int col;
     if (*s == '-' || *s == '+') {
       // -N and +N: add to 'textwidth'
@@ -7378,16 +7411,12 @@ const char *check_colorcolumn(win_T *wp)
         return e_invarg;
       }
       col = col * getdigits_int(&s, true, 0);
-      if (wp->w_buffer->b_p_tw == 0) {
+      if (tw == 0) {
         goto skip;          // 'textwidth' not set, skip this item
       }
-      assert((col >= 0
-              && wp->w_buffer->b_p_tw <= INT_MAX - col
-              && wp->w_buffer->b_p_tw + col >= INT_MIN)
-             || (col < 0
-                 && wp->w_buffer->b_p_tw >= INT_MIN - col
-                 && wp->w_buffer->b_p_tw + col <= INT_MAX));
-      col += (int)wp->w_buffer->b_p_tw;
+      assert((col >= 0 && tw <= INT_MAX - col && tw + col >= INT_MIN)
+             || (col < 0 && tw >= INT_MIN - col && tw + col <= INT_MAX));
+      col += (int)tw;
       if (col < 0) {
         goto skip;
       }
@@ -7407,6 +7436,10 @@ skip:
     if (*++s == NUL) {
       return e_invarg;        // illegal trailing comma as in "set cc=80,"
     }
+  }
+
+  if (wp == NULL) {
+    return NULL;  // only parse "cc"
   }
 
   xfree(wp->w_p_cc_cols);

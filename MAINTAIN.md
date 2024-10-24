@@ -79,6 +79,8 @@ When a (non-experimental) feature is slated to be removed it should:
       `v0.10.0-dev-1957+gd676746c33` then use `0.12`.
     - For Vimscript features, use `v:lua.vim.deprecate()`. Use the same version
       as described for Lua features.
+    - `vim.deprecate(…, 'x.y.z')` where major version `x` is greater than the
+      current Nvim major version, is always treated as _soft_ deprecation.
 2. Be _hard_ deprecated in a following a release in which it was soft deprecated.
     - Use of the deprecated feature will still work but should issue a warning.
     - Features implemented in C will need bespoke implementations to communicate
@@ -213,12 +215,12 @@ https://github.com/neovim/neovim-backup
     * For special-purpose jobs where the runner version doesn't really matter,
       prefer `-latest` tags so we don't need to manually bump the versions. An
       example of a special-purpose workflow is `labeler_pr.yml`.
-    * For our testing job `test.yml`, prefer to use the latest stable (i.e.
-      non-beta) version explicitly. Avoid using the `-latest` tags here as it
-      makes it difficult to determine from an unrelated PR if a failure is due
-      to the PR itself or due to GitHub bumping the `-latest` tag without our
-      knowledge. There's also a high risk that automatically bumping the CI
-      versions will fail due to manual work being required from experience.
+    * For our testing job `test.yml`, prefer to use the latest version
+      explicitly. Avoid using the `-latest` tags here as it makes it difficult
+      to determine from an unrelated PR if a failure is due to the PR itself or
+      due to GitHub bumping the `-latest` tag without our knowledge. There's
+      also a high risk that automatically bumping the CI versions will fail due
+      to manual work being required from experience.
     * For our release job, which is `release.yml`, prefer to use the oldest
       stable (i.e. non-deprecated) versions available. The reason is that we're
       trying to produce images that work in the broadest number of environments,

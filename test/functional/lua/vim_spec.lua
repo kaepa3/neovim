@@ -155,10 +155,10 @@ describe('lua stdlib', function()
       end)
 
       it('plugin=nil, no error if soft-deprecated', function()
-        eq(
-          vim.NIL,
-          exec_lua('return vim.deprecate(...)', 'foo.baz()', 'foo.better_baz()', '0.99.0')
-        )
+        eq(vim.NIL, exec_lua [[return vim.deprecate('old1', 'new1', '0.99.0')]])
+        -- Major version > current Nvim major is always "soft-deprecated".
+        -- XXX: This is also a reminder to update the hardcoded `nvim_major`, when Nvim reaches 1.0.
+        eq(vim.NIL, exec_lua [[return vim.deprecate('old2', 'new2', '1.0.0')]])
       end)
 
       it('plugin=nil, show error if hard-deprecated', function()
@@ -172,13 +172,6 @@ describe('lua stdlib', function()
             foo.hard_dep() is deprecated. Run ":checkhealth vim.deprecated" for more information]]
           ):format(was_removed, nextver),
           exec_lua('return vim.deprecate(...)', 'foo.hard_dep()', 'vim.new_api()', nextver)
-        )
-      end)
-
-      it('plugin=nil, to be deleted in the next major version (1.0)', function()
-        eq(
-          [[foo.baz() is deprecated. Run ":checkhealth vim.deprecated" for more information]],
-          exec_lua [[ return vim.deprecate('foo.baz()', nil, '1.0') ]]
         )
       end)
 
@@ -319,21 +312,106 @@ describe('lua stdlib', function()
       49,
       51,
     }
+    local indices8 = {
+      [0] = 0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+    }
     for i, k in pairs(indices32) do
       eq(k, exec_lua('return vim.str_byteindex(_G.test_text, ...)', i), i)
+      eq(k, exec_lua('return vim.str_byteindex(_G.test_text, ..., false)', i), i)
+      eq(k, exec_lua('return vim.str_byteindex(_G.test_text, "utf-32", ...)', i), i)
     end
     for i, k in pairs(indices16) do
       eq(k, exec_lua('return vim.str_byteindex(_G.test_text, ..., true)', i), i)
+      eq(k, exec_lua('return vim.str_byteindex(_G.test_text, "utf-16", ...)', i), i)
     end
-    eq(
+    for i, k in pairs(indices8) do
+      eq(k, exec_lua('return vim.str_byteindex(_G.test_text, "utf-8", ...)', i), i)
+    end
+    matches(
       'index out of range',
       pcall_err(exec_lua, 'return vim.str_byteindex(_G.test_text, ...)', #indices32 + 1)
     )
-    eq(
+    matches(
       'index out of range',
       pcall_err(exec_lua, 'return vim.str_byteindex(_G.test_text, ..., true)', #indices16 + 1)
     )
-    local i32, i16 = 0, 0
+    matches(
+      'index out of range',
+      pcall_err(exec_lua, 'return vim.str_byteindex(_G.test_text, "utf-16", ...)', #indices16 + 1)
+    )
+    matches(
+      'index out of range',
+      pcall_err(exec_lua, 'return vim.str_byteindex(_G.test_text, "utf-32", ...)', #indices32 + 1)
+    )
+    matches(
+      'invalid encoding',
+      pcall_err(exec_lua, 'return vim.str_byteindex("hello", "madeupencoding", 1)')
+    )
+    eq(
+      indices32[#indices32],
+      exec_lua('return vim.str_byteindex(_G.test_text, "utf-32", 99999, false)')
+    )
+    eq(
+      indices16[#indices16],
+      exec_lua('return vim.str_byteindex(_G.test_text, "utf-16", 99999, false)')
+    )
+    eq(
+      indices8[#indices8],
+      exec_lua('return vim.str_byteindex(_G.test_text, "utf-8", 99999, false)')
+    )
+    eq(2, exec_lua('return vim.str_byteindex("é", "utf-16", 2, false)'))
+    local i32, i16, i8 = 0, 0, 0
     local len = 51
     for k = 0, len do
       if indices32[i32] < k then
@@ -345,9 +423,29 @@ describe('lua stdlib', function()
           i16 = i16 + 1
         end
       end
+      if indices8[i8] < k then
+        i8 = i8 + 1
+      end
       eq({ i32, i16 }, exec_lua('return {vim.str_utfindex(_G.test_text, ...)}', k), k)
+      eq({ i32 }, exec_lua('return {vim.str_utfindex(_G.test_text, "utf-32", ...)}', k), k)
+      eq({ i16 }, exec_lua('return {vim.str_utfindex(_G.test_text, "utf-16", ...)}', k), k)
+      eq({ i8 }, exec_lua('return {vim.str_utfindex(_G.test_text, "utf-8", ...)}', k), k)
     end
-    eq(
+
+    eq({ #indices32, #indices16 }, exec_lua('return {vim.str_utfindex(_G.test_text)}'))
+
+    eq(#indices32, exec_lua('return vim.str_utfindex(_G.test_text, "utf-32", math.huge, false)'))
+    eq(#indices16, exec_lua('return vim.str_utfindex(_G.test_text, "utf-16", math.huge, false)'))
+    eq(#indices8, exec_lua('return vim.str_utfindex(_G.test_text, "utf-8", math.huge, false)'))
+
+    eq(#indices32, exec_lua('return vim.str_utfindex(_G.test_text, "utf-32")'))
+    eq(#indices16, exec_lua('return vim.str_utfindex(_G.test_text, "utf-16")'))
+    eq(#indices8, exec_lua('return vim.str_utfindex(_G.test_text, "utf-8")'))
+    matches(
+      'invalid encoding',
+      pcall_err(exec_lua, 'return vim.str_utfindex(_G.test_text, "madeupencoding", ...)', 1)
+    )
+    matches(
       'index out of range',
       pcall_err(exec_lua, 'return vim.str_utfindex(_G.test_text, ...)', len + 1)
     )
@@ -1326,7 +1424,9 @@ describe('lua stdlib', function()
     ]],
     }
     feed('<cr>')
-    eq({ 3, NIL }, api.nvim_get_var('yy'))
+    retry(10, nil, function()
+      eq({ 3, NIL }, api.nvim_get_var('yy'))
+    end)
 
     exec_lua([[timer:close()]])
   end)
@@ -1363,7 +1463,79 @@ describe('lua stdlib', function()
     eq('{"a": {}, "b": []}', exec_lua([[ return vim.fn.json_encode({a=vim.empty_dict(), b={}}) ]]))
   end)
 
-  it('vim.validate', function()
+  it('vim.validate (fast form)', function()
+    exec_lua("vim.validate('arg1', {}, 'table')")
+    exec_lua("vim.validate('arg1', nil, 'table', true)")
+    exec_lua("vim.validate('arg1', { foo='foo' }, 'table')")
+    exec_lua("vim.validate('arg1', { 'foo' }, 'table')")
+    exec_lua("vim.validate('arg1', 'foo', 'string')")
+    exec_lua("vim.validate('arg1', nil, 'string', true)")
+    exec_lua("vim.validate('arg1', 1, 'number')")
+    exec_lua("vim.validate('arg1', 0, 'number')")
+    exec_lua("vim.validate('arg1', 0.1, 'number')")
+    exec_lua("vim.validate('arg1', nil, 'number', true)")
+    exec_lua("vim.validate('arg1', true, 'boolean')")
+    exec_lua("vim.validate('arg1', false, 'boolean')")
+    exec_lua("vim.validate('arg1', nil, 'boolean', true)")
+    exec_lua("vim.validate('arg1', function()end, 'function')")
+    exec_lua("vim.validate('arg1', nil, 'function', true)")
+    exec_lua("vim.validate('arg1', nil, 'nil')")
+    exec_lua("vim.validate('arg1', nil, 'nil', true)")
+    exec_lua("vim.validate('arg1', coroutine.create(function()end), 'thread')")
+    exec_lua("vim.validate('arg1', nil, 'thread', true)")
+    exec_lua("vim.validate('arg1', 2, function(a) return (a % 2) == 0  end, 'even number')")
+    exec_lua("vim.validate('arg1', 5, {'number', 'string'})")
+    exec_lua("vim.validate('arg2', 'foo', {'number', 'string'})")
+
+    matches('arg1: expected number, got nil', pcall_err(vim.validate, 'arg1', nil, 'number'))
+    matches('arg1: expected string, got nil', pcall_err(vim.validate, 'arg1', nil, 'string'))
+    matches('arg1: expected table, got nil', pcall_err(vim.validate, 'arg1', nil, 'table'))
+    matches('arg1: expected function, got nil', pcall_err(vim.validate, 'arg1', nil, 'function'))
+    matches('arg1: expected string, got number', pcall_err(vim.validate, 'arg1', 5, 'string'))
+    matches('arg1: expected table, got number', pcall_err(vim.validate, 'arg1', 5, 'table'))
+    matches('arg1: expected function, got number', pcall_err(vim.validate, 'arg1', 5, 'function'))
+    matches('arg1: expected number, got string', pcall_err(vim.validate, 'arg1', '5', 'number'))
+    matches('arg1: expected x, got number', pcall_err(exec_lua, "vim.validate('arg1', 1, 'x')"))
+    matches('invalid validator: 1', pcall_err(exec_lua, "vim.validate('arg1', 1, 1)"))
+    matches('invalid arguments', pcall_err(exec_lua, "vim.validate('arg1', { 1 })"))
+
+    -- Validated parameters are required by default.
+    matches(
+      'arg1: expected string, got nil',
+      pcall_err(exec_lua, "vim.validate('arg1',  nil, 'string')")
+    )
+    -- Explicitly required.
+    matches(
+      'arg1: expected string, got nil',
+      pcall_err(exec_lua, "vim.validate('arg1', nil, 'string', false)")
+    )
+
+    matches(
+      'arg1: expected table, got number',
+      pcall_err(exec_lua, "vim.validate('arg1', 1, 'table')")
+    )
+
+    matches(
+      'arg1: expected even number, got 3',
+      pcall_err(exec_lua, "vim.validate('arg1', 3, function(a) return a == 1 end, 'even number')")
+    )
+    matches(
+      'arg1: expected %?, got 3',
+      pcall_err(exec_lua, "vim.validate('arg1', 3, function(a) return a == 1 end)")
+    )
+    matches(
+      'arg1: expected number|string, got nil',
+      pcall_err(exec_lua, "vim.validate('arg1', nil, {'number', 'string'})")
+    )
+
+    -- Pass an additional message back.
+    matches(
+      'arg1: expected %?, got 3. Info: TEST_MSG',
+      pcall_err(exec_lua, "vim.validate('arg1', 3, function(a) return a == 1, 'TEST_MSG' end)")
+    )
+  end)
+
+  it('vim.validate (spec form)', function()
     exec_lua("vim.validate{arg1={{}, 'table' }}")
     exec_lua("vim.validate{arg1={{}, 't' }}")
     exec_lua("vim.validate{arg1={nil, 't', true }}")
@@ -1392,29 +1564,11 @@ describe('lua stdlib', function()
     exec_lua("vim.validate{arg1={{}, 't' }, arg2={ 'foo', 's' }}")
     exec_lua("vim.validate{arg1={2, function(a) return (a % 2) == 0  end, 'even number' }}")
     exec_lua("vim.validate{arg1={5, {'n', 's'} }, arg2={ 'foo', {'n', 's'} }}")
-    vim.validate('arg1', 5, 'number')
-    vim.validate('arg1', '5', 'string')
-    vim.validate('arg1', { 5 }, 'table')
-    vim.validate('arg1', function()
-      return 5
-    end, 'function')
-    vim.validate('arg1', nil, 'number', true)
-    vim.validate('arg1', nil, 'string', true)
-    vim.validate('arg1', nil, 'table', true)
-    vim.validate('arg1', nil, 'function', true)
 
-    matches('arg1: expected number, got nil', pcall_err(vim.validate, 'arg1', nil, 'number'))
-    matches('arg1: expected string, got nil', pcall_err(vim.validate, 'arg1', nil, 'string'))
-    matches('arg1: expected table, got nil', pcall_err(vim.validate, 'arg1', nil, 'table'))
-    matches('arg1: expected function, got nil', pcall_err(vim.validate, 'arg1', nil, 'function'))
-    matches('arg1: expected string, got number', pcall_err(vim.validate, 'arg1', 5, 'string'))
-    matches('arg1: expected table, got number', pcall_err(vim.validate, 'arg1', 5, 'table'))
-    matches('arg1: expected function, got number', pcall_err(vim.validate, 'arg1', 5, 'function'))
-    matches('arg1: expected number, got string', pcall_err(vim.validate, 'arg1', '5', 'number'))
     matches('expected table, got number', pcall_err(exec_lua, "vim.validate{ 1, 'x' }"))
-    matches('invalid type name: x', pcall_err(exec_lua, "vim.validate{ arg1={ 1, 'x' }}"))
-    matches('invalid type name: 1', pcall_err(exec_lua, 'vim.validate{ arg1={ 1, 1 }}'))
-    matches('invalid type name: nil', pcall_err(exec_lua, 'vim.validate{ arg1={ 1 }}'))
+    matches('arg1: expected x, got number', pcall_err(exec_lua, "vim.validate{ arg1={ 1, 'x' }}"))
+    matches('invalid validator: 1', pcall_err(exec_lua, 'vim.validate{ arg1={ 1, 1 }}'))
+    matches('invalid validator: nil', pcall_err(exec_lua, 'vim.validate{ arg1={ 1 }}'))
 
     -- Validated parameters are required by default.
     matches(
@@ -3223,6 +3377,45 @@ describe('lua stdlib', function()
       feed('<C-C>')
       eq('/', exec_lua([[return _G.ctrl_c_cmdtype]]))
     end)
+
+    it('callback is not invoked recursively #30752', function()
+      local screen = Screen.new(60, 10)
+      screen:attach()
+      exec_lua([[
+        vim.on_key(function(key, typed)
+          vim.api.nvim_echo({
+            { 'key_cb\n' },
+            { ("KEYCB: key '%s', typed '%s'\n"):format(key, typed) },
+          }, false, {})
+        end)
+      ]])
+      feed('^')
+      screen:expect([[
+                                                                    |
+        {1:~                                                           }|*5
+        {3:                                                            }|
+        key_cb                                                      |
+        KEYCB: key '^', typed '^'                                   |
+        {6:Press ENTER or type command to continue}^                     |
+      ]])
+      feed('<C-C>')
+      screen:expect([[
+                                                                    |
+        {1:~                                                           }|*3
+        {3:                                                            }|
+        key_cb                                                      |
+        KEYCB: key '^', typed '^'                                   |
+        key_cb                                                      |
+        KEYCB: key '{18:^C}', typed '{18:^C}'                                 |
+        {6:Press ENTER or type command to continue}^                     |
+      ]])
+      feed('<C-C>')
+      screen:expect([[
+        ^                                                            |
+        {1:~                                                           }|*8
+                                                                    |
+      ]])
+    end)
   end)
 
   describe('vim.wait', function()
@@ -4060,8 +4253,13 @@ describe('vim.keymap', function()
     )
 
     matches(
-      'opts: expected table, got function',
+      'rhs: expected string|function, got number',
       pcall_err(exec_lua, [[vim.keymap.set({}, 'x', 42, function() end)]])
+    )
+
+    matches(
+      'opts: expected table, got function',
+      pcall_err(exec_lua, [[vim.keymap.set({}, 'x', 'x', function() end)]])
     )
 
     matches(

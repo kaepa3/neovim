@@ -12,6 +12,8 @@ end
 
 local sysname = vim.uv.os_uname().sysname
 
+--- @class vim.lsp.protocol.constants
+--- @nodoc
 local constants = {
   --- @enum lsp.DiagnosticSeverity
   DiagnosticSeverity = {
@@ -314,7 +316,9 @@ local constants = {
   },
 }
 
--- Protocol for the Microsoft Language Server Protocol (mslsp)
+--- Protocol for the Microsoft Language Server Protocol (mslsp)
+--- @class vim.lsp.protocol : vim.lsp.protocol.constants
+--- @nodoc
 local protocol = {}
 
 --- @diagnostic disable:no-unknown
@@ -562,7 +566,7 @@ function protocol.make_client_capabilities()
       workDoneProgress = true,
       showMessage = {
         messageActionItem = {
-          additionalPropertiesSupport = false,
+          additionalPropertiesSupport = true,
         },
       },
       showDocument = {

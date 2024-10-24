@@ -658,7 +658,7 @@ static const void *shada_hist_iter(const void *const iter, const uint8_t history
           .histtype = history_type,
           .string = hist_he.hisstr,
           .sep = (char)(history_type == HIST_SEARCH
-                        ? hist_he.hisstr[strlen(hist_he.hisstr) + 1]
+                        ? hist_he.hisstr[hist_he.hisstrlen + 1]
                         : 0),
         }
       },
@@ -784,6 +784,7 @@ static inline void hms_to_he_array(const HistoryMergerState *const hms_p,
     hist->timestamp = cur_entry->data.timestamp;
     hist->hisnum = (int)(hist - hist_array) + 1;
     hist->hisstr = cur_entry->data.data.history_item.string;
+    hist->hisstrlen = strlen(cur_entry->data.data.history_item.string);
     hist->additional_data = cur_entry->data.additional_data;
     hist++;
   })
@@ -1886,13 +1887,18 @@ static inline ShaDaWriteResult shada_read_when_writing(FileDescriptor *const sd_
           shada_free_shada_entry(&entry);
           break;
         }
-        if (wms->global_marks[idx].data.type == kSDItemMissing) {
+
+        // Global or numbered mark.
+        PossiblyFreedShadaEntry *mark
+          = idx < 26 ? &wms->global_marks[idx] : &wms->numbered_marks[idx - 26];
+
+        if (mark->data.type == kSDItemMissing) {
           if (namedfm[idx].fmark.timestamp >= entry.timestamp) {
             shada_free_shada_entry(&entry);
             break;
           }
         }
-        COMPARE_WITH_ENTRY(&wms->global_marks[idx], entry);
+        COMPARE_WITH_ENTRY(mark, entry);
       }
       break;
     case kSDItemChange:

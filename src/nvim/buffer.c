@@ -255,7 +255,7 @@ int open_buffer(bool read_stdin, exarg_T *eap, int flags_arg)
     emsg(_("E83: Cannot allocate buffer, using other one..."));
     enter_buffer(curbuf);
     if (old_tw != curbuf->b_p_tw) {
-      check_colorcolumn(curwin);
+      check_colorcolumn(NULL, curwin);
     }
     return FAIL;
   }
@@ -476,6 +476,11 @@ static bool can_unload_buffer(buf_T *buf)
           fname != NULL ? fname : "[No Name]");
   }
   return can_unload;
+}
+
+bool buf_locked(buf_T *buf)
+{
+  return buf->b_locked || buf->b_locked_split;
 }
 
 /// Close the link to a buffer.
@@ -1024,7 +1029,7 @@ void handle_swap_exists(bufref_T *old_curbuf)
       enter_buffer(buf);
 
       if (old_tw != curbuf->b_p_tw) {
-        check_colorcolumn(curwin);
+        check_colorcolumn(NULL, curwin);
       }
     }
     // If "old_curbuf" is NULL we are in big trouble here...
@@ -1664,7 +1669,7 @@ void set_curbuf(buf_T *buf, int action, bool update_jumplist)
     // enter some buffer.  Using the last one is hopefully OK.
     enter_buffer(valid ? buf : lastbuf);
     if (old_tw != curbuf->b_p_tw) {
-      check_colorcolumn(curwin);
+      check_colorcolumn(NULL, curwin);
     }
   }
 
@@ -2980,7 +2985,7 @@ int setfname(buf_T *buf, char *ffname_arg, char *sfname_arg, bool message)
       close_buffer(NULL, obuf, DOBUF_WIPE, false, false);
     }
     sfname = xstrdup(sfname);
-#ifdef USE_FNAME_CASE
+#ifdef CASE_INSENSITIVE_FILENAME
     path_fix_case(sfname);            // set correct case for short file name
 #endif
     if (buf->b_sfname != buf->b_ffname) {

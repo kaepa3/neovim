@@ -78,9 +78,8 @@ ga			Print the ascii value of the character under the
 			If the character can be inserted as a digraph, also
 			output the two characters that can be used to create
 			the character:
-			    <ö> 246, Hex 00f6, Oct 366, Digr o: ~
+				<ö> 246, Hex 00f6, Oct 366, Digr o: ~
 			This shows you can type CTRL-K o : to insert ö.
-
 
 							*g8*
 g8			Print the hex values of the bytes used in the
@@ -549,9 +548,9 @@ gO			Show a filetype-specific, navigable "outline" of the
 
 If you use the less or more program to view a file, you don't get syntax
 highlighting.  Thus you would like to use Vim instead.  You can do this by
-using the shell script "$VIMRUNTIME/macros/less.sh".
+using the shell script "$VIMRUNTIME/scripts/less.sh".
 
-This shell script uses the Vim script "$VIMRUNTIME/macros/less.vim".  It sets
+This shell script uses the Vim script "$VIMRUNTIME/scripts/less.vim".  It sets
 up mappings to simulate the commands that less supports.  Otherwise, you can
 still use the Vim commands.
 
