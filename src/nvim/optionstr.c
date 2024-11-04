@@ -235,6 +235,7 @@ void check_buf_options(buf_T *buf)
   check_string_option(&buf->b_p_ep);
   check_string_option(&buf->b_p_path);
   check_string_option(&buf->b_p_tags);
+  check_string_option(&buf->b_p_ffu);
   check_string_option(&buf->b_p_tfu);
   check_string_option(&buf->b_p_tc);
   check_string_option(&buf->b_p_dict);
@@ -250,7 +251,6 @@ void check_buf_options(buf_T *buf)
 /// Free the string allocated for an option.
 /// Checks for the string being empty_string_option. This may happen if we're out of memory,
 /// xstrdup() returned NULL, which was replaced by empty_string_option by check_options().
-/// Does NOT check for P_ALLOCED flag!
 void free_string_option(char *p)
 {
   if (p != empty_string_option) {
@@ -420,9 +420,9 @@ const char *check_stl_option(char *s)
 /// often illegal in a file name. Be more permissive if "secure" is off.
 bool check_illegal_path_names(char *val, uint32_t flags)
 {
-  return (((flags & P_NFNAME)
+  return (((flags & kOptFlagNFname)
            && strpbrk(val, (secure ? "/\\*?[|;&<>\r\n" : "/\\*?[<>\r\n")) != NULL)
-          || ((flags & P_NDNAME)
+          || ((flags & kOptFlagNDname)
               && strpbrk(val, "*?[|;&<>\r\n") != NULL));
 }
 
@@ -655,6 +655,9 @@ const char *did_set_backupcopy(optset_T *args)
   if (opt_flags & OPT_LOCAL) {
     bkc = buf->b_p_bkc;
     flags = &buf->b_bkc_flags;
+  } else if (!(opt_flags & OPT_GLOBAL)) {
+    // When using :set, clear the local flags.
+    buf->b_bkc_flags = 0;
   }
 
   if ((opt_flags & OPT_LOCAL) && *bkc == NUL) {
@@ -1070,6 +1073,9 @@ const char *did_set_completeopt(optset_T *args FUNC_ATTR_UNUSED)
   if (args->os_flags & OPT_LOCAL) {
     cot = buf->b_p_cot;
     flags = &buf->b_cot_flags;
+  } else if (!(args->os_flags & OPT_GLOBAL)) {
+    // When using :set, clear the local flags.
+    buf->b_cot_flags = 0;
   }
 
   if (check_opt_strings(cot, p_cot_values, true) != OK) {
@@ -1378,7 +1384,7 @@ const char *did_set_filetype_or_syntax(optset_T *args)
 
   args->os_value_changed = strcmp(args->os_oldval.string.data, *varp) != 0;
 
-  // Since we check the value, there is no need to set P_INSECURE,
+  // Since we check the value, there is no need to set kOptFlagInsecure,
   // even when the value comes from a modeline.
   args->os_value_checked = true;
 
@@ -1659,7 +1665,7 @@ const char *did_set_keymap(optset_T *args)
 
   secure = secure_save;
 
-  // Since we check the value, there is no need to set P_INSECURE,
+  // Since we check the value, there is no need to set kOptFlagInsecure,
   // even when the value comes from a modeline.
   args->os_value_checked = true;
 

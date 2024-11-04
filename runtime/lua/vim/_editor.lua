@@ -545,7 +545,7 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
   -- TODO: handle double-width characters
   if regtype:byte() == 22 then
     local bufline = vim.api.nvim_buf_get_lines(bufnr, pos1[1], pos1[1] + 1, true)[1]
-    pos1[2] = vim.str_utfindex(bufline, pos1[2])
+    pos1[2] = vim.str_utfindex(bufline, 'utf-32', pos1[2])
   end
 
   local region = {}
@@ -557,14 +557,14 @@ function vim.region(bufnr, pos1, pos2, regtype, inclusive)
       c2 = c1 + tonumber(regtype:sub(2))
       -- and adjust for non-ASCII characters
       local bufline = vim.api.nvim_buf_get_lines(bufnr, l, l + 1, true)[1]
-      local utflen = vim.str_utfindex(bufline, #bufline)
+      local utflen = vim.str_utfindex(bufline, 'utf-32', #bufline)
       if c1 <= utflen then
-        c1 = assert(tonumber(vim.str_byteindex(bufline, c1)))
+        c1 = assert(tonumber(vim.str_byteindex(bufline, 'utf-32', c1)))
       else
         c1 = #bufline + 1
       end
       if c2 <= utflen then
-        c2 = assert(tonumber(vim.str_byteindex(bufline, c2)))
+        c2 = assert(tonumber(vim.str_byteindex(bufline, 'utf-32', c2)))
       else
         c2 = #bufline + 1
       end
@@ -651,7 +651,7 @@ do
   end
 end
 
-local on_key_cbs = {} --- @type table<integer,function>
+local on_key_cbs = {} --- @type table<integer,[function, table]>
 
 --- Adds Lua function {fn} with namespace id {ns_id} as a listener to every,
 --- yes every, input key.
@@ -664,60 +664,74 @@ local on_key_cbs = {} --- @type table<integer,function>
 ---           it won't be invoked for those keys.
 ---@note {fn} will not be cleared by |nvim_buf_clear_namespace()|
 ---
----@param fn fun(key: string, typed: string)? Function invoked for every input key,
+---@param fn nil|fun(key: string, typed: string): string? Function invoked for every input key,
 ---          after mappings have been applied but before further processing. Arguments
 ---          {key} and {typed} are raw keycodes, where {key} is the key after mappings
 ---          are applied, and {typed} is the key(s) before mappings are applied.
 ---          {typed} may be empty if {key} is produced by non-typed key(s) or by the
 ---          same typed key(s) that produced a previous {key}.
----          When {fn} is `nil` and {ns_id} is specified, the callback associated with
----          namespace {ns_id} is removed.
+---          If {fn} returns an empty string, {key} is discarded/ignored.
+---          When {fn} is `nil`, the callback associated with namespace {ns_id} is removed.
 ---@param ns_id integer? Namespace ID. If nil or 0, generates and returns a
 ---                      new |nvim_create_namespace()| id.
+---@param opts table? Optional parameters
 ---
 ---@see |keytrans()|
 ---
 ---@return integer Namespace id associated with {fn}. Or count of all callbacks
 ---if on_key() is called without arguments.
-function vim.on_key(fn, ns_id)
+function vim.on_key(fn, ns_id, opts)
   if fn == nil and ns_id == nil then
     return vim.tbl_count(on_key_cbs)
   end
 
   vim.validate('fn', fn, 'callable', true)
   vim.validate('ns_id', ns_id, 'number', true)
+  vim.validate('opts', opts, 'table', true)
+  opts = opts or {}
 
   if ns_id == nil or ns_id == 0 then
     ns_id = vim.api.nvim_create_namespace('')
   end
 
-  on_key_cbs[ns_id] = fn
+  on_key_cbs[ns_id] = fn and { fn, opts }
   return ns_id
 end
 
 --- Executes the on_key callbacks.
 ---@private
 function vim._on_key(buf, typed_buf)
-  local failed_ns_ids = {}
-  local failed_messages = {}
+  local failed = {} ---@type [integer, string][]
+  local discard = false
   for k, v in pairs(on_key_cbs) do
-    local ok, err_msg = pcall(v, buf, typed_buf)
+    local fn = v[1]
+    local ok, rv = xpcall(function()
+      return fn(buf, typed_buf)
+    end, debug.traceback)
+    if ok and rv ~= nil then
+      if type(rv) == 'string' and #rv == 0 then
+        discard = true
+        -- break   -- Without break deliver to all callbacks even when it eventually discards.
+        -- "break" does not make sense unless callbacks are sorted by ???.
+      else
+        ok = false
+        rv = 'return string must be empty'
+      end
+    end
     if not ok then
       vim.on_key(nil, k)
-      table.insert(failed_ns_ids, k)
-      table.insert(failed_messages, err_msg)
+      table.insert(failed, { k, rv })
     end
   end
 
-  if failed_ns_ids[1] then
-    error(
-      string.format(
-        "Error executing 'on_key' with ns_ids '%s'\n    Messages: %s",
-        table.concat(failed_ns_ids, ', '),
-        table.concat(failed_messages, '\n')
-      )
-    )
+  if #failed > 0 then
+    local errmsg = ''
+    for _, v in ipairs(failed) do
+      errmsg = errmsg .. string.format('\nWith ns_id %d: %s', v[1], v[2])
+    end
+    error(errmsg)
   end
+  return discard
 end
 
 --- Convert UTF-32, UTF-16 or UTF-8 {index} to byte index.
@@ -740,9 +754,14 @@ function vim.str_byteindex(s, encoding, index, strict_indexing)
     --   • {str}        (`string`)
     --   • {index}      (`integer`)
     --   • {use_utf16}  (`boolean?`)
+    vim.deprecate(
+      'vim.str_byteindex',
+      'vim.str_byteindex(s, encoding, index, strict_indexing)',
+      '1.0'
+    )
     local old_index = encoding
     local use_utf16 = index or false
-    return vim.__str_byteindex(s, old_index, use_utf16) or error('index out of range')
+    return vim._str_byteindex(s, old_index, use_utf16) or error('index out of range')
   end
 
   vim.validate('s', s, 'string')
@@ -769,7 +788,7 @@ function vim.str_byteindex(s, encoding, index, strict_indexing)
     end
     return index
   end
-  return vim.__str_byteindex(s, index, encoding == 'utf-16')
+  return vim._str_byteindex(s, index, encoding == 'utf-16')
     or strict_indexing and error('index out of range')
     or len
 end
@@ -793,8 +812,13 @@ function vim.str_utfindex(s, encoding, index, strict_indexing)
     -- Parameters: ~
     --   • {str}    (`string`)
     --   • {index}  (`integer?`)
+    vim.deprecate(
+      'vim.str_utfindex',
+      'vim.str_utfindex(s, encoding, index, strict_indexing)',
+      '1.0'
+    )
     local old_index = encoding
-    local col32, col16 = vim.__str_utfindex(s, old_index) --[[@as integer,integer]]
+    local col32, col16 = vim._str_utfindex(s, old_index) --[[@as integer,integer]]
     if not col32 or not col16 then
       error('index out of range')
     end
@@ -828,7 +852,7 @@ function vim.str_utfindex(s, encoding, index, strict_indexing)
     local len = #s
     return index <= len and index or (strict_indexing and error('index out of range') or len)
   end
-  local col32, col16 = vim.__str_utfindex(s, index) --[[@as integer?,integer?]]
+  local col32, col16 = vim._str_utfindex(s, index) --[[@as integer?,integer?]]
   local col = encoding == 'utf-16' and col16 or col32
   if col then
     return col
@@ -836,7 +860,7 @@ function vim.str_utfindex(s, encoding, index, strict_indexing)
   if strict_indexing then
     error('index out of range')
   end
-  local max32, max16 = vim.__str_utfindex(s)--[[@as integer integer]]
+  local max32, max16 = vim._str_utfindex(s)--[[@as integer integer]]
   return encoding == 'utf-16' and max16 or max32
 end
 
