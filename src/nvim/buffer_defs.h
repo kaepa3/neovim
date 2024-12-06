@@ -206,7 +206,7 @@ typedef struct {
   OptInt wo_winbl;
 #define w_p_winbl w_onebuf_opt.wo_winbl  // 'winblend'
 
-  LastSet wo_script_ctx[WV_COUNT];        // SCTXs for window-local options
+  LastSet wo_script_ctx[kWinOptCount];  // SCTXs for window-local options
 #define w_p_script_ctx w_onebuf_opt.wo_script_ctx
 } winopt_T;
 
@@ -316,8 +316,6 @@ typedef struct {
   char *b_p_spf;              // 'spellfile'
   char *b_p_spl;              // 'spelllang'
   char *b_p_spo;              // 'spelloptions'
-#define SPO_CAMEL  0x1
-#define SPO_NPBUFFER 0x2
   unsigned b_p_spo_flags;      // 'spelloptions' flags
   int b_cjk;                  // all CJK letters as OK
   uint8_t b_syn_chartab[32];  // syntax iskeyword option
@@ -512,7 +510,7 @@ struct file_buffer {
   // or contents of the file being edited.
   bool b_p_initialized;                 // set when options initialized
 
-  LastSet b_p_script_ctx[BV_COUNT];     // SCTXs for buffer-local options
+  LastSet b_p_script_ctx[kBufOptCount];  // SCTXs for buffer-local options
 
   int b_p_ai;                   ///< 'autoindent'
   int b_p_ai_nopaste;           ///< b_p_ai saved for paste mode
@@ -1035,7 +1033,7 @@ struct window_S {
   synblock_T *w_s;                 ///< for :ownsyntax
 
   int w_ns_hl;
-  int w_ns_hl_winhl;
+  int w_ns_hl_winhl;  ///< when set to -1, 'winhighlight' shouldn't be used
   int w_ns_hl_active;
   int *w_ns_hl_attr;
 

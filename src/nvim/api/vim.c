@@ -779,8 +779,8 @@ void nvim_set_vvar(String name, Object value, Error *err)
 /// Echo a message.
 ///
 /// @param chunks  A list of `[text, hl_group]` arrays, each representing a
-///                text chunk with specified highlight. `hl_group` element
-///                can be omitted for no highlight.
+///                text chunk with specified highlight group name or ID.
+///                `hl_group` element can be omitted for no highlight.
 /// @param history  if true, add to |message-history|.
 /// @param opts  Optional parameters.
 ///          - verbose: Message is printed as a result of 'verbose' option.
@@ -1004,10 +1004,10 @@ Buffer nvim_create_buf(Boolean listed, Boolean scratch, Error *err)
   buf_copy_options(buf, BCO_ENTER | BCO_NOHELP);
 
   if (scratch) {
-    set_option_direct_for(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL, 0, kOptReqBuf,
-                          buf);
-    set_option_direct_for(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL, 0, kOptReqBuf,
-                          buf);
+    set_option_direct_for(kOptBufhidden, STATIC_CSTR_AS_OPTVAL("hide"), OPT_LOCAL, 0,
+                          kOptScopeBuf, buf);
+    set_option_direct_for(kOptBuftype, STATIC_CSTR_AS_OPTVAL("nofile"), OPT_LOCAL, 0,
+                          kOptScopeBuf, buf);
     assert(buf->b_ml.ml_mfp->mf_fd < 0);  // ml_open() should not have opened swapfile already
     buf->b_p_swf = false;
     buf->b_p_ml = false;
@@ -1040,7 +1040,7 @@ fail:
 /// Open a terminal instance in a buffer
 ///
 /// By default (and currently the only option) the terminal will not be
-/// connected to an external process. Instead, input send on the channel
+/// connected to an external process. Instead, input sent on the channel
 /// will be echoed directly by the terminal. This is useful to display
 /// ANSI terminal sequences returned as part of a rpc message, or similar.
 ///
@@ -1050,6 +1050,18 @@ fail:
 /// then display it using |nvim_open_win()|, and then  call this function.
 /// Then |nvim_chan_send()| can be called immediately to process sequences
 /// in a virtual terminal having the intended size.
+///
+/// Example: this `TermHl` command can be used to display and highlight raw ANSI termcodes, so you
+/// can use Nvim as a "scrollback pager" (for terminals like kitty): [terminal-scrollback-pager]()
+///
+/// ```lua
+/// vim.api.nvim_create_user_command('TermHl', function()
+///   local b = vim.api.nvim_create_buf(false, true)
+///   local chan = vim.api.nvim_open_term(b, {})
+///   vim.api.nvim_chan_send(chan, table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'))
+///   vim.api.nvim_win_set_buf(0, b)
+/// end, { desc = 'Highlights ANSI termcodes in curbuf' })
+/// ```
 ///
 /// @param buffer the buffer to use (expected to be empty)
 /// @param opts   Optional parameters.
@@ -2156,7 +2168,7 @@ Dict nvim_eval_statusline(String str, Dict(eval_statusline) *opts, Arena *arena,
       if (statuscol.foldinfo.fi_level != 0 && statuscol.foldinfo.fi_lines > 0) {
         wp->w_cursorline = statuscol.foldinfo.fi_lnum;
       }
-      statuscol.use_cul = lnum == wp->w_cursorline && (wp->w_p_culopt_flags & CULOPT_NBR);
+      statuscol.use_cul = lnum == wp->w_cursorline && (wp->w_p_culopt_flags & kOptCuloptFlagNumber);
     }
 
     statuscol.sign_cul_id = statuscol.use_cul ? cul_id : 0;
@@ -2398,14 +2410,22 @@ void nvim__redraw(Dict(redraw) *opts, Error *err)
     redraw_buf_range_later(rbuf, first, last);
   }
 
-  bool flush = opts->flush;
+  // Redraw later types require update_screen() so call implicitly unless set to false.
+  if (HAS_KEY(opts, redraw, valid) || HAS_KEY(opts, redraw, range)) {
+    opts->flush = HAS_KEY(opts, redraw, flush) ? opts->flush : true;
+  }
+
+  // When explicitly set to false and only "redraw later" types are present,
+  // don't call ui_flush() either.
+  bool flush_ui = opts->flush;
   if (opts->tabline) {
     // Flush later in case tabline was just hidden or shown for the first time.
     if (redraw_tabline && firstwin->w_lines_valid == 0) {
-      flush = true;
+      opts->flush = true;
     } else {
       draw_tabline();
     }
+    flush_ui = true;
   }
 
   bool save_lz = p_lz;
@@ -2416,31 +2436,35 @@ void nvim__redraw(Dict(redraw) *opts, Error *err)
     if (win == NULL) {
       FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
         if (buf == NULL || wp->w_buffer == buf) {
-          redraw_status(wp, opts, &flush);
+          redraw_status(wp, opts, &opts->flush);
         }
       }
     } else {
-      redraw_status(win, opts, &flush);
+      redraw_status(win, opts, &opts->flush);
     }
+    flush_ui = true;
   }
 
   win_T *cwin = win ? win : curwin;
   // Allow moving cursor to recently opened window and make sure it is drawn #28868.
   if (opts->cursor && (!cwin->w_grid.target || !cwin->w_grid.target->valid)) {
-    flush = true;
+    opts->flush = true;
   }
 
   // Redraw pending screen updates when explicitly requested or when determined
   // that it is necessary to properly draw other requested components.
-  if (flush && !cmdpreview) {
+  if (opts->flush && !cmdpreview) {
     update_screen();
   }
 
   if (opts->cursor) {
     setcursor_mayforce(cwin, true);
+    flush_ui = true;
   }
 
-  ui_flush();
+  if (flush_ui) {
+    ui_flush();
+  }
 
   RedrawingDisabled = save_rd;
   p_lz = save_lz;

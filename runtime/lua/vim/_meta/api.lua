@@ -592,8 +592,9 @@ function vim.api.nvim_buf_line_count(buffer) end
 --- - id : id of the extmark to edit.
 --- - end_row : ending line of the mark, 0-based inclusive.
 --- - end_col : ending col of the mark, 0-based exclusive.
---- - hl_group : name of the highlight group used to highlight
----     this mark.
+--- - hl_group : highlight group used for the text range. This and below
+---     highlight groups can be supplied either as a string or as an integer,
+---     the latter of which can be obtained using `nvim_get_hl_id_by_name()`.
 --- - hl_eol : when true, for a multiline highlight covering the
 ---            EOL of a line, continue the highlight for the rest
 ---            of the screen line (just like for diff and
@@ -603,9 +604,7 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---     text chunk with specified highlight. `highlight` element
 ---     can either be a single highlight group, or an array of
 ---     multiple highlight groups that will be stacked
----     (highest priority last). A highlight group can be supplied
----     either as a string or as an integer, the latter which
----     can be obtained using `nvim_get_hl_id_by_name()`.
+---     (highest priority last).
 --- - virt_text_pos : position of virtual text. Possible values:
 ---   - "eol": right after eol character (default).
 ---   - "overlay": display over the specified column, without
@@ -676,15 +675,12 @@ function vim.api.nvim_buf_line_count(buffer) end
 ---     buffer or end of the line respectively. Defaults to true.
 --- - sign_text: string of length 1-2 used to display in the
 ---     sign column.
---- - sign_hl_group: name of the highlight group used to
----     highlight the sign column text.
---- - number_hl_group: name of the highlight group used to
----     highlight the number column.
---- - line_hl_group: name of the highlight group used to
----     highlight the whole line.
---- - cursorline_hl_group: name of the highlight group used to
----     highlight the sign column text when the cursor is on
----     the same line as the mark and 'cursorline' is enabled.
+--- - sign_hl_group: highlight group used for the sign column text.
+--- - number_hl_group: highlight group used for the number column.
+--- - line_hl_group: highlight group used for the whole line.
+--- - cursorline_hl_group: highlight group used for the sign
+---     column text when the cursor is on the same line as the
+---     mark and 'cursorline' is enabled.
 --- - conceal: string which should be either empty or a single
 ---     character. Enable concealing similar to `:syn-conceal`.
 ---     When a character is supplied it is used as `:syn-cchar`.
@@ -967,9 +963,9 @@ function vim.api.nvim_create_augroup(name, opts) end
 ---     - id: (number) autocommand id
 ---     - event: (string) name of the triggered event `autocmd-events`
 ---     - group: (number|nil) autocommand group id, if any
----     - match: (string) expanded value of [<amatch>]
----     - buf: (number) expanded value of [<abuf>]
----     - file: (string) expanded value of [<afile>]
+---     - file: (string) [<afile>] (not expanded to a full path)
+---     - match: (string) [<amatch>] (expanded to a full path)
+---     - buf: (number) [<abuf>]
 ---     - data: (any) arbitrary data passed from [nvim_exec_autocmds()] [event-data]()
 --- - command (string) optional: Vim command to execute on event. Cannot be used with
 --- {callback}
@@ -1016,7 +1012,7 @@ function vim.api.nvim_create_namespace(name) end
 --- ```
 ---
 --- @param name string Name of the new user command. Must begin with an uppercase letter.
---- @param command any Replacement command to execute when this user command is executed. When called
+--- @param command string|fun(args: vim.api.keyset.create_user_command.command_args) Replacement command to execute when this user command is executed. When called
 --- from Lua, the command can also be a Lua function. The function is called with a
 --- single table argument that contains the following keys:
 --- - name: (string) Command name
@@ -1106,8 +1102,8 @@ function vim.api.nvim_del_var(name) end
 --- Echo a message.
 ---
 --- @param chunks any[] A list of `[text, hl_group]` arrays, each representing a
---- text chunk with specified highlight. `hl_group` element
---- can be omitted for no highlight.
+--- text chunk with specified highlight group name or ID.
+--- `hl_group` element can be omitted for no highlight.
 --- @param history boolean if true, add to `message-history`.
 --- @param opts vim.api.keyset.echo_opts Optional parameters.
 --- - verbose: Message is printed as a result of 'verbose' option.
@@ -1658,7 +1654,7 @@ function vim.api.nvim_notify(msg, log_level, opts) end
 --- Open a terminal instance in a buffer
 ---
 --- By default (and currently the only option) the terminal will not be
---- connected to an external process. Instead, input send on the channel
+--- connected to an external process. Instead, input sent on the channel
 --- will be echoed directly by the terminal. This is useful to display
 --- ANSI terminal sequences returned as part of a rpc message, or similar.
 ---
@@ -1668,6 +1664,18 @@ function vim.api.nvim_notify(msg, log_level, opts) end
 --- then display it using `nvim_open_win()`, and then  call this function.
 --- Then `nvim_chan_send()` can be called immediately to process sequences
 --- in a virtual terminal having the intended size.
+---
+--- Example: this `TermHl` command can be used to display and highlight raw ANSI termcodes, so you
+--- can use Nvim as a "scrollback pager" (for terminals like kitty): [terminal-scrollback-pager]()
+---
+--- ```lua
+--- vim.api.nvim_create_user_command('TermHl', function()
+---   local b = vim.api.nvim_create_buf(false, true)
+---   local chan = vim.api.nvim_open_term(b, {})
+---   vim.api.nvim_chan_send(chan, table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n'))
+---   vim.api.nvim_win_set_buf(0, b)
+--- end, { desc = 'Highlights ANSI termcodes in curbuf' })
+--- ```
 ---
 --- @param buffer integer the buffer to use (expected to be empty)
 --- @param opts vim.api.keyset.open_term Optional parameters.
@@ -1768,7 +1776,7 @@ function vim.api.nvim_open_term(buffer, opts) end
 --- - focusable: Enable focus by user actions (wincmds, mouse events).
 ---     Defaults to true. Non-focusable windows can be entered by
 ---     `nvim_set_current_win()`, or, when the `mouse` field is set to true,
----     by mouse events.
+---     by mouse events. See `focusable`.
 --- - mouse: Specify how this window interacts with mouse events.
 ---     Defaults to `focusable` value.
 ---     - If false, mouse events pass through this window.

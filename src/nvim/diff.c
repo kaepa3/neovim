@@ -1390,8 +1390,8 @@ void diff_win_options(win_T *wp, bool addbuf)
     }
     wp->w_p_fdm_save = xstrdup(wp->w_p_fdm);
   }
-  set_option_direct_for(kOptFoldmethod, STATIC_CSTR_AS_OPTVAL("diff"), OPT_LOCAL, 0, kOptReqWin,
-                        wp);
+  set_option_direct_for(kOptFoldmethod, STATIC_CSTR_AS_OPTVAL("diff"), OPT_LOCAL, 0,
+                        kOptScopeWin, wp);
 
   if (!wp->w_p_diff) {
     wp->w_p_fen_save = wp->w_p_fen;
@@ -2417,7 +2417,7 @@ int diffopt_changed(void)
 
   char *p = p_dip;
   while (*p != NUL) {
-    // Note: Keep this in sync with p_dip_values
+    // Note: Keep this in sync with opt_dip_values.
     if (strncmp(p, "filler", 6) == 0) {
       p += 6;
       diff_flags_new |= DIFF_FILLER;
@@ -2464,7 +2464,7 @@ int diffopt_changed(void)
       p += 8;
       diff_flags_new |= DIFF_INTERNAL;
     } else if (strncmp(p, "algorithm:", 10) == 0) {
-      // Note: Keep this in sync with p_dip_algorithm_values.
+      // Note: Keep this in sync with opt_dip_algorithm_values.
       p += 10;
       if (strncmp(p, "myers", 5) == 0) {
         p += 5;
@@ -2745,7 +2745,7 @@ bool diff_infold(win_T *wp, linenr_T lnum)
 void nv_diffgetput(bool put, size_t count)
 {
   if (bt_prompt(curbuf)) {
-    vim_beep(BO_OPER);
+    vim_beep(kOptBoFlagOperator);
     return;
   }
 

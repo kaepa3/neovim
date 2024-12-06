@@ -120,8 +120,8 @@ elseif(MINGW)
   # Use POSIX compatible stdio in Mingw
   target_compile_definitions(main_lib INTERFACE __USE_MINGW_ANSI_STDIO)
 
-  # Enable wmain
-  target_link_libraries(nvim_bin PRIVATE -municode)
+  # wrapper for nvim.manifest
+  target_sources(main_lib INTERFACE ${CMAKE_CURRENT_LIST_DIR}/os/nvim.rc)
 elseif(CMAKE_C_COMPILER_ID STREQUAL "GNU")
   target_compile_options(main_lib INTERFACE
     -Wno-conversion
@@ -308,7 +308,6 @@ set(GENERATOR_C_GRAMMAR ${GENERATOR_DIR}/c_grammar.lua)
 set(GENERATOR_HASHY ${GENERATOR_DIR}/hashy.lua)
 set(GENERATOR_PRELOAD ${GENERATOR_DIR}/preload.lua)
 set(HEADER_GENERATOR ${GENERATOR_DIR}/gen_declarations.lua)
-set(OPTIONS_ENUM_GENERATOR ${GENERATOR_DIR}/gen_options_enum.lua)
 set(OPTIONS_GENERATOR ${GENERATOR_DIR}/gen_options.lua)
 
 # GENERATED_DIR and GENERATED_INCLUDES_DIR
@@ -323,6 +322,7 @@ set(GENERATED_KEYSETS_DEFS ${GENERATED_DIR}/keysets_defs.generated.h)
 set(GENERATED_OPTIONS ${GENERATED_DIR}/options.generated.h)
 set(GENERATED_OPTIONS_ENUM ${GENERATED_DIR}/options_enum.generated.h)
 set(GENERATED_OPTIONS_MAP ${GENERATED_DIR}/options_map.generated.h)
+set(GENERATED_OPTION_VARS ${GENERATED_DIR}/option_vars.generated.h)
 set(GENERATED_UI_EVENTS_CALL ${GENERATED_DIR}/ui_events_call.generated.h)
 set(GENERATED_UI_EVENTS_CLIENT ${GENERATED_DIR}/ui_events_client.generated.h)
 set(GENERATED_UI_EVENTS_REMOTE ${GENERATED_DIR}/ui_events_remote.generated.h)
@@ -556,7 +556,7 @@ foreach(sfile ${NVIM_SOURCES}
     set(PREPROC_OUTPUT -w -E -o ${gf_i})
   endif()
 
-  set(depends "${HEADER_GENERATOR}" "${sfile}" "${LUA_GEN_DEPS}")
+  set(depends "${HEADER_GENERATOR}" "${sfile}" "${LUA_GEN_DEPS}" "${GENERATOR_C_GRAMMAR}")
   if("${f}" STREQUAL "version.c")
     # Ensure auto/versiondef_git.h exists after "make clean".
     list(APPEND depends update_version_stamp "${NVIM_VERSION_GIT_H}" "${NVIM_VERSION_DEF_H}")
@@ -658,6 +658,7 @@ list(APPEND NVIM_GENERATED_FOR_HEADERS
   "${GENERATED_EVENTS_ENUM}"
   "${GENERATED_KEYSETS_DEFS}"
   "${GENERATED_OPTIONS_ENUM}"
+  "${GENERATED_OPTION_VARS}"
 )
 
 list(APPEND NVIM_GENERATED_FOR_SOURCES
@@ -687,14 +688,9 @@ add_custom_command(OUTPUT ${GENERATED_EVENTS_ENUM} ${GENERATED_EVENTS_NAMES_MAP}
   DEPENDS ${LUA_GEN_DEPS} ${EVENTS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/auevents.lua
 )
 
-add_custom_command(OUTPUT ${GENERATED_OPTIONS}
-  COMMAND ${LUA_GEN} ${OPTIONS_GENERATOR} ${GENERATED_OPTIONS}
+add_custom_command(OUTPUT ${GENERATED_OPTIONS} ${GENERATED_OPTIONS_ENUM} ${GENERATED_OPTIONS_MAP} ${GENERATED_OPTION_VARS}
+  COMMAND ${LUA_GEN} ${OPTIONS_GENERATOR} ${GENERATED_OPTIONS} ${GENERATED_OPTIONS_ENUM} ${GENERATED_OPTIONS_MAP} ${GENERATED_OPTION_VARS}
   DEPENDS ${LUA_GEN_DEPS} ${OPTIONS_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/options.lua
-)
-
-add_custom_command(OUTPUT ${GENERATED_OPTIONS_ENUM} ${GENERATED_OPTIONS_MAP}
-  COMMAND ${LUA_GEN} ${OPTIONS_ENUM_GENERATOR} ${GENERATED_OPTIONS_ENUM} ${GENERATED_OPTIONS_MAP}
-  DEPENDS ${LUA_GEN_DEPS} ${OPTIONS_ENUM_GENERATOR} ${CMAKE_CURRENT_LIST_DIR}/options.lua
 )
 
 # NVIM_GENERATED_FOR_SOURCES and NVIM_GENERATED_FOR_HEADERS must be mutually exclusive.

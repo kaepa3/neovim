@@ -386,9 +386,9 @@ cleanup:
 ///                 - id: (number) autocommand id
 ///                 - event: (string) name of the triggered event |autocmd-events|
 ///                 - group: (number|nil) autocommand group id, if any
-///                 - match: (string) expanded value of [<amatch>]
-///                 - buf: (number) expanded value of [<abuf>]
-///                 - file: (string) expanded value of [<afile>]
+///                 - file: (string) [<afile>] (not expanded to a full path)
+///                 - match: (string) [<amatch>] (expanded to a full path)
+///                 - buf: (number) [<abuf>]
 ///                 - data: (any) arbitrary data passed from [nvim_exec_autocmds()] [event-data]()
 ///             - command (string) optional: Vim command to execute on event. Cannot be used with
 ///             {callback}
@@ -631,7 +631,7 @@ Integer nvim_create_augroup(uint64_t channel_id, String name, Dict(create_augrou
   FUNC_API_SINCE(9)
 {
   char *augroup_name = name.data;
-  bool clear_autocmds = api_object_to_bool(opts->clear, "clear", true, err);
+  bool clear_autocmds = GET_BOOL_OR_TRUE(opts, create_augroup, clear);
 
   int augroup = -1;
   WITH_SCRIPT_CONTEXT(channel_id, {

@@ -94,8 +94,103 @@ describe('default', function()
   end)
 
   describe('key mappings', function()
+    describe('Visual mode search mappings', function()
+      it('handle various chars properly', function()
+        n.clear({ args_rm = { '--cmd' } })
+        local screen = Screen.new(60, 8)
+        screen:set_default_attr_ids({
+          [1] = { foreground = Screen.colors.NvimDarkGray4 },
+          [2] = {
+            foreground = Screen.colors.NvimDarkGray3,
+            background = Screen.colors.NvimLightGray3,
+          },
+          [3] = {
+            foreground = Screen.colors.NvimLightGrey1,
+            background = Screen.colors.NvimDarkYellow,
+          },
+          [4] = {
+            foreground = Screen.colors.NvimDarkGrey1,
+            background = Screen.colors.NvimLightYellow,
+          },
+        })
+        n.api.nvim_buf_set_lines(0, 0, -1, true, {
+          [[testing <CR> /?\!1]],
+          [[testing <CR> /?\!2]],
+          [[testing <CR> /?\!3]],
+          [[testing <CR> /?\!4]],
+        })
+        n.feed('gg0vf!o*')
+        screen:expect([[
+          {3:testing <CR> /?\!}1                                          |
+          {4:^testing <CR> /?\!}2                                          |
+          {3:testing <CR> /?\!}3                                          |
+          {3:testing <CR> /?\!}4                                          |
+          {1:~                                                           }|*2
+          {2:[No Name] [+]                             2,1            All}|
+          /\Vtesting <CR> \/?\\!                    [2/4]             |
+        ]])
+        n.feed('n')
+        screen:expect([[
+          {3:testing <CR> /?\!}1                                          |
+          {3:testing <CR> /?\!}2                                          |
+          {4:^testing <CR> /?\!}3                                          |
+          {3:testing <CR> /?\!}4                                          |
+          {1:~                                                           }|*2
+          {2:[No Name] [+]                             3,1            All}|
+          /\Vtesting <CR> \/?\\!                    [3/4]             |
+        ]])
+        n.feed('G0vf!o#')
+        screen:expect([[
+          {3:testing <CR> /?\!}1                                          |
+          {3:testing <CR> /?\!}2                                          |
+          {4:^testing <CR> /?\!}3                                          |
+          {3:testing <CR> /?\!}4                                          |
+          {1:~                                                           }|*2
+          {2:[No Name] [+]                             3,1            All}|
+          ?\Vtesting <CR> /?\\!                     [3/4]             |
+        ]])
+        n.feed('n')
+        screen:expect([[
+          {3:testing <CR> /?\!}1                                          |
+          {4:^testing <CR> /?\!}2                                          |
+          {3:testing <CR> /?\!}3                                          |
+          {3:testing <CR> /?\!}4                                          |
+          {1:~                                                           }|*2
+          {2:[No Name] [+]                             2,1            All}|
+          ?\Vtesting <CR> /?\\!                     [2/4]             |
+        ]])
+      end)
+    end)
+
     describe('unimpaired-style mappings', function()
-      it('do not show a full stack trace #30625', function()
+      it('show the command ouptut when successful', function()
+        n.clear({ args_rm = { '--cmd' } })
+        local screen = Screen.new(40, 8)
+        n.fn.setqflist({
+          { filename = 'file1', text = 'item1' },
+          { filename = 'file2', text = 'item2' },
+        })
+
+        n.feed(']q')
+
+        screen:set_default_attr_ids({
+          [1] = { foreground = Screen.colors.NvimDarkGrey4 },
+          [2] = {
+            background = Screen.colors.NvimLightGray3,
+            foreground = Screen.colors.NvimDarkGrey3,
+          },
+        })
+        screen:expect({
+          grid = [[
+            ^                                        |
+            {1:~                                       }|*5
+            {2:file2                 0,0-1          All}|
+            (2 of 2): item2                         |
+          ]],
+        })
+      end)
+
+      it('do not show a full stack trace when unsuccessful #30625', function()
         n.clear({ args_rm = { '--cmd' } })
         local screen = Screen.new(40, 8)
         screen:set_default_attr_ids({
@@ -172,6 +267,30 @@ describe('default', function()
 
           first line]])
         end)
+
+        it('supports dot repetition', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed('[<Space>')
+          n.feed('.')
+          n.expect([[
+
+
+          first line]])
+        end)
+
+        it('supports dot repetition and a count', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed('[<Space>')
+          n.feed('3.')
+          n.expect([[
+
+
+
+
+          first line]])
+        end)
       end)
 
       describe(']<Space>', function()
@@ -192,6 +311,29 @@ describe('default', function()
           first line
 
 
+
+
+          ]])
+        end)
+
+        it('supports dot repetition', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed(']<Space>')
+          n.feed('.')
+          n.expect([[
+          first line
+
+          ]])
+        end)
+
+        it('supports dot repetition and a count', function()
+          n.clear({ args_rm = { '--cmd' } })
+          n.insert([[first line]])
+          n.feed(']<Space>')
+          n.feed('2.')
+          n.expect([[
+          first line
 
 
           ]])

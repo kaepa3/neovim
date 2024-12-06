@@ -49,10 +49,10 @@ do
 
     vim.keymap.set('x', '*', function()
       return _visual_search('/')
-    end, { desc = ':help v_star-default', expr = true, silent = true })
+    end, { desc = ':help v_star-default', expr = true, replace_keycodes = false })
     vim.keymap.set('x', '#', function()
       return _visual_search('?')
-    end, { desc = ':help v_#-default', expr = true, silent = true })
+    end, { desc = ':help v_#-default', expr = true, replace_keycodes = false })
   end
 
   --- Map Y to y$. This mimics the behavior of D and C. See |Y-default|
@@ -222,8 +222,8 @@ do
     --- Execute a command and print errors without a stacktrace.
     --- @param opts table Arguments to |nvim_cmd()|
     local function cmd(opts)
-      local _, err = pcall(vim.api.nvim_cmd, opts, {})
-      if err then
+      local ok, err = pcall(vim.api.nvim_cmd, opts, {})
+      if not ok then
         vim.api.nvim_err_writeln(err:sub(#'Vim:' + 1))
       end
     end
@@ -366,16 +366,16 @@ do
 
     -- Add empty lines
     vim.keymap.set('n', '[<Space>', function()
-      local repeated = vim.fn['repeat']({ '' }, vim.v.count1)
-      local linenr = vim.api.nvim_win_get_cursor(0)[1]
-      vim.api.nvim_buf_set_lines(0, linenr - 1, linenr - 1, true, repeated)
-    end, { desc = 'Add empty line above cursor' })
+      -- TODO: update once it is possible to assign a Lua function to options #25672
+      vim.go.operatorfunc = "v:lua.require'vim._buf'.space_above"
+      return 'g@l'
+    end, { expr = true, desc = 'Add empty line above cursor' })
 
     vim.keymap.set('n', ']<Space>', function()
-      local repeated = vim.fn['repeat']({ '' }, vim.v.count1)
-      local linenr = vim.api.nvim_win_get_cursor(0)[1]
-      vim.api.nvim_buf_set_lines(0, linenr, linenr, true, repeated)
-    end, { desc = 'Add empty line below cursor' })
+      -- TODO: update once it is possible to assign a Lua function to options #25672
+      vim.go.operatorfunc = "v:lua.require'vim._buf'.space_below"
+      return 'g@l'
+    end, { expr = true, desc = 'Add empty line below cursor' })
   end
 end
 
@@ -492,6 +492,9 @@ do
       vim.bo.textwidth = 0
       vim.wo[0][0].wrap = false
       vim.wo[0][0].list = false
+      vim.wo[0][0].number = false
+      vim.wo[0][0].relativenumber = false
+      vim.wo[0][0].signcolumn = 'no'
 
       -- This is gross. Proper list options support when?
       local winhl = vim.o.winhighlight
@@ -546,8 +549,9 @@ do
     ---
     --- @param option string Option name
     --- @param value any Option value
-    local function setoption(option, value)
-      if vim.api.nvim_get_option_info2(option, {}).was_set then
+    --- @param force boolean? Always set the value, even if already set
+    local function setoption(option, value, force)
+      if not force and vim.api.nvim_get_option_info2(option, {}).was_set then
         -- Don't do anything if option is already set
         return
       end
@@ -563,7 +567,7 @@ do
           once = true,
           nested = true,
           callback = function()
-            setoption(option, value)
+            setoption(option, value, force)
           end,
         })
       end
@@ -645,11 +649,15 @@ do
         return nil, nil, nil
       end
 
-      local timer = assert(vim.uv.new_timer())
-
+      -- This autocommand updates the value of 'background' anytime we receive
+      -- an OSC 11 response from the terminal emulator. If the user has set
+      -- 'background' explictly then we will delete this autocommand,
+      -- effectively disabling automatic background setting.
+      local force = false
       local id = vim.api.nvim_create_autocmd('TermResponse', {
         group = group,
         nested = true,
+        desc = "Update the value of 'background' automatically based on the terminal emulator's background color",
         callback = function(args)
           local resp = args.data ---@type string
           local r, g, b = parseosc11(resp)
@@ -661,27 +669,33 @@ do
             if rr and gg and bb then
               local luminance = (0.299 * rr) + (0.587 * gg) + (0.114 * bb)
               local bg = luminance < 0.5 and 'dark' or 'light'
-              setoption('background', bg)
-            end
+              setoption('background', bg, force)
 
-            return true
+              -- On the first query response, don't force setting the option in
+              -- case the user has already set it manually. If they have, then
+              -- this autocommand will be deleted. If they haven't, then we do
+              -- want to force setting the option to override the value set by
+              -- this autocommand.
+              if not force then
+                force = true
+              end
+            end
+          end
+        end,
+      })
+
+      vim.api.nvim_create_autocmd('VimEnter', {
+        group = group,
+        nested = true,
+        once = true,
+        callback = function()
+          if vim.api.nvim_get_option_info2('background', {}).was_set then
+            vim.api.nvim_del_autocmd(id)
           end
         end,
       })
 
       io.stdout:write('\027]11;?\007')
-
-      timer:start(1000, 0, function()
-        -- Delete the autocommand if no response was received
-        vim.schedule(function()
-          -- Suppress error if autocommand has already been deleted
-          pcall(vim.api.nvim_del_autocmd, id)
-        end)
-
-        if not timer:is_closing() then
-          timer:close()
-        end
-      end)
     end
 
     --- If the TUI (term_has_truecolor) was able to determine that the host

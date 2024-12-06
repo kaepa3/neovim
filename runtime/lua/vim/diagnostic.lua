@@ -2,6 +2,8 @@ local api, if_nil = vim.api, vim.F.if_nil
 
 local M = {}
 
+local _qf_id = nil
+
 --- [diagnostic-structure]()
 ---
 --- Diagnostics use the same indexing as the rest of the Nvim API (i.e. 0-based
@@ -848,9 +850,26 @@ local function set_list(loclist, opts)
   local diagnostics = get_diagnostics(bufnr, opts --[[@as vim.diagnostic.GetOpts]], false)
   local items = M.toqflist(diagnostics)
   if loclist then
-    vim.fn.setloclist(winnr, {}, ' ', { title = title, items = items })
+    vim.fn.setloclist(winnr, {}, 'u', { title = title, items = items })
   else
-    vim.fn.setqflist({}, ' ', { title = title, items = items })
+    -- Check if the diagnostics quickfix list no longer exists.
+    if _qf_id and vim.fn.getqflist({ id = _qf_id }).id == 0 then
+      _qf_id = nil
+    end
+
+    -- If we already have a diagnostics quickfix, update it rather than creating a new one.
+    -- This avoids polluting the finite set of quickfix lists, and preserves the currently selected
+    -- entry.
+    vim.fn.setqflist({}, _qf_id and 'u' or ' ', {
+      title = title,
+      items = items,
+      id = _qf_id,
+    })
+
+    -- Get the id of the newly created quickfix list.
+    if _qf_id == nil then
+      _qf_id = vim.fn.getqflist({ id = 0 }).id
+    end
   end
   if open then
     api.nvim_command(loclist and 'lwindow' or 'botright cwindow')
@@ -1962,6 +1981,7 @@ function M.open_float(opts, ...)
     opts.focus_id = scope
   end
   local float_bufnr, winnr = vim.lsp.util.open_floating_preview(lines, 'plaintext', opts)
+  vim.bo[float_bufnr].path = vim.bo[bufnr].path
   for i, hl in ipairs(highlights) do
     local line = lines[i]
     local prefix_len = hl.prefix and hl.prefix.length or 0

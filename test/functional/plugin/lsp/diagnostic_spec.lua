@@ -89,7 +89,7 @@ describe('vim.lsp.diagnostic', function()
         return extmarks
       end
 
-      client_id = assert(vim.lsp.start_client {
+      client_id = assert(vim.lsp.start({
         cmd_env = {
           NVIM_LUA_NOTRACK = '1',
         },
@@ -101,7 +101,7 @@ describe('vim.lsp.diagnostic', function()
           '--headless',
         },
         offset_encoding = 'utf-16',
-      })
+      }, { attach = false }))
     end)
 
     fake_uri = 'file:///fake/uri'
@@ -209,9 +209,15 @@ describe('vim.lsp.diagnostic', function()
     before_each(function()
       exec_lua(create_server_definition)
       exec_lua(function()
+        _G.requests = 0
         _G.server = _G._create_server({
           capabilities = {
             diagnosticProvider = {},
+          },
+          handlers = {
+            [vim.lsp.protocol.Methods.textDocument_diagnostic] = function()
+              _G.requests = _G.requests + 1
+            end,
           },
         })
 
@@ -370,6 +376,57 @@ describe('vim.lsp.diagnostic', function()
         1,
         exec_lua(function()
           return #vim.diagnostic.get(diagnostic_bufnr)
+        end)
+      )
+    end)
+
+    it('handles server cancellation', function()
+      eq(
+        1,
+        exec_lua(function()
+          vim.lsp.diagnostic.on_diagnostic({
+            code = vim.lsp.protocol.ErrorCodes.ServerCancelled,
+            -- Empty data defaults to retriggering request
+            data = {},
+            message = '',
+          }, {}, {
+            method = vim.lsp.protocol.Methods.textDocument_diagnostic,
+            client_id = client_id,
+          })
+
+          return _G.requests
+        end)
+      )
+
+      eq(
+        2,
+        exec_lua(function()
+          vim.lsp.diagnostic.on_diagnostic({
+            code = vim.lsp.protocol.ErrorCodes.ServerCancelled,
+            data = { retriggerRequest = true },
+            message = '',
+          }, {}, {
+            method = vim.lsp.protocol.Methods.textDocument_diagnostic,
+            client_id = client_id,
+          })
+
+          return _G.requests
+        end)
+      )
+
+      eq(
+        2,
+        exec_lua(function()
+          vim.lsp.diagnostic.on_diagnostic({
+            code = vim.lsp.protocol.ErrorCodes.ServerCancelled,
+            data = { retriggerRequest = false },
+            message = '',
+          }, {}, {
+            method = vim.lsp.protocol.Methods.textDocument_diagnostic,
+            client_id = client_id,
+          })
+
+          return _G.requests
         end)
       )
     end)

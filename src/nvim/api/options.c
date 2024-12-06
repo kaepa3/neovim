@@ -23,15 +23,15 @@
 #endif
 
 static int validate_option_value_args(Dict(option) *opts, char *name, OptIndex *opt_idxp,
-                                      int *scope, OptReqScope *req_scope, void **from,
-                                      char **filetype, Error *err)
+                                      int *opt_flags, OptScope *scope, void **from, char **filetype,
+                                      Error *err)
 {
 #define HAS_KEY_X(d, v) HAS_KEY(d, option, v)
   if (HAS_KEY_X(opts, scope)) {
     if (!strcmp(opts->scope.data, "local")) {
-      *scope = OPT_LOCAL;
+      *opt_flags = OPT_LOCAL;
     } else if (!strcmp(opts->scope.data, "global")) {
-      *scope = OPT_GLOBAL;
+      *opt_flags = OPT_GLOBAL;
     } else {
       VALIDATE_EXP(false, "scope", "'local' or 'global'", NULL, {
         return FAIL;
@@ -39,14 +39,14 @@ static int validate_option_value_args(Dict(option) *opts, char *name, OptIndex *
     }
   }
 
-  *req_scope = kOptReqGlobal;
+  *scope = kOptScopeGlobal;
 
   if (filetype != NULL && HAS_KEY_X(opts, filetype)) {
     *filetype = opts->filetype.data;
   }
 
   if (HAS_KEY_X(opts, win)) {
-    *req_scope = kOptReqWin;
+    *scope = kOptScopeWin;
     *from = find_window_by_handle(opts->win, err);
     if (ERROR_SET(err)) {
       return FAIL;
@@ -54,12 +54,12 @@ static int validate_option_value_args(Dict(option) *opts, char *name, OptIndex *
   }
 
   if (HAS_KEY_X(opts, buf)) {
-    VALIDATE(!(HAS_KEY_X(opts, scope) && *scope == OPT_GLOBAL), "%s",
+    VALIDATE(!(HAS_KEY_X(opts, scope) && *opt_flags == OPT_GLOBAL), "%s",
              "cannot use both global 'scope' and 'buf'", {
       return FAIL;
     });
-    *scope = OPT_LOCAL;
-    *req_scope = kOptReqBuf;
+    *opt_flags = OPT_LOCAL;
+    *scope = kOptScopeBuf;
     *from = find_buffer_by_handle(opts->buf, err);
     if (ERROR_SET(err)) {
       return FAIL;
@@ -78,25 +78,24 @@ static int validate_option_value_args(Dict(option) *opts, char *name, OptIndex *
   });
 
   *opt_idxp = find_option(name);
-  int flags = get_option_attrs(*opt_idxp);
-  if (flags == 0) {
+  if (*opt_idxp == kOptInvalid) {
     // unknown option
     api_set_error(err, kErrorTypeValidation, "Unknown option '%s'", name);
-  } else if (*req_scope == kOptReqBuf || *req_scope == kOptReqWin) {
+  } else if (*scope == kOptScopeBuf || *scope == kOptScopeWin) {
     // if 'buf' or 'win' is passed, make sure the option supports it
-    int req_flags = *req_scope == kOptReqBuf ? SOPT_BUF : SOPT_WIN;
-    if (!(flags & req_flags)) {
-      char *tgt = *req_scope & kOptReqBuf ? "buf" : "win";
-      char *global = flags & SOPT_GLOBAL ? "global " : "";
-      char *req = flags & SOPT_BUF ? "buffer-local "
-                                   : flags & SOPT_WIN ? "window-local " : "";
+    if (!option_has_scope(*opt_idxp, *scope)) {
+      char *tgt = *scope == kOptScopeBuf ? "buf" : "win";
+      char *global = option_has_scope(*opt_idxp, kOptScopeGlobal) ? "global " : "";
+      char *req = option_has_scope(*opt_idxp, kOptScopeBuf)
+                  ? "buffer-local "
+                  : (option_has_scope(*opt_idxp, kOptScopeWin) ? "window-local " : "");
 
       api_set_error(err, kErrorTypeValidation, "'%s' cannot be passed for %s%soption '%s'",
                     tgt, global, req, name);
     }
   }
 
-  return OK;
+  return ERROR_SET(err) ? FAIL : OK;
 #undef HAS_KEY_X
 }
 
@@ -152,13 +151,13 @@ Object nvim_get_option_value(String name, Dict(option) *opts, Error *err)
   FUNC_API_SINCE(9) FUNC_API_RET_ALLOC
 {
   OptIndex opt_idx = 0;
-  int scope = 0;
-  OptReqScope req_scope = kOptReqGlobal;
+  int opt_flags = 0;
+  OptScope scope = kOptScopeGlobal;
   void *from = NULL;
   char *filetype = NULL;
 
-  if (!validate_option_value_args(opts, name.data, &opt_idx, &scope, &req_scope, &from, &filetype,
-                                  err)) {
+  if (!validate_option_value_args(opts, name.data, &opt_idx, &opt_flags, &scope, &from,
+                                  &filetype, err)) {
     return (Object)OBJECT_INIT;
   }
 
@@ -166,6 +165,14 @@ Object nvim_get_option_value(String name, Dict(option) *opts, Error *err)
 
   buf_T *ftbuf = do_ft_buf(filetype, &aco, err);
   if (ERROR_SET(err)) {
+    if (ftbuf != NULL) {
+      // restore curwin/curbuf and a few other things
+      aucmd_restbuf(&aco);
+
+      assert(curbuf != ftbuf);  // safety check
+      wipe_buffer(ftbuf, false);
+    }
+
     return (Object)OBJECT_INIT;
   }
 
@@ -174,7 +181,7 @@ Object nvim_get_option_value(String name, Dict(option) *opts, Error *err)
     from = ftbuf;
   }
 
-  OptVal value = get_option_value_for(opt_idx, scope, req_scope, from, err);
+  OptVal value = get_option_value_for(opt_idx, opt_flags, scope, from, err);
 
   if (ftbuf != NULL) {
     // restore curwin/curbuf and a few other things
@@ -217,10 +224,11 @@ void nvim_set_option_value(uint64_t channel_id, String name, Object value, Dict(
   FUNC_API_SINCE(9)
 {
   OptIndex opt_idx = 0;
-  int scope = 0;
-  OptReqScope req_scope = kOptReqGlobal;
+  int opt_flags = 0;
+  OptScope scope = kOptScopeGlobal;
   void *to = NULL;
-  if (!validate_option_value_args(opts, name.data, &opt_idx, &scope, &req_scope, &to, NULL, err)) {
+  if (!validate_option_value_args(opts, name.data, &opt_idx, &opt_flags, &scope, &to, NULL,
+                                  err)) {
     return;
   }
 
@@ -230,10 +238,9 @@ void nvim_set_option_value(uint64_t channel_id, String name, Object value, Dict(
   // - option is global or local to window (global-local)
   //
   // Then force scope to local since we don't want to change the global option
-  if (req_scope == kOptReqWin && scope == 0) {
-    int flags = get_option_attrs(opt_idx);
-    if (flags & SOPT_GLOBAL) {
-      scope = OPT_LOCAL;
+  if (scope == kOptScopeWin && opt_flags == 0) {
+    if (option_has_scope(opt_idx, kOptScopeGlobal)) {
+      opt_flags = OPT_LOCAL;
     }
   }
 
@@ -249,7 +256,7 @@ void nvim_set_option_value(uint64_t channel_id, String name, Object value, Dict(
   });
 
   WITH_SCRIPT_CONTEXT(channel_id, {
-    set_option_value_for(name.data, opt_idx, optval, scope, req_scope, to, err);
+    set_option_value_for(name.data, opt_idx, optval, opt_flags, scope, to, err);
   });
 }
 
@@ -304,16 +311,16 @@ Dict nvim_get_option_info2(String name, Dict(option) *opts, Arena *arena, Error 
   FUNC_API_SINCE(11)
 {
   OptIndex opt_idx = 0;
-  int scope = 0;
-  OptReqScope req_scope = kOptReqGlobal;
+  int opt_flags = 0;
+  OptScope scope = kOptScopeGlobal;
   void *from = NULL;
-  if (!validate_option_value_args(opts, name.data, &opt_idx, &scope, &req_scope, &from, NULL,
+  if (!validate_option_value_args(opts, name.data, &opt_idx, &opt_flags, &scope, &from, NULL,
                                   err)) {
     return (Dict)ARRAY_DICT_INIT;
   }
 
-  buf_T *buf = (req_scope == kOptReqBuf) ? (buf_T *)from : curbuf;
-  win_T *win = (req_scope == kOptReqWin) ? (win_T *)from : curwin;
+  buf_T *buf = (scope == kOptScopeBuf) ? (buf_T *)from : curbuf;
+  win_T *win = (scope == kOptScopeWin) ? (win_T *)from : curwin;
 
-  return get_vimoption(name, scope, buf, win, arena, err);
+  return get_vimoption(name, opt_flags, buf, win, arena, err);
 }
