@@ -811,11 +811,14 @@ vim.json.decode({str}, {opts})                             *vim.json.decode()*
     Return: ~
         (`any`)
 
-vim.json.encode({obj})                                     *vim.json.encode()*
+vim.json.encode({obj}, {opts})                             *vim.json.encode()*
     Encodes (or "packs") Lua object {obj} as JSON in a Lua string.
 
     Parameters: ~
-      • {obj}  (`any`)
+      • {obj}   (`any`)
+      • {opts}  (`table<string,any>?`) Options table with keys:
+                • escape_slash: (boolean) (default false) When true, escapes
+                  `/` character in JSON strings
 
     Return: ~
         (`string`)
@@ -2474,7 +2477,7 @@ vim.validate({name}, {value}, {validator}, {optional}, {message})
 
     Parameters: ~
       • {name}       (`string`) Argument name
-      • {value}      (`string`) Argument value
+      • {value}      (`any`) Argument value
       • {validator}  (`vim.validate.Validator`)
                      • (`string|string[]`): Any value that can be returned
                        from |lua-type()| in addition to `'callable'`:
