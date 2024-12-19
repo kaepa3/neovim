@@ -1147,8 +1147,9 @@ function vim.fn.confirm(msg, choices, default, type) end
 --- A |Dictionary| is copied in a similar way as a |List|.
 --- Also see |deepcopy()|.
 ---
---- @param expr any
---- @return any
+--- @generic T
+--- @param expr T
+--- @return T
 function vim.fn.copy(expr) end
 
 --- Return the cosine of {expr}, measured in radians, as a |Float|.
@@ -1308,9 +1309,10 @@ function vim.fn.debugbreak(pid) end
 --- {noref} set to 1 will fail.
 --- Also see |copy()|.
 ---
---- @param expr any
+--- @generic T
+--- @param expr T
 --- @param noref? boolean
---- @return any
+--- @return T
 function vim.fn.deepcopy(expr, noref) end
 
 --- Without {flags} or with {flags} empty: Deletes the file by the
@@ -4769,7 +4771,7 @@ function vim.fn.isnan(expr) end
 --- cases, items() returns a List with the index and the value at
 --- the index.
 ---
---- @param dict any
+--- @param dict table
 --- @return any
 function vim.fn.items(dict) end
 
@@ -4803,7 +4805,7 @@ function vim.fn.jobresize(job, width, height) end
 --- @return any
 function vim.fn.jobsend(...) end
 
---- Note: Prefer |vim.system()| in Lua (unless using the `pty` option).
+--- Note: Prefer |vim.system()| in Lua (unless using `rpc`, `pty`, or `term`).
 ---
 --- Spawns {cmd} as a job.
 --- If {cmd} is a List it runs directly (no 'shell').
@@ -4811,8 +4813,11 @@ function vim.fn.jobsend(...) end
 ---   call jobstart(split(&shell) + split(&shellcmdflag) + ['{cmd}'])
 --- <(See |shell-unquoting| for details.)
 ---
---- Example: >vim
----   call jobstart('nvim -h', {'on_stdout':{j,d,e->append(line('.'),d)}})
+--- Example: start a job and handle its output: >vim
+---   call jobstart(['nvim', '-h'], {'on_stdout':{j,d,e->append(line('.'),d)}})
+--- <
+--- Example: start a job in a |terminal| connected to the current buffer: >vim
+---   call jobstart(['nvim', '-h'], {'term':v:true})
 --- <
 --- Returns |job-id| on success, 0 on invalid arguments (or job
 --- table is full), -1 if {cmd}[0] or 'shell' is not executable.
@@ -4877,6 +4882,10 @@ function vim.fn.jobsend(...) end
 ---   stdin:      (string) Either "pipe" (default) to connect the
 ---         job's stdin to a channel or "null" to disconnect
 ---         stdin.
+---   term:      (boolean) Spawns {cmd} in a new pseudo-terminal session
+---           connected to the current (unmodified) buffer. Implies "pty".
+---           Default "height" and "width" are set to the current window
+---           dimensions. |jobstart()|. Defaults $TERM to "xterm-256color".
 ---   width:      (number) Width of the `pty` terminal.
 ---
 --- {opts} is passed as |self| dictionary to the callback; the
@@ -5952,7 +5961,7 @@ function vim.fn.matchstrpos(expr, pat, start, count) end
 --- an error.  An empty |List| or |Dictionary| results in zero.
 ---
 --- @param expr any
---- @return any
+--- @return number
 function vim.fn.max(expr) end
 
 --- Returns a |List| of |Dictionaries| describing |menus| (defined
@@ -7016,10 +7025,11 @@ function vim.fn.readfile(fname, type, max) end
 ---   echo reduce('xyz', { acc, val -> acc .. ',' .. val })
 --- <
 ---
+--- @generic T
 --- @param object any
---- @param func function
+--- @param func fun(accumulator: T, current: any): any
 --- @param initial? any
---- @return any
+--- @return T
 function vim.fn.reduce(object, func, initial) end
 
 --- Returns the single letter name of the register being executed.
@@ -7215,8 +7225,9 @@ function vim.fn.resolve(filename) end
 ---   let revlist = reverse(copy(mylist))
 --- <
 ---
---- @param object any
---- @return any
+--- @generic T
+--- @param object T[]
+--- @return T[]
 function vim.fn.reverse(object) end
 
 --- Round off {expr} to the nearest integral value and return it
@@ -9079,10 +9090,11 @@ function vim.fn.sockconnect(mode, address, opts) end
 ---   eval mylist->sort({i1, i2 -> i1 - i2})
 --- <
 ---
---- @param list any
+--- @generic T
+--- @param list T[]
 --- @param how? string|function
 --- @param dict? any
---- @return any
+--- @return T[]
 function vim.fn.sort(list, how, dict) end
 
 --- Return the sound-folded equivalent of {word}.  Uses the first
@@ -10163,19 +10175,8 @@ function vim.fn.tanh(expr) end
 --- @return string
 function vim.fn.tempname() end
 
---- Spawns {cmd} in a new pseudo-terminal session connected
---- to the current (unmodified) buffer. Parameters and behavior
---- are the same as |jobstart()| except "pty", "width", "height",
---- and "TERM" are ignored: "height" and "width" are taken from
---- the current window. Note that termopen() implies a "pty" arg
---- to jobstart(), and thus has the implications documented at
---- |jobstart()|.
----
---- Returns the same values as jobstart().
----
---- Terminal environment is initialized as in |jobstart-env|,
---- except $TERM is set to "xterm-256color". Full behavior is
---- described in |terminal|.
+--- @deprecated
+--- Use |jobstart()| with `{term: v:true}` instead.
 ---
 --- @param cmd string|string[]
 --- @param opts? table

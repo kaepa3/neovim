@@ -1305,10 +1305,10 @@ copy({expr})                                                            *copy()*
 		Also see |deepcopy()|.
 
                 Parameters: ~
-                  • {expr} (`any`)
+                  • {expr} (`T`)
 
                 Return: ~
-                  (`any`)
+                  (`T`)
 
 cos({expr})                                                              *cos()*
 		Return the cosine of {expr}, measured in radians, as a |Float|.
@@ -1490,11 +1490,11 @@ deepcopy({expr} [, {noref}])                                   *deepcopy()* *E69
 		Also see |copy()|.
 
                 Parameters: ~
-                  • {expr} (`any`)
+                  • {expr} (`T`)
                   • {noref} (`boolean?`)
 
                 Return: ~
-                  (`any`)
+                  (`T`)
 
 delete({fname} [, {flags}])                                           *delete()*
 		Without {flags} or with {flags} empty: Deletes the file by the
@@ -5281,7 +5281,7 @@ items({dict})                                                          *items()*
 		the index.
 
                 Parameters: ~
-                  • {dict} (`any`)
+                  • {dict} (`table`)
 
                 Return: ~
                   (`any`)
@@ -5309,7 +5309,7 @@ jobresize({job}, {width}, {height})                                *jobresize()*
                   (`any`)
 
 jobstart({cmd} [, {opts}])                                          *jobstart()*
-		Note: Prefer |vim.system()| in Lua (unless using the `pty` option).
+		Note: Prefer |vim.system()| in Lua (unless using `rpc`, `pty`, or `term`).
 
 		Spawns {cmd} as a job.
 		If {cmd} is a List it runs directly (no 'shell').
@@ -5317,8 +5317,11 @@ jobstart({cmd} [, {opts}])                                          *jobstart()*
 		  call jobstart(split(&shell) + split(&shellcmdflag) + ['{cmd}'])
 <		(See |shell-unquoting| for details.)
 
-		Example: >vim
-		  call jobstart('nvim -h', {'on_stdout':{j,d,e->append(line('.'),d)}})
+		Example: start a job and handle its output: >vim
+		  call jobstart(['nvim', '-h'], {'on_stdout':{j,d,e->append(line('.'),d)}})
+<
+		Example: start a job in a |terminal| connected to the current buffer: >vim
+		  call jobstart(['nvim', '-h'], {'term':v:true})
 <
 		Returns |job-id| on success, 0 on invalid arguments (or job
 		table is full), -1 if {cmd}[0] or 'shell' is not executable.
@@ -5383,6 +5386,10 @@ jobstart({cmd} [, {opts}])                                          *jobstart()*
 		  stdin:      (string) Either "pipe" (default) to connect the
 			      job's stdin to a channel or "null" to disconnect
 			      stdin.
+		  term:	    (boolean) Spawns {cmd} in a new pseudo-terminal session
+		          connected to the current (unmodified) buffer. Implies "pty".
+		          Default "height" and "width" are set to the current window
+		          dimensions. |jobstart()|. Defaults $TERM to "xterm-256color".
 		  width:      (number) Width of the `pty` terminal.
 
 		{opts} is passed as |self| dictionary to the callback; the
@@ -6567,7 +6574,7 @@ max({expr})                                                              *max()*
                   • {expr} (`any`)
 
                 Return: ~
-                  (`any`)
+                  (`number`)
 
 menu_get({path} [, {modes}])                                        *menu_get()*
 		Returns a |List| of |Dictionaries| describing |menus| (defined
@@ -7733,11 +7740,11 @@ reduce({object}, {func} [, {initial}])                           *reduce()* *E99
 
                 Parameters: ~
                   • {object} (`any`)
-                  • {func} (`function`)
+                  • {func} (`fun(accumulator: T, current: any): any`)
                   • {initial} (`any?`)
 
                 Return: ~
-                  (`any`)
+                  (`T`)
 
 reg_executing()                                                *reg_executing()*
 		Returns the single letter name of the register being executed.
@@ -7951,10 +7958,10 @@ reverse({object})                                                    *reverse()*
 <
 
                 Parameters: ~
-                  • {object} (`any`)
+                  • {object} (`T[]`)
 
                 Return: ~
-                  (`any`)
+                  (`T[]`)
 
 round({expr})                                                          *round()*
 		Round off {expr} to the nearest integral value and return it
@@ -9952,12 +9959,12 @@ sort({list} [, {how} [, {dict}]])                                  *sort()* *E70
 <
 
                 Parameters: ~
-                  • {list} (`any`)
+                  • {list} (`T[]`)
                   • {how} (`string|function?`)
                   • {dict} (`any?`)
 
                 Return: ~
-                  (`any`)
+                  (`T[]`)
 
 soundfold({word})                                                  *soundfold()*
 		Return the sound-folded equivalent of {word}.  Uses the first
@@ -11167,28 +11174,6 @@ tempname()                                                          *tempname()*
 
                 Return: ~
                   (`string`)
-
-termopen({cmd} [, {opts}])                                          *termopen()*
-		Spawns {cmd} in a new pseudo-terminal session connected
-		to the current (unmodified) buffer. Parameters and behavior
-		are the same as |jobstart()| except "pty", "width", "height",
-		and "TERM" are ignored: "height" and "width" are taken from
-		the current window. Note that termopen() implies a "pty" arg
-		to jobstart(), and thus has the implications documented at
-		|jobstart()|.
-
-		Returns the same values as jobstart().
-
-		Terminal environment is initialized as in |jobstart-env|,
-		except $TERM is set to "xterm-256color". Full behavior is
-		described in |terminal|.
-
-                Parameters: ~
-                  • {cmd} (`string|string[]`)
-                  • {opts} (`table?`)
-
-                Return: ~
-                  (`integer`)
 
 test_garbagecollect_now()                            *test_garbagecollect_now()*
 		Like |garbagecollect()|, but executed right away.  This must
