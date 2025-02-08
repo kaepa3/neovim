@@ -152,7 +152,7 @@ describe(':terminal cursor', function()
     end)
   end)
 
-  it('can be modified by application #3681', function()
+  it('can be modified by application #3681 #31685', function()
     skip(is_os('win'), '#31587')
 
     local states = {
@@ -181,7 +181,15 @@ describe(':terminal cursor', function()
             eq(0, screen._mode_info[terminal_mode_idx].blinkon)
             eq(0, screen._mode_info[terminal_mode_idx].blinkoff)
           end
+
           eq(v.shape, screen._mode_info[terminal_mode_idx].cursor_shape)
+
+          -- Cell percentages are hard coded for each shape in terminal.c
+          if v.shape == 'horizontal' then
+            eq(20, screen._mode_info[terminal_mode_idx].cell_percentage)
+          elseif v.shape == 'vertical' then
+            eq(25, screen._mode_info[terminal_mode_idx].cell_percentage)
+          end
         end,
       })
     end
@@ -373,9 +381,6 @@ describe('buffer cursor position is correct in terminal without number column', 
     }, {
       cols = 70,
     })
-    -- Also check for real cursor position, as it is used for stuff like input methods
-    screen._handle_busy_start = function() end
-    screen._handle_busy_stop = function() end
     screen:expect([[
                                                                             |*4
       Entering Ex mode.  Type "visual" to go to Normal mode.                |
@@ -684,9 +689,6 @@ describe('buffer cursor position is correct in terminal with number column', fun
     }, {
       cols = 70,
     })
-    -- Also check for real cursor position, as it is used for stuff like input methods
-    screen._handle_busy_start = function() end
-    screen._handle_busy_stop = function() end
     screen:expect([[
       {7:  1 }                                                                  |
       {7:  2 }                                                                  |

@@ -65,6 +65,7 @@
 #include "nvim/ex_docmd.h"
 #include "nvim/getchar.h"
 #include "nvim/globals.h"
+#include "nvim/grid.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/highlight_group.h"
@@ -92,9 +93,15 @@
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
 #include "nvim/vim_defs.h"
+#include "nvim/vterm/keyboard.h"
+#include "nvim/vterm/mouse.h"
+#include "nvim/vterm/parser.h"
+#include "nvim/vterm/pen.h"
+#include "nvim/vterm/screen.h"
+#include "nvim/vterm/state.h"
+#include "nvim/vterm/vterm.h"
+#include "nvim/vterm/vterm_keycodes_defs.h"
 #include "nvim/window.h"
-#include "vterm/vterm.h"
-#include "vterm/vterm_keycodes.h"
 
 typedef struct {
   VimState state;
@@ -172,6 +179,8 @@ struct terminal {
     StringBuilder *send;  ///< When there is a pending TermRequest autocommand, block and store input.
   } pending;
 
+  bool theme_updates;  ///< Send a theme update notification when 'bg' changes
+
   bool color_set[16];
 
   char *selection_buffer;  /// libvterm selection buffer
@@ -186,6 +195,7 @@ static VTermScreenCallbacks vterm_screen_callbacks = {
   .movecursor = term_movecursor,
   .settermprop = term_settermprop,
   .bell = term_bell,
+  .theme = term_theme,
   .sb_pushline = term_sb_push,  // Called before a line goes offscreen.
   .sb_popline = term_sb_pop,
 };
@@ -773,21 +783,32 @@ static int terminal_execute(VimState *state, int key)
 {
   TerminalState *s = (TerminalState *)state;
 
-  switch (key) {
+  // Check for certain control keys like Ctrl-C and Ctrl-\. We still send the
+  // unmerged key and modifiers to the terminal.
+  int tmp_mod_mask = mod_mask;
+  int mod_key = merge_modifiers(key, &tmp_mod_mask);
+
+  switch (mod_key) {
   case K_LEFTMOUSE:
   case K_LEFTDRAG:
   case K_LEFTRELEASE:
-  case K_MOUSEMOVE:
   case K_MIDDLEMOUSE:
   case K_MIDDLEDRAG:
   case K_MIDDLERELEASE:
   case K_RIGHTMOUSE:
   case K_RIGHTDRAG:
   case K_RIGHTRELEASE:
+  case K_X1MOUSE:
+  case K_X1DRAG:
+  case K_X1RELEASE:
+  case K_X2MOUSE:
+  case K_X2DRAG:
+  case K_X2RELEASE:
   case K_MOUSEDOWN:
   case K_MOUSEUP:
   case K_MOUSELEFT:
   case K_MOUSERIGHT:
+  case K_MOUSEMOVE:
     if (send_mouse_event(s->term, key)) {
       return 0;
     }
@@ -831,13 +852,13 @@ static int terminal_execute(VimState *state, int key)
     FALLTHROUGH;
 
   default:
-    if (key == Ctrl_C) {
+    if (mod_key == Ctrl_C) {
       // terminal_enter() always sets `mapped_ctrl_c` to avoid `got_int`. 8eeda7169aa4
       // But `got_int` may be set elsewhere, e.g. by interrupt() or an autocommand,
       // so ensure that it is cleared.
       got_int = false;
     }
-    if (key == Ctrl_BSL && !s->got_bsl) {
+    if (mod_key == Ctrl_BSL && !s->got_bsl) {
       s->got_bsl = true;
       break;
     }
@@ -1004,9 +1025,9 @@ static void terminal_send_key(Terminal *term, int c)
     c = Ctrl_AT;
   }
 
-  VTermKey key = convert_key(c, &mod);
+  VTermKey key = convert_key(&c, &mod);
 
-  if (key) {
+  if (key != VTERM_KEY_NONE) {
     vterm_keyboard_key(term->vt, key, mod);
   } else if (!IS_SPECIAL(c)) {
     vterm_keyboard_unichar(term->vt, (uint32_t)c, mod);
@@ -1134,6 +1155,20 @@ bool terminal_running(const Terminal *term)
   return !term->closed;
 }
 
+void terminal_notify_theme(Terminal *term, bool dark)
+  FUNC_ATTR_NONNULL_ALL
+{
+  if (!term->theme_updates) {
+    return;
+  }
+
+  char buf[10];
+  ssize_t ret = snprintf(buf, sizeof(buf), "\x1b[997;%cn", dark ? '1' : '2');
+  assert(ret > 0);
+  assert((size_t)ret <= sizeof(buf));
+  terminal_send(term, buf, (size_t)ret);
+}
+
 static void terminal_focus(const Terminal *term, bool focus)
   FUNC_ATTR_NONNULL_ALL
 {
@@ -1252,6 +1287,10 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *data)
     invalidate_terminal(term, -1, -1);
     break;
 
+  case VTERM_PROP_THEMEUPDATES:
+    term->theme_updates = val->boolean;
+    break;
+
   default:
     return 0;
   }
@@ -1263,6 +1302,14 @@ static int term_settermprop(VTermProp prop, VTermValue *val, void *data)
 static int term_bell(void *data)
 {
   vim_beep(kOptBoFlagTerm);
+  return 1;
+}
+
+/// Called when the terminal wants to query the system theme.
+static int term_theme(bool *dark, void *data)
+  FUNC_ATTR_NONNULL_ALL
+{
+  *dark = (*p_bg == 'd');
   return 1;
 }
 
@@ -1347,7 +1394,7 @@ static int term_sb_pop(int cols, VTermScreenCell *cells, void *data)
   // copy to vterm state
   memcpy(cells, sbrow->cells, sizeof(cells[0]) * cols_to_copy);
   for (size_t col = cols_to_copy; col < (size_t)cols; col++) {
-    cells[col].chars[0] = 0;
+    cells[col].schar = 0;
     cells[col].width = 1;
   }
 
@@ -1408,19 +1455,23 @@ static int term_selection_set(VTermSelectionMask mask, VTermStringFragment frag,
 // }}}
 // input handling {{{
 
-static void convert_modifiers(int key, VTermModifier *statep)
+static void convert_modifiers(int *key, VTermModifier *statep)
 {
   if (mod_mask & MOD_MASK_SHIFT) {
     *statep |= VTERM_MOD_SHIFT;
   }
   if (mod_mask & MOD_MASK_CTRL) {
     *statep |= VTERM_MOD_CTRL;
+    if (!(mod_mask & MOD_MASK_SHIFT) && *key >= 'A' && *key <= 'Z') {
+      // vterm interprets CTRL+A as SHIFT+CTRL, change to CTRL+a
+      *key += ('a' - 'A');
+    }
   }
   if (mod_mask & MOD_MASK_ALT) {
     *statep |= VTERM_MOD_ALT;
   }
 
-  switch (key) {
+  switch (*key) {
   case K_S_TAB:
   case K_S_UP:
   case K_S_DOWN:
@@ -1452,11 +1503,11 @@ static void convert_modifiers(int key, VTermModifier *statep)
   }
 }
 
-static VTermKey convert_key(int key, VTermModifier *statep)
+static VTermKey convert_key(int *key, VTermModifier *statep)
 {
   convert_modifiers(key, statep);
 
-  switch (key) {
+  switch (*key) {
   case K_BS:
     return VTERM_KEY_BACKSPACE;
   case K_S_TAB:
@@ -1759,8 +1810,6 @@ static bool send_mouse_event(Terminal *term, int c)
       pressed = true; FALLTHROUGH;
     case K_LEFTRELEASE:
       button = 1; break;
-    case K_MOUSEMOVE:
-      button = 0; break;
     case K_MIDDLEDRAG:
     case K_MIDDLEMOUSE:
       pressed = true; FALLTHROUGH;
@@ -1771,6 +1820,16 @@ static bool send_mouse_event(Terminal *term, int c)
       pressed = true; FALLTHROUGH;
     case K_RIGHTRELEASE:
       button = 3; break;
+    case K_X1DRAG:
+    case K_X1MOUSE:
+      pressed = true; FALLTHROUGH;
+    case K_X1RELEASE:
+      button = 8; break;
+    case K_X2DRAG:
+    case K_X2MOUSE:
+      pressed = true; FALLTHROUGH;
+    case K_X2RELEASE:
+      button = 9; break;
     case K_MOUSEDOWN:
       pressed = true; button = 4; break;
     case K_MOUSEUP:
@@ -1779,12 +1838,14 @@ static bool send_mouse_event(Terminal *term, int c)
       pressed = true; button = 7; break;
     case K_MOUSERIGHT:
       pressed = true; button = 6; break;
+    case K_MOUSEMOVE:
+      button = 0; break;
     default:
       return false;
     }
 
     VTermModifier mod = VTERM_MOD_NONE;
-    convert_modifiers(c, &mod);
+    convert_modifiers(&c, &mod);
     mouse_action(term, button, row, col - offset, pressed, mod);
     return false;
   }
@@ -1857,12 +1918,8 @@ static void fetch_row(Terminal *term, int row, int end_col)
   while (col < end_col) {
     VTermScreenCell cell;
     fetch_cell(term, row, col, &cell);
-    if (cell.chars[0]) {
-      int cell_len = 0;
-      for (int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell.chars[i]; i++) {
-        cell_len += utf_char2bytes((int)cell.chars[i], ptr + cell_len);
-      }
-      ptr += cell_len;
+    if (cell.schar) {
+      schar_get_adv(&ptr, cell.schar);
       line_len = (size_t)(ptr - term->textbuf);
     } else {
       *ptr++ = ' ';
@@ -1883,7 +1940,7 @@ static bool fetch_cell(Terminal *term, int row, int col, VTermScreenCell *cell)
     } else {
       // fill the pointer with an empty cell
       *cell = (VTermScreenCell) {
-        .chars = { 0 },
+        .schar = 0,
         .width = 1,
       };
       return false;
@@ -1961,9 +2018,11 @@ static void refresh_cursor(Terminal *term)
     break;
   case VTERM_PROP_CURSORSHAPE_UNDERLINE:
     shape_table[SHAPE_IDX_TERM].shape = SHAPE_HOR;
+    shape_table[SHAPE_IDX_TERM].percentage = 20;
     break;
   case VTERM_PROP_CURSORSHAPE_BAR_LEFT:
     shape_table[SHAPE_IDX_TERM].shape = SHAPE_VER;
+    shape_table[SHAPE_IDX_TERM].percentage = 25;
     break;
   }
 

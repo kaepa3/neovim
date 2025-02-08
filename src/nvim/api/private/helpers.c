@@ -31,13 +31,10 @@
 #include "nvim/msgpack_rpc/unpacker.h"
 #include "nvim/pos_defs.h"
 #include "nvim/types_defs.h"
-#include "nvim/ui.h"
-#include "nvim/ui_defs.h"
-#include "nvim/version.h"
 
 #ifdef INCLUDE_GENERATED_DECLARATIONS
 # include "api/private/api_metadata.generated.h"
-# include "api/private/helpers.c.generated.h"
+# include "api/private/helpers.c.generated.h"  // IWYU pragma: keep
 #endif
 
 /// Start block that may cause Vimscript exceptions while evaluating another code
@@ -779,7 +776,7 @@ char *api_typename(ObjectType t)
   UNREACHABLE;
 }
 
-HlMessage parse_hl_msg(Array chunks, Error *err)
+HlMessage parse_hl_msg(Array chunks, bool is_err, Error *err)
 {
   HlMessage hl_msg = KV_INITIAL_VALUE;
   for (size_t i = 0; i < chunks.size; i++) {
@@ -794,7 +791,7 @@ HlMessage parse_hl_msg(Array chunks, Error *err)
 
     String str = copy_string(chunk.items[0].data.string, NULL);
 
-    int hl_id = 0;
+    int hl_id = is_err ? HLF_E : 0;
     if (chunk.size == 2) {
       hl_id = object_to_hl_id(chunk.items[1], "text highlight", err);
     }

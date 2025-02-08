@@ -13,6 +13,8 @@
 #include <uv.h>
 
 #include "auto/config.h"
+#include "klib/kvec.h"
+#include "mpack/mpack_core.h"
 #include "mpack/object.h"
 #include "nvim/api/private/converter.h"
 #include "nvim/api/private/defs.h"
@@ -38,7 +40,6 @@
 #include "nvim/eval.h"
 #include "nvim/eval/buffer.h"
 #include "nvim/eval/decode.h"
-#include "nvim/eval/deprecated.h"
 #include "nvim/eval/encode.h"
 #include "nvim/eval/executor.h"
 #include "nvim/eval/funcs.h"
@@ -90,6 +91,7 @@
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/packer.h"
+#include "nvim/msgpack_rpc/packer_defs.h"
 #include "nvim/msgpack_rpc/server.h"
 #include "nvim/normal.h"
 #include "nvim/normal_defs.h"
@@ -546,8 +548,7 @@ static void f_byte2line(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 /// "call(func, arglist [, dict])" function
 static void f_call(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
-  if (argvars[1].v_type != VAR_LIST) {
-    emsg(_(e_listreq));
+  if (tv_check_for_list_arg(argvars, 1) == FAIL) {
     return;
   }
   if (argvars[1].vval.v_list == NULL) {
@@ -573,22 +574,32 @@ static void f_call(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   if (func == NULL || *func == NUL) {
     return;         // type error, empty name or null function
   }
+  char *tofree = NULL;
+  if (argvars[0].v_type == VAR_STRING) {
+    char *p = func;
+    tofree = trans_function_name(&p, false, TFN_INT|TFN_QUIET, NULL, NULL);
+    if (tofree == NULL) {
+      emsg_funcname(e_unknown_function_str, func);
+      return;
+    }
+    func = tofree;
+  }
 
   dict_T *selfdict = NULL;
   if (argvars[2].v_type != VAR_UNKNOWN) {
     if (tv_check_for_dict_arg(argvars, 2) == FAIL) {
-      if (owned) {
-        func_unref(func);
-      }
-      return;
+      goto done;
     }
     selfdict = argvars[2].vval.v_dict;
   }
 
   func_call(func, &argvars[1], partial, selfdict, rettv);
+
+done:
   if (owned) {
     func_unref(func);
   }
+  xfree(tofree);
 }
 
 /// "changenr()" function
@@ -3064,8 +3075,11 @@ static void f_gettext(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   static const char *const has_list[] = {
-#if defined(BSD) && !defined(__APPLE__)
+#if defined(BSD) && !defined(__APPLE__) && !defined(__GNU__)
     "bsd",
+#endif
+#ifdef __GNU__
+    "hurd",
 #endif
 #ifdef __linux__
     "linux",
@@ -3555,10 +3569,10 @@ static void f_inputlist(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   });
 
   // Ask for choice.
-  bool mouse_used;
-  int selected = prompt_for_number(&mouse_used);
+  bool mouse_used = false;
+  int selected = prompt_for_input(NULL, 0, false, &mouse_used);
   if (mouse_used) {
-    selected -= lines_left;
+    selected = tv_list_len(argvars[0].vval.v_list) - (cmdline_row - mouse_row);
   }
 
   rettv->vval.v_number = selected;
@@ -4128,7 +4142,7 @@ void f_jobstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 }
 
 /// "jobstop()" function
-static void f_jobstop(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
+void f_jobstop(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   rettv->v_type = VAR_NUMBER;
   rettv->vval.v_number = 0;
@@ -4175,8 +4189,6 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     return;
   }
 
-  ui_busy_start();
-  ui_flush();
   list_T *args = argvars[0].vval.v_list;
   Channel **jobs = xcalloc((size_t)tv_list_len(args), sizeof(*jobs));
   MultiQueue *waiting_jobs = multiqueue_new_parent(loop_on_put, &main_loop);
@@ -4211,6 +4223,13 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   if (argvars[1].v_type == VAR_NUMBER && argvars[1].vval.v_number >= 0) {
     remaining = (int)argvars[1].vval.v_number;
     before = os_hrtime();
+  }
+
+  // Only mark the UI as busy when jobwait() blocks
+  const bool busy = remaining != 0;
+  if (busy) {
+    ui_busy_start();
+    ui_flush();
   }
 
   for (i = 0; i < tv_list_len(args); i++) {
@@ -4254,7 +4273,9 @@ static void f_jobwait(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 
   multiqueue_free(waiting_jobs);
   xfree(jobs);
-  ui_busy_stop();
+  if (busy) {
+    ui_busy_stop();
+  }
   tv_list_ref(rv);
   rettv->v_type = VAR_LIST;
   rettv->vval.v_list = rv;
@@ -4313,20 +4334,6 @@ static void f_keytrans(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   char *escaped = vim_strsave_escape_ks(argvars[0].vval.v_string);
   rettv->vval.v_string = str2special_save(escaped, true, true);
   xfree(escaped);
-}
-
-/// "last_buffer_nr()" function.
-static void f_last_buffer_nr(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  int n = 0;
-
-  FOR_ALL_BUFFERS(buf) {
-    if (n < buf->b_fnum) {
-      n = buf->b_fnum;
-    }
-  }
-
-  rettv->vval.v_number = n;
 }
 
 /// "len()" function
@@ -6421,103 +6428,6 @@ static void f_rpcrequest(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 end:
   arena_mem_free(res_mem);
   api_clear_error(&err);
-}
-
-/// "rpcstart()" function (DEPRECATED)
-static void f_rpcstart(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  rettv->v_type = VAR_NUMBER;
-  rettv->vval.v_number = 0;
-
-  if (check_secure()) {
-    return;
-  }
-
-  if (argvars[0].v_type != VAR_STRING
-      || (argvars[1].v_type != VAR_LIST && argvars[1].v_type != VAR_UNKNOWN)) {
-    // Wrong argument types
-    emsg(_(e_invarg));
-    return;
-  }
-
-  list_T *args = NULL;
-  int argsl = 0;
-  if (argvars[1].v_type == VAR_LIST) {
-    args = argvars[1].vval.v_list;
-    argsl = tv_list_len(args);
-    // Assert that all list items are strings
-    int i = 0;
-    TV_LIST_ITER_CONST(args, arg, {
-      if (TV_LIST_ITEM_TV(arg)->v_type != VAR_STRING) {
-        semsg(_("E5010: List item %d of the second argument is not a string"),
-              i);
-        return;
-      }
-      i++;
-    });
-  }
-
-  if (argvars[0].vval.v_string == NULL || argvars[0].vval.v_string[0] == NUL) {
-    emsg(_(e_api_spawn_failed));
-    return;
-  }
-
-  // Allocate extra memory for the argument vector and the NULL pointer
-  int argvl = argsl + 2;
-  char **argv = xmalloc(sizeof(char *) * (size_t)argvl);
-
-  // Copy program name
-  argv[0] = xstrdup(argvars[0].vval.v_string);
-
-  int i = 1;
-  // Copy arguments to the vector
-  if (argsl > 0) {
-    TV_LIST_ITER_CONST(args, arg, {
-      argv[i++] = xstrdup(tv_get_string(TV_LIST_ITEM_TV(arg)));
-    });
-  }
-
-  // The last item of argv must be NULL
-  argv[i] = NULL;
-
-  Channel *chan = channel_job_start(argv, NULL, CALLBACK_READER_INIT,
-                                    CALLBACK_READER_INIT, CALLBACK_NONE,
-                                    false, true, false, false,
-                                    kChannelStdinPipe, NULL, 0, 0, NULL,
-                                    &rettv->vval.v_number);
-  if (chan) {
-    channel_create_event(chan, NULL);
-  }
-}
-
-/// "rpcstop()" function
-static void f_rpcstop(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
-{
-  rettv->v_type = VAR_NUMBER;
-  rettv->vval.v_number = 0;
-
-  if (check_secure()) {
-    return;
-  }
-
-  if (argvars[0].v_type != VAR_NUMBER) {
-    // Wrong argument types
-    emsg(_(e_invarg));
-    return;
-  }
-
-  // if called with a job, stop it, else closes the channel
-  uint64_t id = (uint64_t)argvars[0].vval.v_number;
-  if (find_job(id, false)) {
-    f_jobstop(argvars, rettv, fptr);
-  } else {
-    const char *error;
-    rettv->vval.v_number =
-      channel_close((uint64_t)argvars[0].vval.v_number, kChannelPartRpc, &error);
-    if (!rettv->vval.v_number) {
-      emsg(error);
-    }
-  }
 }
 
 static void screenchar_adjust(ScreenGrid **grid, int *row, int *col)

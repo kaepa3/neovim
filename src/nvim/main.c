@@ -7,6 +7,7 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@
 #endif
 
 #include "auto/config.h"  // IWYU pragma: keep
+#include "klib/kvec.h"
 #include "nvim/api/extmark.h"
 #include "nvim/api/private/defs.h"
 #include "nvim/api/private/helpers.h"
@@ -79,9 +81,6 @@
 #include "nvim/option.h"
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
-#include "nvim/optionstr.h"
-#include "nvim/os/fileio.h"
-#include "nvim/os/fileio_defs.h"
 #include "nvim/os/fs.h"
 #include "nvim/os/input.h"
 #include "nvim/os/lang.h"
@@ -361,7 +360,7 @@ int main(int argc, char **argv)
 
   setbuf(stdout, NULL);  // NOLINT(bugprone-unsafe-functions)
 
-  full_screen = !silent_mode || exmode_active;
+  full_screen = !silent_mode;
 
   // Set the default values for the options that use Rows and Columns.
   win_init_size();
@@ -635,6 +634,7 @@ int main(int argc, char **argv)
   if (params.luaf != NULL) {
     // Like "--cmd", "+", "-c" and "-S", don't truncate messages.
     msg_scroll = true;
+    DLOG("executing Lua -l script");
     bool lua_ok = nlua_exec_file(params.luaf);
     TIME_MSG("executing Lua -l script");
     if (msg_didout) {
@@ -845,8 +845,9 @@ void preserve_exit(const char *errmsg)
     // For TUI: exit alternate screen so that the error messages can be seen.
     ui_client_stop();
   }
-  if (errmsg != NULL) {
-    fprintf(stderr, "%s\n", errmsg);
+  if (errmsg != NULL && errmsg[0] != NUL) {
+    size_t has_eol = '\n' == errmsg[strlen(errmsg) - 1];
+    fprintf(stderr, has_eol ? "%s" : "%s\n", errmsg);
   }
   if (ui_client_channel_id) {
     os_exit(1);
@@ -857,7 +858,7 @@ void preserve_exit(const char *errmsg)
   FOR_ALL_BUFFERS(buf) {
     if (buf->b_ml.ml_mfp != NULL && buf->b_ml.ml_mfp->mf_fname != NULL) {
       if (errmsg != NULL) {
-        fprintf(stderr, "Vim: preserving files...\r\n");
+        fprintf(stderr, "Nvim: preserving files...\n");
       }
       ml_sync_all(false, false, true);  // preserve all swap files
       break;
@@ -867,7 +868,7 @@ void preserve_exit(const char *errmsg)
   ml_close_all(false);              // close all memfiles, without deleting
 
   if (errmsg != NULL) {
-    fprintf(stderr, "Vim: Finished.\r\n");
+    fprintf(stderr, "Nvim: Finished.\n");
   }
 
   getout(1);
@@ -1228,6 +1229,9 @@ static void command_line_scan(mparm_T *parmp)
         if (exmode_active) {    // "-es" silent (batch) Ex-mode
           silent_mode = true;
           parmp->no_swap_file = true;
+          if (p_shadafile == NULL || *p_shadafile == NUL) {
+            set_option_value_give_err(kOptShadafile, STATIC_CSTR_AS_OPTVAL("NONE"), 0);
+          }
         } else {                // "-s {scriptin}" read from script file
           want_argument = true;
         }
@@ -2085,8 +2089,7 @@ static void source_startup_scripts(const mparm_T *const parmp)
 {
   // If -u given, use only the initializations from that file and nothing else.
   if (parmp->use_vimrc != NULL) {
-    if (strequal(parmp->use_vimrc, "NONE")
-        || strequal(parmp->use_vimrc, "NORC")) {
+    if (strequal(parmp->use_vimrc, "NONE") || strequal(parmp->use_vimrc, "NORC")) {
       // Do nothing.
     } else {
       if (do_source(parmp->use_vimrc, false, DOSO_NONE, NULL) != OK) {

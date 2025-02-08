@@ -1,5 +1,6 @@
 // highlight_group.c: code for managing highlight groups
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -31,6 +32,7 @@
 #include "nvim/garray_defs.h"
 #include "nvim/gettext_defs.h"
 #include "nvim/globals.h"
+#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/lua/executor.h"
@@ -148,7 +150,7 @@ static const char *highlight_init_both[] = {
   "PmenuMatchSel     gui=bold      cterm=bold",
   "PmenuSel          gui=reverse   cterm=reverse,underline blend=0",
   "RedrawDebugNormal gui=reverse   cterm=reverse",
-  "TabLineSel        gui=bold      cterm=bold",
+  "TabLineSel        gui=bold      cterm=NONE",
   "TermCursor        gui=reverse   cterm=reverse",
   "Underlined        gui=underline cterm=underline",
   "lCursor           guifg=bg      guibg=fg",
@@ -230,6 +232,11 @@ static const char *highlight_init_both[] = {
   "default link DiagnosticVirtualTextInfo  DiagnosticInfo",
   "default link DiagnosticVirtualTextHint  DiagnosticHint",
   "default link DiagnosticVirtualTextOk    DiagnosticOk",
+  "default link DiagnosticVirtualLinesError DiagnosticError",
+  "default link DiagnosticVirtualLinesWarn  DiagnosticWarn",
+  "default link DiagnosticVirtualLinesInfo  DiagnosticInfo",
+  "default link DiagnosticVirtualLinesHint  DiagnosticHint",
+  "default link DiagnosticVirtualLinesOk    DiagnosticOk",
   "default link DiagnosticSignError        DiagnosticError",
   "default link DiagnosticSignWarn         DiagnosticWarn",
   "default link DiagnosticSignInfo         DiagnosticInfo",
@@ -357,7 +364,7 @@ static const char *highlight_init_light[] = {
   "ErrorMsg             guifg=NvimDarkRed                                    ctermfg=1",
   "FloatShadow                               guibg=NvimLightGrey4            ctermbg=0 blend=80",
   "FloatShadowThrough                        guibg=NvimLightGrey4            ctermbg=0 blend=100",
-  "Folded               guifg=NvimDarkGrey4  guibg=NvimLightGrey3",
+  "Folded               guifg=NvimDarkGrey4  guibg=NvimLightGrey1",
   "LineNr               guifg=NvimLightGrey4",
   "MatchParen                                guibg=NvimLightGrey4  gui=bold  cterm=bold,underline",
   "ModeMsg              guifg=NvimDarkGreen                                  ctermfg=2",
@@ -380,7 +387,7 @@ static const char *highlight_init_light[] = {
   "SpellLocal           guisp=NvimDarkGreen  gui=undercurl                   cterm=undercurl",
   "SpellRare            guisp=NvimDarkCyan   gui=undercurl                   cterm=undercurl",
   "StatusLine           guifg=NvimLightGrey3 guibg=NvimDarkGrey3             cterm=reverse",
-  "StatusLineNC         guifg=NvimDarkGrey3  guibg=NvimLightGrey3            cterm=bold,underline",
+  "StatusLineNC         guifg=NvimDarkGrey2  guibg=NvimLightGrey4            cterm=bold,underline",
   "Title                guifg=NvimDarkGrey2                        gui=bold  cterm=bold",
   "Visual                                    guibg=NvimLightGrey4            ctermfg=15 ctermbg=0",
   "WarningMsg           guifg=NvimDarkYellow                                 ctermfg=3",
@@ -441,7 +448,7 @@ static const char *highlight_init_dark[] = {
   "ErrorMsg             guifg=NvimLightRed                                  ctermfg=9",
   "FloatShadow                                guibg=NvimDarkGrey4           ctermbg=0 blend=80",
   "FloatShadowThrough                         guibg=NvimDarkGrey4           ctermbg=0 blend=100",
-  "Folded               guifg=NvimLightGrey4  guibg=NvimDarkGrey3",
+  "Folded               guifg=NvimLightGrey4  guibg=NvimDarkGrey1",
   "LineNr               guifg=NvimDarkGrey4",
   "MatchParen                                 guibg=NvimDarkGrey4  gui=bold cterm=bold,underline",
   "ModeMsg              guifg=NvimLightGreen                                ctermfg=10",
@@ -464,7 +471,7 @@ static const char *highlight_init_dark[] = {
   "SpellLocal           guisp=NvimLightGreen  gui=undercurl                 cterm=undercurl",
   "SpellRare            guisp=NvimLightCyan   gui=undercurl                 cterm=undercurl",
   "StatusLine           guifg=NvimDarkGrey3   guibg=NvimLightGrey3          cterm=reverse",
-  "StatusLineNC         guifg=NvimLightGrey3  guibg=NvimDarkGrey3           cterm=bold,underline",
+  "StatusLineNC         guifg=NvimLightGrey2  guibg=NvimDarkGrey4           cterm=bold,underline",
   "Title                guifg=NvimLightGrey2                       gui=bold cterm=bold",
   "Visual                                     guibg=NvimDarkGrey4           ctermfg=0 ctermbg=15",
   "WarningMsg           guifg=NvimLightYellow                               ctermfg=11",

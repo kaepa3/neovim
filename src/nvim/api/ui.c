@@ -23,7 +23,6 @@
 #include "nvim/event/wstream.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
-#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
@@ -34,6 +33,7 @@
 #include "nvim/msgpack_rpc/channel.h"
 #include "nvim/msgpack_rpc/channel_defs.h"
 #include "nvim/msgpack_rpc/packer.h"
+#include "nvim/msgpack_rpc/packer_defs.h"
 #include "nvim/option.h"
 #include "nvim/types_defs.h"
 #include "nvim/ui.h"
@@ -537,7 +537,7 @@ static void prepare_call(RemoteUI *ui, const char *name)
     ui_alloc_buf(ui);
   }
 
-  // To optimize data transfer(especially for "grid_line"), we bundle adjacent
+  // To optimize data transfer (especially for "grid_line"), we bundle adjacent
   // calls to same method together, so only add a new call entry if the last
   // method call is different from "name"
 

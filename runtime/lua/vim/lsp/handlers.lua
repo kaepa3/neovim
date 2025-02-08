@@ -47,7 +47,7 @@ RSC[ms.dollar_progress] = function(_, params, ctx)
   local value = params.value
 
   if type(value) == 'table' then
-    kind = value.kind
+    kind = value.kind --- @type string
     -- Carry over title of `begin` messages to `report` and `end` messages
     -- So that consumers always have it available, even if they consume a
     -- subset of the full sequence
@@ -247,12 +247,12 @@ local function response_to_list(map_result, entity, title_fn)
     local items = map_result(result, ctx.bufnr)
 
     local list = { title = title, items = items, context = ctx }
-    if config.loclist then
-      vim.fn.setloclist(0, {}, ' ', list)
-      vim.cmd.lopen()
-    elseif config.on_list then
+    if config.on_list then
       assert(vim.is_callable(config.on_list), 'on_list is not a function')
       config.on_list(list)
+    elseif config.loclist then
+      vim.fn.setloclist(0, {}, ' ', list)
+      vim.cmd.lopen()
     else
       vim.fn.setqflist({}, ' ', list)
       vim.cmd('botright copen')
@@ -382,7 +382,7 @@ end
 --- @diagnostic disable-next-line: deprecated
 RCS[ms.textDocument_hover] = M.hover
 
-local sig_help_ns = api.nvim_create_namespace('vim_lsp_signature_help')
+local sig_help_ns = api.nvim_create_namespace('nvim.lsp.signature_help')
 
 --- @deprecated remove in 0.13
 --- |lsp-handler| for the method "textDocument/signatureHelp".
@@ -582,9 +582,8 @@ NSC['window/showMessage'] = function(_, params, ctx)
   if message_type == protocol.MessageType.Error then
     err_message('LSP[', client_name, '] ', message)
   else
-    --- @type string
-    local message_type_name = protocol.MessageType[message_type]
-    api.nvim_out_write(string.format('LSP[%s][%s] %s\n', client_name, message_type_name, message))
+    message = ('LSP[%s][%s] %s\n'):format(client_name, protocol.MessageType[message_type], message)
+    api.nvim_echo({ { message } }, true, {})
   end
   return params
 end

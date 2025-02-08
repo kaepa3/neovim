@@ -26,7 +26,6 @@ local api = n.api
 local is_ci = t.is_ci
 local is_os = t.is_os
 local new_pipename = n.new_pipename
-local spawn_argv = n.spawn_argv
 local set_session = n.set_session
 local write_file = t.write_file
 local eval = n.eval
@@ -645,7 +644,7 @@ describe('TUI', function()
 
       aunmenu PopUp
       " Delete the default MenuPopup event handler.
-      autocmd! nvim_popupmenu
+      autocmd! nvim.popupmenu
       menu PopUp.foo :let g:menustr = 'foo'<CR>
       menu PopUp.bar :let g:menustr = 'bar'<CR>
       menu PopUp.baz :let g:menustr = 'baz'<CR>
@@ -1952,10 +1951,10 @@ describe('TUI', function()
     exec_lua([[vim.uv.kill(vim.fn.jobpid(vim.bo.channel), 'sigterm')]])
     screen:expect {
       grid = [[
-      Vim: Caught deadly signal 'SIGTERM'               |
-                                                        |*2
+      Nvim: Caught deadly signal 'SIGTERM'              |
+                                                        |
       [Process exited 1]^                                |
-                                                        |*2
+                                                        |*3
       {3:-- TERMINAL --}                                    |
     ]],
     }
@@ -3184,7 +3183,6 @@ describe('TUI', function()
           local req = args.data
           local payload = req:match('^\027P%+q([%x;]+)$')
           if payload and vim.text.hexdecode(payload) == 'Ms' then
-            vim.g.xtgettcap = 'Ms'
             local resp = string.format('\027P1+r%s=%s\027\\', payload, vim.text.hexencode('\027]52;;\027\\'))
             vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
             return true
@@ -3202,9 +3200,6 @@ describe('TUI', function()
     }, {
       env = {
         VIMRUNTIME = os.getenv('VIMRUNTIME'),
-
-        -- Only queries when SSH_TTY is set
-        SSH_TTY = '/dev/pts/1',
       },
     })
 
@@ -3212,8 +3207,7 @@ describe('TUI', function()
 
     local child_session = n.connect(child_server)
     retry(nil, 1000, function()
-      eq('Ms', eval("get(g:, 'xtgettcap', '')"))
-      eq({ true, 'OSC 52' }, { child_session:request('nvim_eval', 'g:clipboard.name') })
+      eq({ true, { osc52 = true } }, { child_session:request('nvim_eval', 'g:termfeatures') })
     end)
   end)
 end)
@@ -3315,18 +3309,42 @@ describe('TUI bg color', function()
       {3:-- TERMINAL --}                                    |
     ]])
   end)
+
+  it('sends theme update notifications when background changes #31652', function()
+    command('set background=dark') -- set outer Nvim background
+    local child_server = new_pipename()
+    local screen = tt.setup_child_nvim({
+      '--listen',
+      child_server,
+      '-u',
+      'NONE',
+      '-i',
+      'NONE',
+      '--cmd',
+      'colorscheme vim',
+      '--cmd',
+      'set noswapfile',
+    })
+    screen:expect({ any = '%[No Name%]' })
+    local child_session = n.connect(child_server)
+    retry(nil, nil, function()
+      eq({ true, 'dark' }, { child_session:request('nvim_eval', '&background') })
+    end)
+    command('set background=light') -- set outer Nvim background
+    retry(nil, nil, function()
+      eq({ true, 'light' }, { child_session:request('nvim_eval', '&background') })
+    end)
+  end)
 end)
 
--- These tests require `tt` because --headless/--embed
--- does not initialize the TUI.
-describe('TUI as a client', function()
+describe('TUI client', function()
   after_each(function()
     os.remove(testlog)
   end)
 
   it('connects to remote instance (with its own TUI)', function()
-    local server_super = spawn_argv(false) -- equivalent to clear()
-    local client_super = spawn_argv(true)
+    local server_super = n.new_session(false)
+    local client_super = n.new_session(true)
 
     set_session(server_super)
     local server_pipe = new_pipename()
@@ -3400,8 +3418,8 @@ describe('TUI as a client', function()
   end)
 
   it('connects to remote instance (--headless)', function()
-    local server = spawn_argv(false) -- equivalent to clear()
-    local client_super = spawn_argv(true, { env = { NVIM_LOG_FILE = testlog } })
+    local server = n.new_session(false)
+    local client_super = n.new_session(true, { env = { NVIM_LOG_FILE = testlog } })
 
     set_session(server)
     local server_pipe = api.nvim_get_vvar('servername')
@@ -3429,10 +3447,10 @@ describe('TUI as a client', function()
     exec_lua([[vim.uv.kill(vim.fn.jobpid(vim.bo.channel), 'sigterm')]])
     screen_client:expect {
       grid = [[
-      Vim: Caught deadly signal 'SIGTERM'               |
-                                                        |*2
+      Nvim: Caught deadly signal 'SIGTERM'              |
+                                                        |
       [Process exited 1]^                                |
-                                                        |*2
+                                                        |*3
       {3:-- TERMINAL --}                                    |
     ]],
     }
@@ -3467,8 +3485,8 @@ describe('TUI as a client', function()
   end)
 
   local function test_remote_tui_quit(status)
-    local server_super = spawn_argv(false) -- equivalent to clear()
-    local client_super = spawn_argv(true)
+    local server_super = n.new_session(false)
+    local client_super = n.new_session(true)
 
     set_session(server_super)
     local server_pipe = new_pipename()

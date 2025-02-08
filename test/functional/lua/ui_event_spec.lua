@@ -106,20 +106,15 @@ describe('vim.ui_attach', function()
   end)
 
   it('does not crash on exit', function()
-    fn.system({
-      n.nvim_prog,
-      '-u',
-      'NONE',
-      '-i',
-      'NONE',
+    local p = n.spawn_wait(
       '--cmd',
       [[ lua ns = vim.api.nvim_create_namespace 'testspace' ]],
       '--cmd',
       [[ lua vim.ui_attach(ns, {ext_popupmenu=true}, function() end) ]],
       '--cmd',
-      'quitall!',
-    })
-    eq(0, n.eval('v:shell_error'))
+      'quitall!'
+    )
+    eq(0, p.status)
   end)
 
   it('can receive accurate message kinds even if they are history', function()
@@ -173,18 +168,67 @@ describe('vim.ui_attach', function()
       vim.ui_attach(ns, { ext_messages = true }, function(ev)
         if ev == 'msg_show' then
           vim.schedule(function() vim.cmd.redraw() end)
-        else
-          vim.cmd.redraw()
+        elseif ev:find('cmdline') then
+          _G.cmdline = _G.cmdline + (ev == 'cmdline_show' and 1 or 0)
+          vim.api.nvim_buf_set_lines(0, 0, -1, false, { tostring(_G.cmdline) })
+          vim.cmd('redraw')
         end
-        _G.cmdline = _G.cmdline + (ev == 'cmdline_show' and 1 or 0)
       end
     )]])
+    screen:expect([[
+      ^                                        |
+      {1:~                                       }|*4
+    ]])
     feed(':')
-    n.assert_alive()
-    eq(2, exec_lua('return _G.cmdline'))
-    n.assert_alive()
+    screen:expect({
+      grid = [[
+        ^1                                       |
+        {1:~                                       }|*4
+      ]],
+      cmdline = { {
+        content = { { '' } },
+        firstc = ':',
+        pos = 0,
+      } },
+    })
     feed('version<CR><CR>v<Esc>')
-    n.assert_alive()
+    screen:expect({
+      grid = [[
+        ^2                                       |
+        {1:~                                       }|*4
+      ]],
+      cmdline = { { abort = false } },
+    })
+    feed([[:call confirm("Save changes?", "&Yes\n&No\n&Cancel")<CR>]])
+    screen:expect({
+      grid = [[
+        ^4                                       |
+        {1:~                                       }|*4
+      ]],
+      cmdline = {
+        {
+          content = { { '' } },
+          hl_id = 10,
+          pos = 0,
+          prompt = '[Y]es, (N)o, (C)ancel: ',
+        },
+      },
+      messages = {
+        {
+          content = { { '\nSave changes?\n', 6, 10 } },
+          history = false,
+          kind = 'confirm',
+        },
+      },
+    })
+    feed('n')
+    screen:expect({
+      grid = [[
+        ^4                                       |
+        {1:~                                       }|*4
+      ]],
+      cmdline = { { abort = false } },
+    })
   end)
 
   it("preserved 'incsearch/command' screen state after :redraw from ext_cmdline", function()
@@ -261,47 +305,12 @@ describe('vim.ui_attach', function()
         lled in a fast event context            |
         {1:~                                       }|
       ]],
+      cmdline = { { abort = false } },
       messages = {
         {
           content = { { 'E122: Function Foo already exists, add ! to replace it', 9, 6 } },
+          history = true,
           kind = 'emsg',
-        },
-      },
-    })
-    -- No fast context for prompt message kinds
-    feed(':%s/Function/Replacement/c<cr>')
-    screen:expect({
-      grid = [[
-        ^E122: {10:Function} Foo already exists, add !|
-         to replace it                          |
-        replace with Replacement (y/n/a/q/l/^E/^|
-        Y)?                                     |
-        {1:~                                       }|
-      ]],
-      messages = {
-        {
-          content = { { 'replace with Replacement (y/n/a/q/l/^E/^Y)?', 6, 18 } },
-          kind = 'confirm_sub',
-        },
-      },
-    })
-    feed('<esc>:call inputlist(["Select:", "One", "Two"])<cr>')
-    screen:expect({
-      grid = [[
-        E122: {10:Function} Foo already exists, add !|
-         to replace it                          |
-        Type number and <Enter> or click with th|
-        e mouse (q or empty cancels):           |
-        {1:^~                                       }|
-      ]],
-      messages = {
-        {
-          content = { { 'Select:\nOne\nTwo\n' } },
-          kind = 'list_cmd',
-        },
-        {
-          content = { { 'Type number and <Enter> or click with the mouse (q or empty cancels): ' } },
-          kind = 'number_prompt',
         },
       },
     })
@@ -336,30 +345,36 @@ describe('vim.ui_attach', function()
         vim.api.nvim_buf_set_lines(0, -2, -1, false, { err[1] })
       end)
     ]])
+    local s1 = [[
+      ^                                        |
+      {1:~                                       }|*4
+    ]]
+    screen:expect(s1)
+    feed('QQQQQQ<CR>')
     screen:expect({
       grid = [[
-        ^                                        |
-        {1:~                                       }|*4
-      ]],
-    })
-    feed('ifoo')
-    screen:expect({
-      grid = [[
-        foo^                                     |
-        {1:~                                       }|*4
-      ]],
-      showmode = { { '-- INSERT --', 5, 11 } },
-    })
-    feed('<esc>:1mes clear<cr>:mes<cr>')
-    screen:expect({
-      grid = [[
-        foo                                     |
-        {3:                                        }|
-        {9:Excessive errors in vim.ui_attach() call}|
-        {9:back from ns: 1.}                        |
+        {9:obal 'err' (a nil value)}                |
+        {9:stack traceback:}                        |
+        {9:        [string "<nvim>"]:2: in function}|
+        {9: <[string "<nvim>"]:1>}                  |
         {100:Press ENTER or type command to continue}^ |
       ]],
+      messages = {
+        {
+          content = { { 'Press ENTER or type command to continue', 100, 18 } },
+          history = true,
+          kind = 'return_prompt',
+        },
+      },
     })
+    feed(':1mes clear<CR>:mes<CR>')
+    screen:expect([[
+                                              |
+      {3:                                        }|
+      {9:Excessive errors in vim.ui_attach() call}|
+      {9:back from ns: 1.}                        |
+      {100:Press ENTER or type command to continue}^ |
+    ]])
     feed('<cr>')
     -- Also when scheduled
     exec_lua([[
@@ -368,7 +383,7 @@ describe('vim.ui_attach', function()
       end)
     ]])
     screen:expect({
-      any = 'fo^o',
+      grid = s1,
       messages = {
         {
           content = {
@@ -378,6 +393,7 @@ describe('vim.ui_attach', function()
               6,
             },
           },
+          history = true,
           kind = 'lua_error',
         },
         {
@@ -388,23 +404,32 @@ describe('vim.ui_attach', function()
               6,
             },
           },
+          history = true,
           kind = 'lua_error',
         },
         {
           content = { { 'Press ENTER or type command to continue', 100, 18 } },
+          history = false,
           kind = 'return_prompt',
         },
       },
     })
     feed('<esc>:1mes clear<cr>:mes<cr>')
-    screen:expect({
-      grid = [[
-        foo                                     |
-        {3:                                        }|
-        {9:Excessive errors in vim.ui_attach() call}|
-        {9:back from ns: 2.}                        |
-        {100:Press ENTER or type command to continue}^ |
-      ]],
-    })
+    screen:expect([[
+                                              |
+      {3:                                        }|
+      {9:Excessive errors in vim.ui_attach() call}|
+      {9:back from ns: 2.}                        |
+      {100:Press ENTER or type command to continue}^ |
+    ]])
+  end)
+
+  it('sourcing invalid file does not crash #32166', function()
+    exec_lua([[
+      local ns = vim.api.nvim_create_namespace("")
+      vim.ui_attach(ns, { ext_messages = true }, function() end)
+    ]])
+    feed((':luafile %s<CR>'):format(testlog))
+    n.assert_alive()
   end)
 end)

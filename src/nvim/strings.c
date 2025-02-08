@@ -9,6 +9,8 @@
 #include <string.h>
 
 #include "auto/config.h"
+#include "nvim/api/private/defs.h"
+#include "nvim/api/private/helpers.h"
 #include "nvim/ascii_defs.h"
 #include "nvim/assert_defs.h"
 #include "nvim/charset.h"
@@ -20,12 +22,12 @@
 #include "nvim/garray.h"
 #include "nvim/garray_defs.h"
 #include "nvim/gettext_defs.h"
-#include "nvim/globals.h"
 #include "nvim/macros_defs.h"
 #include "nvim/math.h"
 #include "nvim/mbyte.h"
 #include "nvim/mbyte_defs.h"
 #include "nvim/memory.h"
+#include "nvim/memory_defs.h"
 #include "nvim/message.h"
 #include "nvim/option.h"
 #include "nvim/plines.h"
@@ -494,20 +496,6 @@ char *vim_strchr(const char *const string, const int c)
     u8char[len] = NUL;
     return strstr(string, u8char);
   }
-}
-
-// Sized version of strchr that can handle embedded NULs.
-// Adjusts n to the new size.
-char *strnchr(const char *p, size_t *n, int c)
-{
-  while (*n > 0) {
-    if (*p == c) {
-      return (char *)p;
-    }
-    p++;
-    (*n)--;
-  }
-  return NULL;
 }
 
 // Sort an array of strings.

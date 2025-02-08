@@ -8,7 +8,6 @@
 #include "nvim/api/private/helpers.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/rstream.h"
-#include "nvim/event/stream.h"
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/map_defs.h"
@@ -388,6 +387,10 @@ static void forward_mouse_event(TermInput *input, TermKeyKey *key)
     len += (size_t)snprintf(buf + len, sizeof(buf) - len, "Middle");
   } else if (button == 3) {
     len += (size_t)snprintf(buf + len, sizeof(buf) - len, "Right");
+  } else if (button == 8) {
+    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "X1");
+  } else if (button == 9) {
+    len += (size_t)snprintf(buf + len, sizeof(buf) - len, "X2");
   }
 
   switch (ev) {
@@ -432,6 +435,15 @@ static void tk_getkeys(TermInput *input, bool force)
   TermKeyResult result;
 
   while ((result = tk_getkey(input->tk, &key, force)) == TERMKEY_RES_KEY) {
+    // Only press and repeat events are handled for now
+    switch (key.event) {
+    case TERMKEY_EVENT_PRESS:
+    case TERMKEY_EVENT_REPEAT:
+      break;
+    default:
+      continue;
+    }
+
     if (key.type == TERMKEY_TYPE_UNICODE && !key.modifiers) {
       forward_simple_utf8(input, &key);
     } else if (key.type == TERMKEY_TYPE_UNICODE

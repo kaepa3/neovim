@@ -7,8 +7,7 @@
 -- so this wouldn't be a separate case to consider)
 
 ---@nodoc
----@diagnostic disable-next-line: lowercase-global
-vim = vim or {}
+_G.vim = _G.vim or {}
 
 ---@generic T
 ---@param orig T
@@ -959,7 +958,7 @@ do
   ---       function vim.startswith(s, prefix)
   ---         vim.validate('s', s, 'string')
   ---         vim.validate('prefix', prefix, 'string')
-  ---         ...
+  ---         -- ...
   ---       end
   ---     ```
   ---
@@ -979,7 +978,7 @@ do
   ---           age={age, 'number'},
   ---           hobbies={hobbies, 'table'},
   ---         }
-  ---         ...
+  ---         -- ...
   ---       end
   ---     ```
   ---

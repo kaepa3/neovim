@@ -334,6 +334,11 @@ end
 --- rootUri, and rootPath on initialization. Unused if `root_dir` is provided.
 --- @field root_markers? string[]
 ---
+--- Directory where the LSP server will base its workspaceFolders, rootUri, and rootPath on
+--- initialization. If a function, it accepts a single callback argument which must be called with
+--- the value of root_dir to use. The LSP server will not be started until the callback is called.
+--- @field root_dir? string|fun(cb:fun(string))
+---
 --- Predicate used to decide if a client should be re-used. Used on all
 --- running clients. The default implementation re-uses a client if name and
 --- root_dir matches.
@@ -415,9 +420,33 @@ lsp.config = setmetatable({ _configs = {} }, {
   --- @return vim.lsp.Config
   __index = function(self, name)
     validate('name', name, 'string')
-    invalidate_enabled_config(name)
+
+    local rconfig = lsp._enabled_configs[name] or {}
     self._configs[name] = self._configs[name] or {}
-    return self._configs[name]
+
+    if not rconfig.resolved_config then
+      -- Resolve configs from lsp/*.lua
+      -- Calls to vim.lsp.config in lsp/* have a lower precedence than calls from other sites.
+      local rtp_config = {} ---@type vim.lsp.Config
+      for _, v in ipairs(api.nvim_get_runtime_file(('lsp/%s.lua'):format(name), true)) do
+        local config = assert(loadfile(v))() ---@type any?
+        if type(config) == 'table' then
+          rtp_config = vim.tbl_deep_extend('force', rtp_config, config)
+        else
+          log.warn(string.format('%s does not return a table, ignoring', v))
+        end
+      end
+
+      rconfig.resolved_config = vim.tbl_deep_extend(
+        'force',
+        lsp.config._configs['*'] or {},
+        rtp_config,
+        lsp.config._configs[name] or {}
+      )
+      rconfig.resolved_config.name = name
+    end
+
+    return rconfig.resolved_config
   end,
 
   --- @param self vim.lsp.config
@@ -441,40 +470,6 @@ lsp.config = setmetatable({ _configs = {} }, {
   end,
 })
 
---- @private
---- @param name string
---- @return vim.lsp.Config
-function lsp._resolve_config(name)
-  local econfig = lsp._enabled_configs[name] or {}
-
-  if not econfig.resolved_config then
-    -- Resolve configs from lsp/*.lua
-    -- Calls to vim.lsp.config in lsp/* have a lower precedence than calls from other sites.
-    local orig_configs = lsp.config._configs
-    lsp.config._configs = {}
-    pcall(vim.cmd.runtime, { ('lsp/%s.lua'):format(name), bang = true })
-    local rtp_configs = lsp.config._configs
-    lsp.config._configs = orig_configs
-
-    local config = vim.tbl_deep_extend(
-      'force',
-      lsp.config._configs['*'] or {},
-      rtp_configs[name] or {},
-      lsp.config._configs[name] or {}
-    )
-
-    config.name = name
-
-    validate('cmd', config.cmd, { 'function', 'table' })
-    validate('cmd', config.reuse_client, 'function', true)
-    -- All other fields are validated in client.create
-
-    econfig.resolved_config = config
-  end
-
-  return assert(econfig.resolved_config)
-end
-
 local lsp_enable_autocmd_id --- @type integer?
 
 --- @param bufnr integer
@@ -495,19 +490,36 @@ local function lsp_enable_callback(bufnr)
     return true
   end
 
+  --- @param config vim.lsp.Config
+  local function start(config)
+    return vim.lsp.start(config, {
+      bufnr = bufnr,
+      reuse_client = config.reuse_client,
+      _root_markers = config.root_markers,
+    })
+  end
+
   for name in vim.spairs(lsp._enabled_configs) do
-    local config = lsp._resolve_config(name)
+    local config = lsp.config[name]
+    validate('cmd', config.cmd, { 'function', 'table' })
+    validate('cmd', config.reuse_client, 'function', true)
 
     if can_start(config) then
       -- Deepcopy config so changes done in the client
       -- do not propagate back to the enabled configs.
       config = vim.deepcopy(config)
 
-      vim.lsp.start(config, {
-        bufnr = bufnr,
-        reuse_client = config.reuse_client,
-        _root_markers = config.root_markers,
-      })
+      if type(config.root_dir) == 'function' then
+        ---@param root_dir string
+        config.root_dir(function(root_dir)
+          config.root_dir = root_dir
+          vim.schedule(function()
+            start(config)
+          end)
+        end)
+      else
+        start(config)
+      end
     end
   end
 end
@@ -534,7 +546,7 @@ function lsp.enable(name, enable)
     if nm == '*' then
       error('Invalid name')
     end
-    lsp._enabled_configs[nm] = enable == false and nil or {}
+    lsp._enabled_configs[nm] = enable ~= false and {} or nil
   end
 
   if not next(lsp._enabled_configs) then
@@ -831,7 +843,7 @@ local function buf_attach(bufnr)
   attached_buffers[bufnr] = true
 
   local uri = vim.uri_from_bufnr(bufnr)
-  local augroup = ('lsp_b_%d_save'):format(bufnr)
+  local augroup = ('nvim.lsp.b_%d_save'):format(bufnr)
   local group = api.nvim_create_augroup(augroup, { clear = true })
   api.nvim_create_autocmd('BufWritePre', {
     group = group,
@@ -1379,12 +1391,13 @@ end
 --- |LspAttach| autocommand. Example:
 ---
 --- ```lua
---- vim.api.nvim_create_autocommand('LspAttach', {
+--- vim.api.nvim_create_autocmd('LspAttach', {
 ---   callback = function(args)
 ---     local client = vim.lsp.get_client_by_id(args.data.client_id)
 ---     if client:supports_method('textDocument/foldingRange') then
----       vim.wo.foldmethod = 'expr'
----       vim.wo.foldexpr = 'v:lua.vim.lsp.foldexpr()'
+---       local win = vim.api.nvim_get_current_win()
+---       vim.wo[win][0].foldmethod = 'expr'
+---       vim.wo[win][0].foldexpr = 'v:lua.vim.lsp.foldexpr()'
 ---     end
 ---   end,
 --- })

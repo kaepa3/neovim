@@ -504,7 +504,8 @@ func Test_set_completion_string_values()
     call assert_equal('current', getcompletion('set browsedir=', 'cmdline')[1])
   endif
   call assert_equal('unload', getcompletion('set bufhidden=', 'cmdline')[1])
-  call assert_equal('nowrite', getcompletion('set buftype=', 'cmdline')[1])
+  "call assert_equal('nowrite', getcompletion('set buftype=', 'cmdline')[1])
+  call assert_equal('help', getcompletion('set buftype=', 'cmdline')[1])
   call assert_equal('internal', getcompletion('set casemap=', 'cmdline')[1])
   if exists('+clipboard')
     " call assert_match('unnamed', getcompletion('set clipboard=', 'cmdline')[1])
@@ -710,6 +711,10 @@ func Test_set_completion_string_values()
   " Test empty option
   set diffopt=
   call assert_equal([], getcompletion('set diffopt-=', 'cmdline'))
+  " Test all possible values
+  call assert_equal(['filler', 'context:', 'iblank', 'icase', 'iwhite', 'iwhiteall', 'iwhiteeol', 'horizontal',
+        \ 'vertical', 'closeoff', 'hiddenoff', 'foldcolumn:', 'followwrap', 'internal', 'indent-heuristic', 'algorithm:', 'linematch:'],
+        \ getcompletion('set diffopt=', 'cmdline'))
   set diffopt&
 
   " Test escaping output

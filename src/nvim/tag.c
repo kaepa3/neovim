@@ -34,7 +34,6 @@
 #include "nvim/hashtab.h"
 #include "nvim/hashtab_defs.h"
 #include "nvim/help.h"
-#include "nvim/highlight.h"
 #include "nvim/highlight_defs.h"
 #include "nvim/input.h"
 #include "nvim/insexpand.h"
@@ -669,7 +668,7 @@ void do_tag(char *tag, int type, int count, int forceit, bool verbose)
 
       if (ask_for_selection) {
         // Ask to select a tag from the list.
-        int i = prompt_for_number(NULL);
+        int i = prompt_for_input(NULL, 0, false, NULL);
         if (i <= 0 || i > num_matches || got_int) {
           // no valid choice: don't change anything
           if (use_tagstack) {

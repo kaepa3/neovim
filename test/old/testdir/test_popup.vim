@@ -1519,6 +1519,39 @@ func Test_pum_highlights_match()
   call StopVimInTerminal(buf)
 endfunc
 
+func Test_pum_highlights_match_with_abbr()
+  CheckScreendump
+  let lines =<< trim END
+    func Omni_test(findstart, base)
+      if a:findstart
+        return col(".")
+      endif
+      return {
+            \ 'words': [
+            \ { 'word': 'foobar', 'abbr': "foobar\t\t!" },
+            \ { 'word': 'foobaz', 'abbr': "foobaz\t\t!" },
+            \]}
+    endfunc
+
+    set omnifunc=Omni_test
+    set completeopt=menuone,noinsert
+    hi PmenuMatchSel  ctermfg=6 ctermbg=7
+    hi PmenuMatch     ctermfg=4 ctermbg=225
+  END
+  call writefile(lines, 'Xscript', 'D')
+  let  buf = RunVimInTerminal('-S Xscript', {})
+  call TermWait(buf)
+  call term_sendkeys(buf, "i\<C-X>\<C-O>")
+  call TermWait(buf, 50)
+  call term_sendkeys(buf, "foo")
+  call VerifyScreenDump(buf, 'Test_pum_highlights_19', {})
+
+  call term_sendkeys(buf, "\<C-E>\<Esc>")
+  call TermWait(buf)
+
+  call StopVimInTerminal(buf)
+endfunc
+
 func Test_pum_user_abbr_hlgroup()
   CheckScreendump
   let lines =<< trim END
@@ -1716,11 +1749,15 @@ endfunc
 func Test_pum_matchins_highlight()
   CheckScreendump
   let lines =<< trim END
+    let g:change = 0
     func Omni_test(findstart, base)
       if a:findstart
         return col(".")
       endif
-      return [#{word: "foo"}, #{word: "bar"}, #{word: "你好"}]
+      if g:change == 0
+        return [#{word: "foo"}, #{word: "bar"}, #{word: "你好"}]
+      endif
+      return [#{word: "foo", info: "info"}, #{word: "bar"}, #{word: "你好"}]
     endfunc
     set omnifunc=Omni_test
     hi ComplMatchIns ctermfg=red
@@ -1767,6 +1804,10 @@ func Test_pum_matchins_highlight()
   call VerifyScreenDump(buf, 'Test_pum_matchins_10', {})
   call term_sendkeys(buf, "\<Esc>")
 
+  call term_sendkeys(buf, ":let g:change=1\<CR>S\<C-X>\<C-O>")
+  call VerifyScreenDump(buf, 'Test_pum_matchins_11', {})
+  call term_sendkeys(buf, "\<Esc>")
+
   call StopVimInTerminal(buf)
 endfunc
 
@@ -1809,7 +1850,39 @@ func Test_pum_matchins_highlight_combine()
   call VerifyScreenDump(buf, 'Test_pum_matchins_combine_06', {})
   call term_sendkeys(buf, "\<Esc>")
 
+  " Does not highlight the compl leader
+  call TermWait(buf)
+  call term_sendkeys(buf, ":set cot+=menuone,noselect\<CR>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "S\<C-X>\<C-O>f\<C-N>")
+  call VerifyScreenDump(buf, 'Test_pum_matchins_combine_07', {})
+  call term_sendkeys(buf, "\<C-E>\<Esc>")
+
+  call term_sendkeys(buf, ":set cot+=fuzzy\<CR>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "S\<C-X>\<C-O>f\<C-N>")
+  call VerifyScreenDump(buf, 'Test_pum_matchins_combine_08', {})
+  call term_sendkeys(buf, "\<C-E>\<Esc>")
+  call TermWait(buf)
+
+  call term_sendkeys(buf, ":set cot-=fuzzy\<CR>")
+  call TermWait(buf)
+  call term_sendkeys(buf, "Sf\<C-N>")
+  call VerifyScreenDump(buf, 'Test_pum_matchins_combine_09', {})
+  call term_sendkeys(buf, "\<C-E>\<Esc>")
+
   call StopVimInTerminal(buf)
+endfunc
+
+" this used to crash
+func Test_popup_completion_many_ctrlp()
+  new
+  let candidates=repeat(['a0'], 99)
+  call setline(1, candidates)
+  exe ":norm! VGg\<C-A>"
+  norm! G
+  call feedkeys("o" .. repeat("\<c-p>", 100), 'tx')
+  bw!
 endfunc
 
 " vim: shiftwidth=2 sts=2 expandtab

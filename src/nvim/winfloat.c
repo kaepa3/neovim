@@ -10,7 +10,6 @@
 #include "nvim/ascii_defs.h"
 #include "nvim/autocmd.h"
 #include "nvim/buffer_defs.h"
-#include "nvim/decoration.h"
 #include "nvim/drawscreen.h"
 #include "nvim/errors.h"
 #include "nvim/globals.h"
@@ -304,6 +303,15 @@ void win_check_anchored_floats(win_T *win)
     if (wp->w_config.relative == kFloatRelativeWindow
         && wp->w_config.window == win->handle) {
       wp->w_pos_changed = true;
+    }
+  }
+}
+
+void win_float_anchor_laststatus(void)
+{
+  FOR_ALL_WINDOWS_IN_TAB(win, curtab) {
+    if (win->w_config.relative == kFloatRelativeLaststatus) {
+      win->w_pos_changed = true;
     }
   }
 }

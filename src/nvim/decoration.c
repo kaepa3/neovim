@@ -17,12 +17,11 @@
 #include "nvim/fold.h"
 #include "nvim/globals.h"
 #include "nvim/grid.h"
-#include "nvim/grid_defs.h"
 #include "nvim/highlight.h"
 #include "nvim/highlight_group.h"
 #include "nvim/marktree.h"
 #include "nvim/memory.h"
-#include "nvim/move.h"
+#include "nvim/memory_defs.h"
 #include "nvim/option_vars.h"
 #include "nvim/pos_defs.h"
 #include "nvim/sign.h"
@@ -304,12 +303,24 @@ static void decor_free_inner(DecorVirtText *vt, uint32_t first_idx)
   }
 }
 
+/// Check if we are in a callback while drawing, which might invalidate the marktree iterator.
+///
+/// This should be called whenever a structural modification has been done to a
+/// marktree in a public API function (i e any change which adds or deletes marks).
+void decor_state_invalidate(buf_T *buf)
+{
+  if (decor_state.win && decor_state.win->w_buffer == buf) {
+    decor_state.itr_valid = false;
+  }
+}
+
 void decor_check_to_be_deleted(void)
 {
   assert(!decor_state.running_decor_provider);
   decor_free_inner(to_free_virt, to_free_sh);
   to_free_virt = NULL;
   to_free_sh = DECOR_ID_INVALID;
+  decor_state.win = NULL;
 }
 
 void decor_state_free(DecorState *state)
@@ -448,6 +459,8 @@ bool decor_redraw_start(win_T *wp, int top_row, DecorState *state)
 {
   buf_T *buf = wp->w_buffer;
   state->top_row = top_row;
+  state->itr_valid = true;
+
   if (!marktree_itr_get_overlap(buf->b_marktree, top_row, 0, state->itr)) {
     return false;
   }
@@ -490,7 +503,11 @@ bool decor_redraw_line(win_T *wp, int row, DecorState *state)
 
   if (state->row == -1) {
     decor_redraw_start(wp, row, state);
+  } else if (!state->itr_valid) {
+    marktree_itr_get(wp->w_buffer->b_marktree, row, 0, state->itr);
+    state->itr_valid = true;
   }
+
   state->row = row;
   state->col_until = -1;
   state->eol_col = -1;
@@ -839,9 +856,9 @@ static const uint32_t sign_filter[4] = {[kMTMetaSignText] = kMTFilterSelect,
 /// Return the sign attributes on the currently refreshed row.
 ///
 /// @param[out] sattrs Output array for sign text and texthl id
-/// @param[out] line_attr Highest priority linehl id
-/// @param[out] cul_attr Highest priority culhl id
-/// @param[out] num_attr Highest priority numhl id
+/// @param[out] line_id Highest priority linehl id
+/// @param[out] cul_id Highest priority culhl id
+/// @param[out] num_id Highest priority numhl id
 void decor_redraw_signs(win_T *wp, buf_T *buf, int row, SignTextAttrs sattrs[], int *line_id,
                         int *cul_id, int *num_id)
 {
