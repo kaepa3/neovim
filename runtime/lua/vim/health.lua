@@ -109,7 +109,7 @@ local s_output = {} ---@type string[]
 
 -- From a path return a list [{name}, {func}, {type}] representing a healthcheck
 local function filepath_to_healthcheck(path)
-  path = vim.fs.normalize(path)
+  path = vim.fs.abspath(vim.fs.normalize(path))
   local name --- @type string
   local func --- @type string
   local filetype --- @type string
@@ -118,7 +118,17 @@ local function filepath_to_healthcheck(path)
     func = 'health#' .. name .. '#check'
     filetype = 'v'
   else
-    local subpath = path:gsub('.*/lua/', '')
+    local rtp_lua = vim
+      .iter(vim.api.nvim_get_runtime_file('lua/', true))
+      :map(function(rtp_lua)
+        return vim.fs.abspath(vim.fs.normalize(rtp_lua))
+      end)
+      :find(function(rtp_lua)
+        return vim.fs.relpath(rtp_lua, path)
+      end)
+    -- "/path/to/rtp/lua/foo/bar/health.lua" => "foo/bar/health.lua"
+    -- "/another/rtp/lua/baz/health/init.lua" => "baz/health/init.lua"
+    local subpath = path:gsub('^' .. vim.pesc(rtp_lua), ''):gsub('^/+', '')
     if vim.fs.basename(subpath) == 'health.lua' then
       -- */health.lua
       name = vim.fs.dirname(subpath)
@@ -186,18 +196,13 @@ local function get_healthcheck(plugin_names)
   return healthchecks
 end
 
---- Indents lines *except* line 1 of a string if it contains newlines.
+--- Indents lines *except* line 1 of a multiline string.
 ---
 --- @param s string
 --- @param columns integer
 --- @return string
 local function indent_after_line1(s, columns)
-  local lines = vim.split(s, '\n')
-  local indent = string.rep(' ', columns)
-  for i = 2, #lines do
-    lines[i] = indent .. lines[i]
-  end
-  return table.concat(lines, '\n')
+  return (vim.text.indent(columns, s):gsub('^%s+', ''))
 end
 
 --- Changes ':h clipboard' to ':help |clipboard|'.
@@ -444,11 +449,15 @@ function M._check(mods, plugin_names)
   vim.print('')
 
   -- Quit with 'q' inside healthcheck buffers.
-  vim.keymap.set('n', 'q', function()
-    if not pcall(vim.cmd.close) then
-      vim.cmd.bdelete()
+  vim._with({ buf = bufnr }, function()
+    if vim.fn.maparg('q', 'n', false, false) == '' then
+      vim.keymap.set('n', 'q', function()
+        if not pcall(vim.cmd.close) then
+          vim.cmd.bdelete()
+        end
+      end, { buffer = bufnr, silent = true, noremap = true, nowait = true })
     end
-  end, { buffer = bufnr, silent = true, noremap = true, nowait = true })
+  end)
 
   -- Once we're done writing checks, set nomodifiable.
   vim.bo[bufnr].modifiable = false

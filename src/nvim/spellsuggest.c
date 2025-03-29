@@ -516,7 +516,7 @@ void spell_suggest(int count)
   spell_find_suggest(line + curwin->w_cursor.col, badlen, &sug, limit,
                      true, need_cap, true);
 
-  msg_ext_set_kind("list_cmd");
+  msg_ext_set_kind("confirm");
   if (GA_EMPTY(&sug.su_ga)) {
     msg(_("Sorry, no suggestions"), 0);
   } else if (count > 0) {
@@ -588,7 +588,9 @@ void spell_suggest(int count)
         msg_advance(30);
         msg_puts(IObuff);
       }
-      msg_putchar('\n');
+      if (!ui_has(kUIMessages) || i < sug.su_ga.ga_len - 1) {
+        msg_putchar('\n');
+      }
     }
 
     cmdmsg_rl = false;

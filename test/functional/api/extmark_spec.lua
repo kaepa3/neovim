@@ -83,7 +83,7 @@ end
 describe('API/extmarks', function()
   local screen
   local marks, positions, init_text, row, col
-  local ns, ns2
+  local ns, ns2 ---@type integer, integer
 
   before_each(function()
     -- Initialize some namespaces and insert 12345 into a buffer
@@ -123,6 +123,10 @@ describe('API/extmarks', function()
       pcall_err(set_extmark, ns, marks[2], 0, 0, { hl_mode = 0 })
     )
     eq("Invalid 'hl_mode': 'foo'", pcall_err(set_extmark, ns, marks[2], 0, 0, { hl_mode = 'foo' }))
+    eq(
+      "Invalid 'virt_lines_overflow': 'foo'",
+      pcall_err(set_extmark, ns, marks[2], 0, 0, { virt_lines_overflow = 'foo' })
+    )
     eq(
       "Invalid 'id': expected Integer, got Array",
       pcall_err(set_extmark, ns, {}, 0, 0, { end_col = 1, end_row = 1 })
@@ -1421,14 +1425,12 @@ describe('API/extmarks', function()
   end)
 
   it('throws consistent error codes', function()
-    local ns_invalid = ns2 + 1
-    eq(
-      "Invalid 'ns_id': 3",
-      pcall_err(set_extmark, ns_invalid, marks[1], positions[1][1], positions[1][2])
-    )
-    eq("Invalid 'ns_id': 3", pcall_err(api.nvim_buf_del_extmark, 0, ns_invalid, marks[1]))
-    eq("Invalid 'ns_id': 3", pcall_err(get_extmarks, ns_invalid, positions[1], positions[2]))
-    eq("Invalid 'ns_id': 3", pcall_err(get_extmark_by_id, ns_invalid, marks[1]))
+    local ns_invalid = ns2 + 1 ---@type integer
+    local err = string.format("Invalid 'ns_id': %d", ns_invalid)
+    eq(err, pcall_err(set_extmark, ns_invalid, marks[1], positions[1][1], positions[1][2]))
+    eq(err, pcall_err(api.nvim_buf_del_extmark, 0, ns_invalid, marks[1]))
+    eq(err, pcall_err(get_extmarks, ns_invalid, positions[1], positions[2]))
+    eq(err, pcall_err(get_extmark_by_id, ns_invalid, marks[1]))
   end)
 
   it('when col = line-length, set the mark on eol', function()
@@ -1531,7 +1533,7 @@ describe('API/extmarks', function()
         0,
         0,
         {
-          ns_id = 1,
+          ns_id = ns,
           end_col = 0,
           end_row = 1,
           right_gravity = true,
@@ -1552,6 +1554,7 @@ describe('API/extmarks', function()
   it('can get details', function()
     set_extmark(ns, marks[1], 0, 0, {
       conceal = 'c',
+      conceal_lines = '',
       cursorline_hl_group = 'Statement',
       end_col = 0,
       end_right_gravity = true,
@@ -1576,16 +1579,12 @@ describe('API/extmarks', function()
       virt_text_hide = true,
       virt_text_pos = 'right_align',
     })
-    set_extmark(ns, marks[2], 0, 0, {
-      priority = 0,
-      virt_text = { { '', 'Macro' }, { '', { 'Type', 'Search' } }, { '' } },
-      virt_text_win_col = 1,
-    })
     eq({
       0,
       0,
       {
         conceal = 'c',
+        conceal_lines = '',
         cursorline_hl_group = 'Statement',
         end_col = 0,
         end_right_gravity = true,
@@ -1594,7 +1593,7 @@ describe('API/extmarks', function()
         hl_group = 'String',
         hl_mode = 'blend',
         line_hl_group = 'Statement',
-        ns_id = 1,
+        ns_id = ns,
         number_hl_group = 'Statement',
         priority = 0,
         right_gravity = false,
@@ -1607,38 +1606,69 @@ describe('API/extmarks', function()
         },
         virt_lines_above = true,
         virt_lines_leftcol = true,
+        virt_lines_overflow = 'trunc',
         virt_text = { { 'text', 'Macro' }, { '???' }, { 'stack', { 'Type', 'Search' } } },
         virt_text_repeat_linebreak = false,
         virt_text_hide = true,
         virt_text_pos = 'right_align',
       },
     }, get_extmark_by_id(ns, marks[1], { details = true }))
+
+    set_extmark(ns, marks[2], 0, 0, {
+      priority = 0,
+      virt_text = { { '', 'Macro' }, { '', { 'Type', 'Search' } }, { '' } },
+      virt_text_repeat_linebreak = true,
+      virt_text_win_col = 1,
+    })
     eq({
       0,
       0,
       {
-        ns_id = 1,
+        ns_id = ns,
         right_gravity = true,
         priority = 0,
         virt_text = { { '', 'Macro' }, { '', { 'Type', 'Search' } }, { '' } },
-        virt_text_repeat_linebreak = false,
+        virt_text_repeat_linebreak = true,
         virt_text_hide = false,
         virt_text_pos = 'win_col',
         virt_text_win_col = 1,
       },
     }, get_extmark_by_id(ns, marks[2], { details = true }))
-    set_extmark(ns, marks[3], 0, 0, { cursorline_hl_group = 'Statement' })
+
+    set_extmark(ns, marks[3], 0, 0, {
+      priority = 0,
+      ui_watched = true,
+      virt_lines = { { { '', 'Macro' }, { '' }, { '', '' } } },
+      virt_lines_overflow = 'scroll',
+    })
     eq({
       0,
       0,
       {
-        ns_id = 1,
+        ns_id = ns,
+        right_gravity = true,
+        ui_watched = true,
+        priority = 0,
+        virt_lines = { { { '', 'Macro' }, { '' }, { '', '' } } },
+        virt_lines_above = false,
+        virt_lines_leftcol = false,
+        virt_lines_overflow = 'scroll',
+      },
+    }, get_extmark_by_id(ns, marks[3], { details = true }))
+
+    set_extmark(ns, marks[4], 0, 0, { cursorline_hl_group = 'Statement' })
+    eq({
+      0,
+      0,
+      {
+        ns_id = ns,
         cursorline_hl_group = 'Statement',
         priority = 4096,
         right_gravity = true,
       },
-    }, get_extmark_by_id(ns, marks[3], { details = true }))
-    set_extmark(ns, marks[4], 0, 0, {
+    }, get_extmark_by_id(ns, marks[4], { details = true }))
+
+    set_extmark(ns, marks[5], 0, 0, {
       end_col = 1,
       conceal = 'a',
       spell = true,
@@ -1651,12 +1681,13 @@ describe('API/extmarks', function()
         end_col = 1,
         end_right_gravity = false,
         end_row = 0,
-        ns_id = 1,
+        ns_id = ns,
         right_gravity = true,
         spell = true,
       },
-    }, get_extmark_by_id(ns, marks[4], { details = true }))
-    set_extmark(ns, marks[5], 0, 0, {
+    }, get_extmark_by_id(ns, marks[5], { details = true }))
+
+    set_extmark(ns, marks[6], 0, 0, {
       end_col = 1,
       spell = false,
     })
@@ -1667,11 +1698,12 @@ describe('API/extmarks', function()
         end_col = 1,
         end_right_gravity = false,
         end_row = 0,
-        ns_id = 1,
+        ns_id = ns,
         right_gravity = true,
         spell = false,
       },
-    }, get_extmark_by_id(ns, marks[5], { details = true }))
+    }, get_extmark_by_id(ns, marks[6], { details = true }))
+
     api.nvim_buf_clear_namespace(0, ns, 0, -1)
     -- legacy sign mark includes sign name
     command('sign define sign1 text=s1 texthl=Title linehl=LineNR numhl=Normal culhl=CursorLine')

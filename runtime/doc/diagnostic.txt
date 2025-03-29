@@ -122,7 +122,7 @@ with |vim.notify()|: >lua
     -- Users can configure the handler
     vim.diagnostic.config({
       ["my/notify"] = {
-        log_level = vim.log.levels.INFO
+        log_level = vim.log.levels.INFO,
 
         -- This handler will only receive "error" diagnostics.
         severity = vim.diagnostic.severity.ERROR,
@@ -373,7 +373,7 @@ EVENTS                                                  *diagnostic-events*
                                                         *DiagnosticChanged*
 DiagnosticChanged       After diagnostics have changed. When used from Lua,
                         the new diagnostics are passed to the autocmd
-                        callback in the "data" table.
+                        callback in the "data" table. Triggered per buffer.
 
 Example: >lua
 

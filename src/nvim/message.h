@@ -28,12 +28,11 @@ enum {
   VIM_DISCARDALL = 6,
 };
 
-/// First message
-extern MessageHistoryEntry *first_msg_hist;
-/// Last message
-extern MessageHistoryEntry *last_msg_hist;
+extern MessageHistoryEntry *msg_hist_last;
 
 EXTERN bool msg_ext_need_clear INIT( = false);
+// Set to true to force grouping a set of message chunks into a single `cmdline_show` event.
+EXTERN bool msg_ext_skip_flush INIT( = false);
 
 /// allocated grid for messages. Used when display+=msgsep is set, or
 /// ext_multigrid is active. See also the description at msg_scroll_flush()

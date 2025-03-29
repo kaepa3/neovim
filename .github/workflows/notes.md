@@ -36,7 +36,7 @@ Note: On Windows "Server" you may need to [install vcruntime140.dll](https://lea
 
 ### Linux (x86_64)
 
-glibc 2.31 or newer is required. Or you may try the (unsupported) [builds for older glibc](https://github.com/neovim/neovim-releases).
+If your system does not have the [required glibc version](https://neovim.io/doc/user/support.html#supported-platforms), try the (unsupported) [builds for older glibc](https://github.com/neovim/neovim-releases).
 
 #### AppImage
 
@@ -54,7 +54,7 @@ glibc 2.31 or newer is required. Or you may try the (unsupported) [builds for ol
 2. Extract: `tar xzvf nvim-linux-x86_64.tar.gz`
 3. Run `./nvim-linux-x86_64/bin/nvim`
 
-### Linux (arm64)
+### Linux (arm64) - Untested
 
 #### AppImage
 

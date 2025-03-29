@@ -159,17 +159,11 @@
 ///                    'fillchars' to a space char, and clearing the
 ///                    |hl-EndOfBuffer| region in 'winhighlight'.
 ///   - border: Style of (optional) window border. This can either be a string
-///     or an array. The string values are
-///     - "none": No border (default).
-///     - "single": A single line box.
-///     - "double": A double line box.
-///     - "rounded": Like "single", but with rounded corners ("╭" etc.).
-///     - "solid": Adds padding by a single whitespace cell.
-///     - "shadow": A drop shadow effect by blending with the background.
-///     - If it is an array, it should have a length of eight or any divisor of
-///       eight. The array will specify the eight chars building up the border
-///       in a clockwise fashion starting with the top-left corner. As an
-///       example, the double box style could be specified as:
+///     or an array. The string values are the same as those described in 'winborder'.
+///     If it is an array, it should have a length of eight or any divisor of
+///     eight. The array will specify the eight chars building up the border
+///     in a clockwise fashion starting with the top-left corner. As an
+///     example, the double box style could be specified as:
 ///       ```
 ///       [ "╔", "═" ,"╗", "║", "╝", "═", "╚", "║" ].
 ///       ```
@@ -214,7 +208,7 @@
 ///
 /// @param[out] err Error details, if any
 ///
-/// @return Window handle, or 0 on error
+/// @return |window-ID|, or 0 on error
 Window nvim_open_win(Buffer buffer, Boolean enter, Dict(win_config) *config, Error *err)
   FUNC_API_SINCE(6) FUNC_API_TEXTLOCK_ALLOW_CMDWIN
 {
@@ -387,7 +381,7 @@ static int win_split_flags(WinSplit split, bool toplevel)
 ///
 /// @see |nvim_open_win()|
 ///
-/// @param      window  Window handle, or 0 for current window
+/// @param      window  |window-ID|, or 0 for current window
 /// @param      config  Map defining the window configuration,
 ///                     see |nvim_open_win()|
 /// @param[out] err     Error details, if any
@@ -694,7 +688,7 @@ static void config_put_bordertext(Dict(win_config) *config, WinConfig *fconfig,
 ///
 /// `relative` is empty for normal windows.
 ///
-/// @param      window Window handle, or 0 for current window
+/// @param      window |window-ID|, or 0 for current window
 /// @param[out] err Error details, if any
 /// @return     Map defining the window configuration, see |nvim_open_win()|
 Dict(win_config) nvim_win_get_config(Window window, Arena *arena, Error *err)
@@ -944,11 +938,11 @@ static void parse_border_style(Object style, WinConfig *fconfig, Error *err)
     char chars[8][MAX_SCHAR_SIZE];
     bool shadow_color;
   } defaults[] = {
-    { "double", { "╔", "═", "╗", "║", "╝", "═", "╚", "║" }, false },
-    { "single", { "┌", "─", "┐", "│", "┘", "─", "└", "│" }, false },
-    { "shadow", { "", "", " ", " ", " ", " ", " ", "" }, true },
-    { "rounded", { "╭", "─", "╮", "│", "╯", "─", "╰", "│" }, false },
-    { "solid", { " ", " ", " ", " ", " ", " ", " ", " " }, false },
+    { opt_winborder_values[1], { "╔", "═", "╗", "║", "╝", "═", "╚", "║" }, false },
+    { opt_winborder_values[2], { "┌", "─", "┐", "│", "┘", "─", "└", "│" }, false },
+    { opt_winborder_values[3], { "", "", " ", " ", " ", " ", " ", "" }, true },
+    { opt_winborder_values[4], { "╭", "─", "╮", "│", "╯", "─", "╰", "│" }, false },
+    { opt_winborder_values[5], { " ", " ", " ", " ", " ", " ", " ", " " }, false },
     { NULL, { { NUL } }, false },
   };
 
@@ -1240,11 +1234,6 @@ static bool parse_win_config(win_T *wp, Dict(win_config) *config, WinConfig *fco
       api_set_error(err, kErrorTypeValidation, "non-float cannot have 'title'");
       goto fail;
     }
-    // title only work with border
-    if (!HAS_KEY_X(config, border) && !fconfig->border) {
-      api_set_error(err, kErrorTypeException, "title requires border to be set");
-      goto fail;
-    }
 
     parse_bordertext(config->title, kBorderTextTitle, fconfig, err);
     if (ERROR_SET(err)) {
@@ -1267,11 +1256,6 @@ static bool parse_win_config(win_T *wp, Dict(win_config) *config, WinConfig *fco
       api_set_error(err, kErrorTypeValidation, "non-float cannot have 'footer'");
       goto fail;
     }
-    // footer only work with border
-    if (!HAS_KEY_X(config, border) && !fconfig->border) {
-      api_set_error(err, kErrorTypeException, "footer requires border to be set");
-      goto fail;
-    }
 
     parse_bordertext(config->footer, kBorderTextFooter, fconfig, err);
     if (ERROR_SET(err)) {
@@ -1289,12 +1273,18 @@ static bool parse_win_config(win_T *wp, Dict(win_config) *config, WinConfig *fco
     }
   }
 
+  Object border_style = OBJECT_INIT;
   if (HAS_KEY_X(config, border)) {
     if (is_split) {
       api_set_error(err, kErrorTypeValidation, "non-float cannot have 'border'");
       goto fail;
     }
-    parse_border_style(config->border, fconfig, err);
+    border_style = config->border;
+  } else if (*p_winborder != NUL && (wp == NULL || !wp->w_floating)) {
+    border_style = CSTR_AS_OBJ(p_winborder);
+  }
+  if (border_style.type != kObjectTypeNil) {
+    parse_border_style(border_style, fconfig, err);
     if (ERROR_SET(err)) {
       goto fail;
     }

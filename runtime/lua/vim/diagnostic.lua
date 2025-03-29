@@ -1456,47 +1456,6 @@ M.handlers.signs = {
         api.nvim_create_namespace(string.format('nvim.%s.diagnostic.signs', ns.name))
     end
 
-    -- Handle legacy diagnostic sign definitions
-    -- These were deprecated in 0.10 and will be removed in 0.12
-    if opts.signs and not opts.signs.text and not opts.signs.numhl then
-      for _, v in ipairs({ 'Error', 'Warn', 'Info', 'Hint' }) do
-        local name = string.format('DiagnosticSign%s', v)
-        local sign = vim.fn.sign_getdefined(name)[1]
-        if sign then
-          local severity = M.severity[v:upper()]
-          vim.deprecate(
-            'Defining diagnostic signs with :sign-define or sign_define()',
-            'vim.diagnostic.config()',
-            '0.12'
-          )
-
-          if not opts.signs.text then
-            opts.signs.text = {}
-          end
-
-          if not opts.signs.numhl then
-            opts.signs.numhl = {}
-          end
-
-          if not opts.signs.linehl then
-            opts.signs.linehl = {}
-          end
-
-          if opts.signs.text[severity] == nil then
-            opts.signs.text[severity] = sign.text or ''
-          end
-
-          if opts.signs.numhl[severity] == nil then
-            opts.signs.numhl[severity] = sign.numhl
-          end
-
-          if opts.signs.linehl[severity] == nil then
-            opts.signs.linehl[severity] = sign.linehl
-          end
-        end
-      end
-    end
-
     local text = {} ---@type table<vim.diagnostic.Severity|string, string>
     for k in pairs(M.severity) do
       if opts.signs.text and opts.signs.text[k] then
@@ -1692,8 +1651,8 @@ M.handlers.virtual_text = {
       diagnostic_cache_extmarks[bufnr][ns.user_data.virt_text_ns] = {}
       if api.nvim_buf_is_valid(bufnr) then
         api.nvim_buf_clear_namespace(bufnr, ns.user_data.virt_text_ns, 0, -1)
+        api.nvim_clear_autocmds({ group = ns.user_data.virt_text_augroup, buffer = bufnr })
       end
-      api.nvim_clear_autocmds({ group = ns.user_data.virt_text_augroup, buffer = bufnr })
     end
   end,
 }
@@ -1757,8 +1716,7 @@ local function render_virtual_lines(namespace, bufnr, diagnostics)
         string.rep(
           ' ',
           -- +1 because indexing starts at 0 in one API but at 1 in the other.
-          -- -1 for non-first lines, since the previous column was already drawn.
-          distance_between_cols(bufnr, diag.lnum, prev_col + 1, diag.col) - 1
+          distance_between_cols(bufnr, diag.lnum, prev_col + 1, diag.col)
         ),
       })
     else
@@ -1851,13 +1809,7 @@ local function render_virtual_lines(namespace, bufnr, diagnostics)
         -- b. Has enough space on the left.
         -- c. Is just one line.
         -- d. Is not an overlap.
-        local msg ---@type string
-        if diagnostic.code then
-          msg = string.format('%s: %s', diagnostic.code, diagnostic.message)
-        else
-          msg = diagnostic.message
-        end
-        for msg_line in msg:gmatch('([^\n]+)') do
+        for msg_line in diagnostic.message:gmatch('([^\n]+)') do
           local vline = {}
           vim.list_extend(vline, left)
           vim.list_extend(vline, center)
@@ -1878,7 +1830,20 @@ local function render_virtual_lines(namespace, bufnr, diagnostics)
       end
     end
 
-    api.nvim_buf_set_extmark(bufnr, namespace, lnum, 0, { virt_lines = virt_lines })
+    api.nvim_buf_set_extmark(bufnr, namespace, lnum, 0, {
+      virt_lines_overflow = 'scroll',
+      virt_lines = virt_lines,
+    })
+  end
+end
+
+--- Default formatter for the virtual_lines handler.
+--- @param diagnostic vim.Diagnostic
+local function format_virtual_lines(diagnostic)
+  if diagnostic.code then
+    return string.format('%s: %s', diagnostic.code, diagnostic.message)
+  else
+    return diagnostic.message
   end
 end
 
@@ -1910,9 +1875,8 @@ M.handlers.virtual_lines = {
 
     api.nvim_clear_autocmds({ group = ns.user_data.virt_lines_augroup, buffer = bufnr })
 
-    if opts.virtual_lines.format then
-      diagnostics = reformat_diagnostics(opts.virtual_lines.format, diagnostics)
-    end
+    diagnostics =
+      reformat_diagnostics(opts.virtual_lines.format or format_virtual_lines, diagnostics)
 
     if opts.virtual_lines.current_line == true then
       -- Create a mapping from line -> diagnostics so that we can quickly get the
@@ -1947,8 +1911,8 @@ M.handlers.virtual_lines = {
       diagnostic_cache_extmarks[bufnr][ns.user_data.virt_lines_ns] = {}
       if api.nvim_buf_is_valid(bufnr) then
         api.nvim_buf_clear_namespace(bufnr, ns.user_data.virt_lines_ns, 0, -1)
+        api.nvim_clear_autocmds({ group = ns.user_data.virt_lines_augroup, buffer = bufnr })
       end
-      api.nvim_clear_autocmds({ group = ns.user_data.virt_lines_augroup, buffer = bufnr })
     end
   end,
 }
@@ -2051,12 +2015,6 @@ function M.is_enabled(filter)
   end
 
   return diagnostic_disabled[bufnr] == nil
-end
-
---- @deprecated use `vim.diagnostic.is_enabled()`
-function M.is_disabled(bufnr, namespace)
-  vim.deprecate('vim.diagnostic.is_disabled()', 'vim.diagnostic.is_enabled()', '0.12')
-  return not M.is_enabled { bufnr = bufnr or 0, ns_id = namespace }
 end
 
 --- Display diagnostics for the given namespace and buffer.
@@ -2436,12 +2394,6 @@ function M.setloclist(opts)
   set_list(true, opts)
 end
 
---- @deprecated use `vim.diagnostic.enable(false, …)`
-function M.disable(bufnr, namespace)
-  vim.deprecate('vim.diagnostic.disable()', 'vim.diagnostic.enable(false, …)', '0.12')
-  M.enable(false, { bufnr = bufnr, ns_id = namespace })
-end
-
 --- Enables or disables diagnostics.
 ---
 --- To "toggle", pass the inverse of `is_enabled()`:
@@ -2453,31 +2405,9 @@ end
 --- @param enable (boolean|nil) true/nil to enable, false to disable
 --- @param filter vim.diagnostic.Filter?
 function M.enable(enable, filter)
-  -- Deprecated signature. Drop this in 0.12
-  local legacy = (enable or filter)
-    and vim.tbl_contains({ 'number', 'nil' }, type(enable))
-    and vim.tbl_contains({ 'number', 'nil' }, type(filter))
-
-  if legacy then
-    vim.deprecate(
-      'vim.diagnostic.enable(buf:number, namespace:number)',
-      'vim.diagnostic.enable(enable:boolean, filter:table)',
-      '0.12'
-    )
-
-    vim.validate('enable', enable, 'number', true) -- Legacy `bufnr` arg.
-    vim.validate('filter', filter, 'number', true) -- Legacy `namespace` arg.
-
-    local ns_id = type(filter) == 'number' and filter or nil
-    filter = {}
-    filter.ns_id = ns_id
-    filter.bufnr = type(enable) == 'number' and enable or nil
-    enable = true
-  else
-    filter = filter or {}
-    vim.validate('enable', enable, 'boolean', true)
-    vim.validate('filter', filter, 'table', true)
-  end
+  filter = filter or {}
+  vim.validate('enable', enable, 'boolean', true)
+  vim.validate('filter', filter, 'table', true)
 
   enable = enable == nil and true or enable
   local bufnr = filter.bufnr

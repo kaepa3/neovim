@@ -2041,11 +2041,11 @@ describe('float window', function()
           [2:----------------------------------------]|*6
           [3:----------------------------------------]|
         ## grid 2
-            neeed some dummy                      |
-            background text                       |
-            to show the effect                    |
-            of color blending                     |
-            of border shadow                      |
+          neeed some dummy                        |
+          background text                         |
+          to show the effect                      |
+          of color blending                       |
+          of border shadow                        |
           ^                                        |
         ## grid 3
                                                   |
@@ -2065,11 +2065,11 @@ describe('float window', function()
         }}
       else
         screen:expect{grid=[[
-            neeed some dummy                      |
-            background text                       |
-            to {1: halloj! }{23:e}ffect                    |
-            of {1: BORDAA  }{24:n}ding                     |
-            of {23:b}{24:order sha}dow                      |
+          neeed some dummy                        |
+          background text                         |
+          to sh{1: halloj! }{23:f}ect                      |
+          of co{1: BORDAA  }{24:i}ng                       |
+          of bo{23:r}{24:der shado}w                        |
           ^                                        |
                                                   |
         ]]}
@@ -2078,10 +2078,6 @@ describe('float window', function()
 
     it('validates title title_pos', function()
       local buf = api.nvim_create_buf(false,false)
-      eq("title requires border to be set",
-         pcall_err(api.nvim_open_win,buf, false, {
-          relative='editor', width=9, height=2, row=2, col=5, title='Title',
-         }))
       eq("title_pos requires title to be set",
          pcall_err(api.nvim_open_win,buf, false, {
           relative='editor', width=9, height=2, row=2, col=5,
@@ -2112,10 +2108,6 @@ describe('float window', function()
 
     it('validates footer footer_pos', function()
       local buf = api.nvim_create_buf(false,false)
-      eq("footer requires border to be set",
-         pcall_err(api.nvim_open_win,buf, false, {
-          relative='editor', width=9, height=2, row=2, col=5, footer='Footer',
-         }))
       eq("footer_pos requires footer to be set",
          pcall_err(api.nvim_open_win,buf, false, {
           relative='editor', width=9, height=2, row=2, col=5,
@@ -2188,6 +2180,49 @@ describe('float window', function()
 
       api.nvim_win_close(win, false)
       assert_alive()
+    end)
+
+    it('no border with title and footer', function()
+      local buf = api.nvim_create_buf(false, false)
+      api.nvim_buf_set_lines(buf, 0, -1, true, { 'Hello' })
+      api.nvim_open_win(buf, false, {
+        relative='editor', width=9, height=2, row=2, col=5,
+        title = 'Title', footer = 'Footer'
+      })
+
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:----------------------------------------]|*6
+            [3:----------------------------------------]|
+          ## grid 2
+            ^                                        |
+            {0:~                                       }|*5
+          ## grid 3
+                                                    |
+          ## grid 4
+            {1:Hello    }|
+            {2:~        }|
+          ]],
+          float_pos = {
+            [4] = { 1001, "NW", 1, 2, 5, true, 50 },
+          },
+          win_viewport = {
+            [2] = { win = 1000, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0 },
+            [4] = { win = 1001, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0 },
+          },
+        })
+      else
+        screen:expect([[
+          ^                                        |
+          {0:~                                       }|
+          {0:~    }{1:Hello    }{0:                          }|
+          {0:~    }{2:~        }{0:                          }|
+          {0:~                                       }|*2
+                                                  |
+        ]])
+      end
     end)
 
     it('border with title', function()
@@ -9844,6 +9879,287 @@ describe('float window', function()
           ]]
         })
       end
+    end)
+
+    it("1-line float does not inherit 'winbar' #19464", function()
+      local res = exec_lua([[
+        local win = vim.api.nvim_get_current_win()
+        vim.wo[win].winbar = '%f'
+        local grp = vim.api.nvim_create_augroup('asdf', { clear = true })
+        vim.api.nvim_create_autocmd('WinEnter', {
+          group = grp,
+          pattern = '*',
+          desc = 'winbar crash?',
+          callback = function()
+            vim.wo[win].winbar = '%f'
+          end,
+        })
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        local float_winid = vim.api.nvim_open_win(buf, true, {
+          relative = 'win',
+          win = win,
+          border = 'single',
+          col = 1,
+          row = 1,
+          height = 1,
+          width = 40,
+        })
+        return {vim.wo[win].winbar, vim.wo[float_winid].winbar}
+      ]])
+      eq({"%f", ""}, res)
+    end)
+
+    it('winborder option', function()
+      local buf = api.nvim_create_buf(false,false)
+      local config = {relative='editor', width=4, height=4, row=2, col=2}
+      command('set winborder=single')
+      api.nvim_open_win(buf, true, config)
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:----------------------------------------]|*6
+            [3:----------------------------------------]|
+          ## grid 2
+                                                    |
+            {0:~                                       }|*5
+          ## grid 3
+                                                    |
+          ## grid 4
+            {5:┌────┐}|
+            {5:│}{1:^    }{5:│}|
+            {5:│}{2:~   }{5:│}|*3
+            {5:└────┘}|
+          ]], float_pos={
+          [4] = {1001, "NW", 1, 2, 2, true, 50};
+        }, win_viewport={
+          [2] = {win = 1000, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [4] = {win = 1001, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+        }, win_viewport_margins={
+          [2] = {
+            bottom = 0,
+            left = 0,
+            right = 0,
+            top = 0,
+            win = 1000
+          },
+          [4] = {
+            bottom = 1,
+            left = 1,
+            right = 1,
+            top = 1,
+            win = 1001
+          }
+        }
+        })
+      else
+        screen:expect({
+          grid = [[
+              {5:┌────┐}                                |
+            {0:~ }{5:│}{1:^    }{5:│}{0:                                }|
+            {0:~ }{5:│}{2:~   }{5:│}{0:                                }|*3
+            {0:~ }{5:└────┘}{0:                                }|
+                                                    |
+          ]]
+        })
+      end
+      command('fclose')
+
+      command('set winborder=double')
+      api.nvim_open_win(buf, true, config)
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:----------------------------------------]|*6
+            [3:----------------------------------------]|
+          ## grid 2
+                                                    |
+            {0:~                                       }|*5
+          ## grid 3
+                                                    |
+          ## grid 5
+            {5:╔════╗}|
+            {5:║}{1:^    }{5:║}|
+            {5:║}{2:~   }{5:║}|*3
+            {5:╚════╝}|
+          ]], float_pos={
+          [5] = {1002, "NW", 1, 2, 2, true, 50};
+        }, win_viewport={
+          [2] = {win = 1000, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [5] = {win = 1002, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+        }, win_viewport_margins={
+          [2] = {
+            bottom = 0,
+            left = 0,
+            right = 0,
+            top = 0,
+            win = 1000
+          },
+          [5] = {
+            bottom = 1,
+            left = 1,
+            right = 1,
+            top = 1,
+            win = 1002
+          }
+        }
+        })
+      else
+        screen:expect({
+          grid = [[
+              {5:╔════╗}                                |
+            {0:~ }{5:║}{1:^    }{5:║}{0:                                }|
+            {0:~ }{5:║}{2:~   }{5:║}{0:                                }|*3
+            {0:~ }{5:╚════╝}{0:                                }|
+                                                    |
+          ]]
+        })
+      end
+      command('fclose!')
+
+      command('set winborder=none')
+      api.nvim_buf_set_lines(buf, 0, -1, false, {'none border'})
+      api.nvim_open_win(buf, true, config)
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:----------------------------------------]|*6
+            [3:----------------------------------------]|
+          ## grid 2
+                                                    |
+            {0:~                                       }|*5
+          ## grid 3
+                                                    |
+          ## grid 6
+            {1:^none}|
+            {1: bor}|
+            {1:der }|
+            {2:~   }|
+          ]],
+          win_pos = {
+          [2] = {
+            height = 6,
+            startcol = 0,
+            startrow = 0,
+            width = 40,
+            win = 1000
+          }
+        },
+          float_pos = {
+          [6] = {1003, "NW", 1, 2, 2, true, 50};
+        },
+          win_viewport = {
+          [2] = {win = 1000, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [6] = {win = 1003, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+        },
+          win_viewport_margins = {
+          [2] = {
+            bottom = 0,
+            left = 0,
+            right = 0,
+            top = 0,
+            win = 1000
+          },
+          [6] = {
+            bottom = 0,
+            left = 0,
+            right = 0,
+            top = 0,
+            win = 1003
+          }
+        },
+        })
+      else
+        screen:expect([[
+                                                  |
+          {0:~                                       }|
+          {0:~ }{1:^none}{0:                                  }|
+          {0:~ }{1: bor}{0:                                  }|
+          {0:~ }{1:der }{0:                                  }|
+          {0:~ }{2:~   }{0:                                  }|
+                                                  |
+        ]])
+      end
+      command('fclose!')
+
+      -- respect config.border
+      command('set winborder=rounded')
+      config.border = 'single'
+      local winid = api.nvim_open_win(buf, false, config)
+      if multigrid then
+        screen:expect({
+          grid = [[
+          ## grid 1
+            [2:----------------------------------------]|*6
+            [3:----------------------------------------]|
+          ## grid 2
+            ^                                        |
+            {0:~                                       }|*5
+          ## grid 3
+                                                    |
+          ## grid 7
+            {5:┌────┐}|
+            {5:│}{1:none}{5:│}|
+            {5:│}{1: bor}{5:│}|
+            {5:│}{1:der }{5:│}|
+            {5:│}{2:~   }{5:│}|
+            {5:└────┘}|
+          ]],
+          win_pos = {
+          [2] = {
+            height = 6,
+            startcol = 0,
+            startrow = 0,
+            width = 40,
+            win = 1000
+          }
+        },
+          float_pos = {
+          [7] = {1004, "NW", 1, 2, 2, true, 50};
+        },
+          win_viewport = {
+          [2] = {win = 1000, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+          [7] = {win = 1004, topline = 0, botline = 2, curline = 0, curcol = 0, linecount = 1, sum_scroll_delta = 0};
+        },
+          win_viewport_margins = {
+          [2] = {
+            bottom = 0,
+            left = 0,
+            right = 0,
+            top = 0,
+            win = 1000
+          },
+          [7] = {
+            bottom = 1,
+            left = 1,
+            right = 1,
+            top = 1,
+            win = 1004
+          }
+        },
+        })
+      else
+        screen:expect([[
+          ^  {5:┌────┐}                                |
+          {0:~ }{5:│}{1:none}{5:│}{0:                                }|
+          {0:~ }{5:│}{1: bor}{5:│}{0:                                }|
+          {0:~ }{5:│}{1:der }{5:│}{0:                                }|
+          {0:~ }{5:│}{2:~   }{5:│}{0:                                }|
+          {0:~ }{5:└────┘}{0:                                }|
+                                                  |
+        ]])
+      end
+
+      -- don't use winborder when reconfig a floating window
+      config.border = nil
+      api.nvim_win_set_config(winid, config)
+      screen:expect_unchanged()
+      command('fclose!')
+      -- it is currently not supported.
+      eq('Vim(set):E474: Invalid argument: winborder=custom', pcall_err(command, 'set winborder=custom'))
     end)
   end
 

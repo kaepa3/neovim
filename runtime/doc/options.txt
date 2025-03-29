@@ -1517,21 +1517,59 @@ A jump table for the options with a short description can be found at |Q_op|.
 	This option cannot be set from a |modeline| or in the |sandbox|, for
 	security reasons.
 
+					*'completefuzzycollect'* *'cfc'*
+'completefuzzycollect' 'cfc'	string	(default "")
+			global
+	A comma-separated list of strings to enable fuzzy collection for
+	specific |ins-completion| modes, affecting how matches are gathered
+	during completion.  For specified modes, fuzzy matching is used to
+	find completion candidates instead of the standard prefix-based
+	matching.  This option can contain the following values:
+
+	keyword		keywords in the current file	|i_CTRL-X_CTRL-N|
+			keywords with flags ".", "w",	|i_CTRL-N| |i_CTRL-P|
+			"b", "u", "U" and "k{dict}" in 'complete'
+			keywords in 'dictionary'	|i_CTRL-X_CTRL-K|
+
+	files		file names			|i_CTRL-X_CTRL-F|
+
+	whole_line	whole lines			|i_CTRL-X_CTRL-L|
+
+	When using the 'completeopt' "longest" option value, fuzzy collection
+	can identify the longest common string among the best fuzzy matches
+	and insert it automatically.
+
 					*'completeitemalign'* *'cia'*
 'completeitemalign' 'cia'	string	(default "abbr,kind,menu")
 			global
-	A comma-separated list of |complete-items| that controls the alignment
-	and display order of items in the popup menu during Insert mode
-	completion. The supported values are abbr, kind, and menu. These
-	options allow to customize how the completion items are shown in the
+	A comma-separated list of strings that controls the alignment and
+	display order of items in the popup menu during Insert mode
+	completion.  The supported values are "abbr", "kind", and "menu".
+	These values allow customizing how |complete-items| are shown in the
 	popup menu.  Note: must always contain those three values in any
 	order.
 
 						*'completeopt'* *'cot'*
-'completeopt' 'cot'	string	(default "menu,preview")
+'completeopt' 'cot'	string	(default "menu,popup")
 			global or local to buffer |global-local|
 	A comma-separated list of options for Insert mode completion
 	|ins-completion|.  The supported values are:
+
+	   fuzzy    Enable |fuzzy-matching| for completion candidates. This
+		    allows for more flexible and intuitive matching, where
+		    characters can be skipped and matches can be found even
+		    if the exact sequence is not typed.  Note: This option
+		    does not affect the collection of candidate list, it only
+		    controls how completion candidates are reduced from the
+		    list of alternatives.  If you want to use |fuzzy-matching|
+		    to gather more alternatives for your candidate list,
+		    see |'completefuzzycollect'|.
+
+	   longest  Only insert the longest common text of the matches.  If
+		    the menu is displayed you can use CTRL-L to add more
+		    characters.  Whether case is ignored depends on the kind
+		    of completion.  For buffer text the 'ignorecase' option is
+		    used.
 
 	   menu	    Use a popup menu to show the possible completions.  The
 		    menu is only shown when there is more than one match and
@@ -1541,45 +1579,31 @@ A jump table for the options with a short description can be found at |Q_op|.
 		    Useful when there is additional information about the
 		    match, e.g., what file it comes from.
 
-	   longest  Only insert the longest common text of the matches.  If
-		    the menu is displayed you can use CTRL-L to add more
-		    characters.  Whether case is ignored depends on the kind
-		    of completion.  For buffer text the 'ignorecase' option is
-		    used.
+	   noinsert Do not insert any text for a match until the user selects
+		    a match from the menu.  Only works in combination with
+		    "menu" or "menuone". No effect if "longest" is present.
 
-	   preview  Show extra information about the currently selected
-		    completion in the preview window.  Only works in
-		    combination with "menu" or "menuone".
+	   noselect Same as "noinsert", except that no menu item is
+		    pre-selected.  If both "noinsert" and "noselect" are
+		    present, "noselect" has precedence.
+
+	   nosort   Disable sorting of completion candidates based on fuzzy
+		    scores when "fuzzy" is enabled.  Candidates will appear
+		    in their original order.
 
 	   popup    Show extra information about the currently selected
 		    completion in a popup window.  Only works in combination
 		    with "menu" or "menuone".  Overrides "preview".
 
-	   noinsert Do not insert any text for a match until the user selects
-		    a match from the menu. Only works in combination with
-		    "menu" or "menuone". No effect if "longest" is present.
-
-	   noselect Same as "noinsert", except that no menu item is
-		    pre-selected. If both "noinsert" and "noselect" are
-		    present, "noselect" has precedence.
-
-	   fuzzy    Enable |fuzzy-matching| for completion candidates. This
-		    allows for more flexible and intuitive matching, where
-		    characters can be skipped and matches can be found even
-		    if the exact sequence is not typed.  Only makes a
-		    difference how completion candidates are reduced from the
-		    list of alternatives, but not how the candidates are
-		    collected (using different completion types).
-
-	   nosort   Disable sorting of completion candidates based on fuzzy
-		    scores when "fuzzy" is enabled. Candidates will appear
-		    in their original order.
-
 	   preinsert
 		    Preinsert the portion of the first candidate word that is
 		    not part of the current completion leader and using the
-		    |hl-ComplMatchIns| highlight group. Does not work when
-		    "fuzzy" is also included.
+		    |hl-ComplMatchIns| highlight group.  In order for it to
+		    work, "fuzzy" must not be set and "menuone" must be set.
+
+	   preview  Show extra information about the currently selected
+		    completion in the preview window.  Only works in
+		    combination with "menu" or "menuone".
 
 						*'completeslash'* *'csl'*
 'completeslash' 'csl'	string	(default "")
@@ -2032,7 +2056,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 	security reasons.
 
 						*'diffopt'* *'dip'*
-'diffopt' 'dip'		string	(default "internal,filler,closeoff,linematch:40")
+'diffopt' 'dip'		string	(default "internal,filler,closeoff,inline:simple,linematch:40")
 			global
 	Option settings for diff mode.  It can consist of the following items.
 	All are optional.  Items must be separated by a comma.
@@ -2094,6 +2118,21 @@ A jump table for the options with a short description can be found at |Q_op|.
 		indent-heuristic
 				Use the indent heuristic for the internal
 				diff library.
+
+		inline:{text}	Highlight inline differences within a change.
+				See |view-diffs|.  Supported values are:
+
+				none    Do not perform inline highlighting.
+				simple  Highlight from first different
+					character to the last one in each
+					line.  This is the default if no
+					`inline:` value is set.
+				char    Use internal diff to perform a
+					character-wise diff and highlight the
+					difference.
+				word    Use internal diff to perform a
+					|word|-wise diff and highlight the
+					difference.
 
 		internal	Use the internal diff library.  This is
 				ignored when 'diffexpr' is set.  *E960*
@@ -2334,6 +2373,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	    set ei=WinEnter,WinLeave
 <
 
+					*'eventignorewin'* *'eiw'*
+'eventignorewin' 'eiw'	string	(default "")
+			local to window
+	Similar to 'eventignore' but applies to a particular window and its
+	buffers, for which window and buffer related autocommands can be
+	ignored indefinitely without affecting the global 'eventignore'.
+
 				*'expandtab'* *'et'* *'noexpandtab'* *'noet'*
 'expandtab' 'et'	boolean	(default off)
 			local to buffer
@@ -2342,12 +2388,13 @@ A jump table for the options with a short description can be found at |Q_op|.
 	when 'autoindent' is on.  To insert a real tab when 'expandtab' is
 	on, use CTRL-V<Tab>.  See also |:retab| and |ins-expandtab|.
 
-					*'exrc'* *'ex'* *'noexrc'* *'noex'*
+	*'exrc'* *'ex'* *'noexrc'* *'noex'* *project-config* *workspace-config*
 'exrc' 'ex'		boolean	(default off)
 			global
-	Automatically execute .nvim.lua, .nvimrc, and .exrc files in the
-	current directory, if the file is in the |trust| list. Use |:trust| to
-	manage trusted files. See also |vim.secure.read()|.
+	Enables project-local configuration. Nvim will execute any .nvim.lua,
+	.nvimrc, or .exrc file found in the |current-directory|, if the file is
+	in the |trust| list. Use |:trust| to manage trusted files. See also
+	|vim.secure.read()|.
 
 	Compare 'exrc' to |editorconfig|:
 	- 'exrc' can execute any code; editorconfig only specifies settings.
@@ -4288,12 +4335,12 @@ A jump table for the options with a short description can be found at |Q_op|.
 	    "g<LeftMouse>"  is "<C-LeftMouse>	(jump to tag under mouse click)
 	    "g<RightMouse>" is "<C-RightMouse>	("CTRL-T")
 
-	*'mousemoveevent'* *'mousemev'* *'nomousemoveevent'* *'nomousemev'*
+*'mousemoveevent'* *'mousemev'* *'nomousemoveevent'* *'nomousemev'* *mouse-hover*
 'mousemoveevent' 'mousemev'	boolean	(default off)
 			global
 	When on, mouse move events are delivered to the input queue and are
-	available for mapping. The default, off, avoids the mouse movement
-	overhead except when needed.
+	available for mapping |<MouseMove>|. The default, off, avoids the mouse
+	movement overhead except when needed.
 	Warning: Setting this option can make pending mappings to be aborted
 	when the mouse is moved.
 
@@ -4498,7 +4545,7 @@ A jump table for the options with a short description can be found at |Q_op|.
 		set path=,,
 <	- A directory name may end in a ':' or '/'.
 	- Environment variables are expanded |:set_env|.
-	- When using |netrw.vim| URLs can be used.  For example, adding
+	- When using |netrw| URLs can be used.  For example, adding
 	  "https://www.vim.org" will make ":find index.html" work.
 	- Search upwards and downwards in a directory tree using "*", "**" and
 	  ";".  See |file-searching| for info and syntax.
@@ -4575,6 +4622,14 @@ A jump table for the options with a short description can be found at |Q_op|.
 			global
 	Maximum number of items to show in the popup menu
 	(|ins-completion-menu|). Zero means "use available screen space".
+
+						*'pummaxwidth'* *'pmw'*
+'pummaxwidth' 'pmw'	number	(default 0)
+			global
+	Maximum width for the popup menu (|ins-completion-menu|).  When zero,
+	there is no maximum width limit, otherwise the popup menu will never be
+	wider than this value.  Truncated text will be indicated by "..." at the
+	end.  Takes precedence over 'pumwidth'.
 
 						*'pumwidth'* *'pw'*
 'pumwidth' 'pw'		number	(default 15)
@@ -7043,7 +7098,10 @@ A jump table for the options with a short description can be found at |Q_op|.
 	"lastused"	When completing buffer names and more than one buffer
 			matches, sort buffers by time last used (other than
 			the current buffer).
-	When there is only a single match, it is fully completed in all cases.
+	"noselect"	Do not pre-select first menu item and start 'wildmenu'
+			if it is enabled.
+	When there is only a single match, it is fully completed in all cases
+	except when "noselect" is present.
 
 	Examples of useful colon-separated values:
 	"longest:full"	Like "longest", but also start 'wildmenu' if it is
@@ -7066,7 +7124,11 @@ A jump table for the options with a short description can be found at |Q_op|.
 		set wildmode=list,full
 <	List all matches without completing, then each full match >vim
 		set wildmode=longest,list
-<	Complete longest common string, then list alternatives.
+<	Complete longest common string, then list alternatives >vim
+		set wildmode=noselect:full
+<	Display 'wildmenu' without completing, then each full match >vim
+		set wildmode=noselect:lastused,full
+<	Same as above, but sort buffers by time last used.
 	More info here: |cmdline-completion|.
 
 						*'wildoptions'* *'wop'*
@@ -7134,6 +7196,18 @@ A jump table for the options with a short description can be found at |Q_op|.
 	transparent background. Values between 0-30 are typically most useful.
 
 	UI-dependent. Works best with RGB colors. 'termguicolors'
+
+							*'winborder'*
+'winborder'		string	(default "")
+			global
+	Defines the default border style of floating windows. The default value
+	is empty, which is equivalent to "none". Valid values include:
+	- "none": No border.
+	- "single": A single line box.
+	- "double": A double line box.
+	- "rounded": Like "single", but with rounded corners ("╭" etc.).
+	- "solid": Adds padding by a single whitespace cell.
+	- "shadow": A drop shadow effect by blending with the background.
 
 							*'window'* *'wi'*
 'window' 'wi'		number	(default screen height - 1)

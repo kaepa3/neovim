@@ -14,18 +14,20 @@ error('Cannot require a meta file')
 ---@field _set_logger fun(self: TSParser, lex: boolean, parse: boolean, cb: TSLoggerCallback)
 ---@field _logger fun(self: TSParser): TSLoggerCallback
 
----@class TSQuery: userdata
----@field inspect fun(self: TSQuery): TSQueryInfo
-
 ---@class (exact) TSQueryInfo
 ---@field captures string[]
 ---@field patterns table<integer, (integer|string)[][]>
 ---
 ---@class TSLangInfo
+---@field abi_version integer
+---@field major_version? integer
+---@field minor_version? integer
+---@field patch_version? integer
+---@field state_count integer
 ---@field fields string[]
 ---@field symbols table<string,boolean>
+---@field supertypes table<string,string[]>
 ---@field _wasm boolean
----@field _abi_version integer
 
 --- @param lang string
 --- @return TSLangInfo

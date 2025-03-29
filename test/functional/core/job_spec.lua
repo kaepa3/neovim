@@ -21,7 +21,6 @@ local rmdir = n.rmdir
 local assert_alive = n.assert_alive
 local command = n.command
 local fn = n.fn
-local os_kill = n.os_kill
 local retry = t.retry
 local api = n.api
 local NIL = vim.NIL
@@ -444,27 +443,23 @@ describe('jobs', function()
   end)
 
   it('disposed on Nvim exit', function()
-    -- use sleep, which doesn't die on stdin close
-    command(
-      "let g:j =  jobstart(has('win32') ? ['ping', '-n', '1001', '127.0.0.1'] : ['sleep', '1000'], g:job_opts)"
-    )
-    local pid = eval('jobpid(g:j)')
-    neq(NIL, api.nvim_get_proc(pid))
+    -- Start a child process which doesn't die on stdin close.
+    local j = n.fn.jobstart({ n.nvim_prog, '--clean', '--headless' })
+    local pid = n.fn.jobpid(j)
+    eq('number', type(api.nvim_get_proc(pid).pid))
     clear()
     eq(NIL, api.nvim_get_proc(pid))
   end)
 
-  it('can survive the exit of nvim with "detach"', function()
-    command('let g:job_opts.detach = 1')
-    command(
-      "let g:j = jobstart(has('win32') ? ['ping', '-n', '1001', '127.0.0.1'] : ['sleep', '1000'], g:job_opts)"
-    )
-    local pid = eval('jobpid(g:j)')
-    neq(NIL, api.nvim_get_proc(pid))
+  it('can survive Nvim exit with "detach"', function()
+    local j = n.fn.jobstart({ n.nvim_prog, '--clean', '--headless' }, { detach = true })
+    local pid = n.fn.jobpid(j)
+    eq('number', type(api.nvim_get_proc(pid).pid))
     clear()
-    neq(NIL, api.nvim_get_proc(pid))
-    -- clean up after ourselves
-    eq(0, os_kill(pid))
+    -- Still alive.
+    eq('number', type(api.nvim_get_proc(pid).pid))
+    -- Clean up after ourselves.
+    eq(0, vim.uv.kill(pid, 'sigkill'))
   end)
 
   it('can pass user data to the callback', function()
@@ -718,7 +713,7 @@ describe('jobs', function()
   end)
 
   it('jobstart() environment: $NVIM, $NVIM_LISTEN_ADDRESS #11009', function()
-    local function get_env_in_child_job(envname, env)
+    local function get_child_env(envname, env)
       return exec_lua(
         [[
         local envname, env = ...
@@ -746,17 +741,17 @@ describe('jobs', function()
     -- $NVIM is _not_ defined in the top-level Nvim process.
     eq('', eval('$NVIM'))
     -- jobstart() shares its v:servername with the child via $NVIM.
-    eq('NVIM=' .. addr, get_env_in_child_job('NVIM'))
+    eq('NVIM=' .. addr, get_child_env('NVIM'))
     -- $NVIM_LISTEN_ADDRESS is unset by server_init in the child.
-    eq('NVIM_LISTEN_ADDRESS=v:null', get_env_in_child_job('NVIM_LISTEN_ADDRESS'))
+    eq('NVIM_LISTEN_ADDRESS=v:null', get_child_env('NVIM_LISTEN_ADDRESS'))
     eq(
       'NVIM_LISTEN_ADDRESS=v:null',
-      get_env_in_child_job('NVIM_LISTEN_ADDRESS', { NVIM_LISTEN_ADDRESS = 'Xtest_jobstart_env' })
+      get_child_env('NVIM_LISTEN_ADDRESS', { NVIM_LISTEN_ADDRESS = 'Xtest_jobstart_env' })
     )
     -- User can explicitly set $NVIM_LOG_FILE, $VIM, $VIMRUNTIME.
     eq(
       'NVIM_LOG_FILE=Xtest_jobstart_env',
-      get_env_in_child_job('NVIM_LOG_FILE', { NVIM_LOG_FILE = 'Xtest_jobstart_env' })
+      get_child_env('NVIM_LOG_FILE', { NVIM_LOG_FILE = 'Xtest_jobstart_env' })
     )
     os.remove('Xtest_jobstart_env')
   end)
@@ -949,7 +944,13 @@ describe('jobs', function()
           echon "\nccc"
         endfunc
       ]])
-      feed_command('call PrintAndWait()')
+      feed(':call PrintAndWait()')
+      screen:expect([[
+                                                          |
+        {1:~                                                 }|*4
+        :call PrintAndWait()^                              |
+      ]])
+      feed('<CR>')
       screen:expect {
         grid = [[
                                                           |

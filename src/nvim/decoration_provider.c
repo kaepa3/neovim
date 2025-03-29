@@ -23,20 +23,18 @@
 # include "decoration_provider.c.generated.h"
 #endif
 
-enum { DP_MAX_ERROR = 3, };
-
 static kvec_t(DecorProvider) decor_providers = KV_INITIAL_VALUE;
 
 #define DECORATION_PROVIDER_INIT(ns_id) (DecorProvider) \
   { ns_id, kDecorProviderDisabled, LUA_NOREF, LUA_NOREF, \
     LUA_NOREF, LUA_NOREF, LUA_NOREF, \
-    LUA_NOREF, -1, false, false, 0 }
+    LUA_NOREF, LUA_NOREF, -1, false, false, 0 }
 
 static void decor_provider_error(DecorProvider *provider, const char *name, const char *msg)
 {
-  const char *ns_name = describe_ns(provider->ns_id, "(UNKNOWN PLUGIN)");
-  ILOG("error in provider %s.%s: %s", ns_name, name, msg);
-  msg_schedule_semsg_multiline("Error in decoration provider %s.%s:\n%s", ns_name, name, msg);
+  const char *ns = describe_ns(provider->ns_id, "(UNKNOWN PLUGIN)");
+  ELOG("Error in decoration provider \"%s\" (ns=%s):\n%s", name, ns, msg);
+  msg_schedule_semsg_multiline("Error in decoration provider \"%s\" (ns=%s):\n%s", name, ns, msg);
 }
 
 // Note we pass in a provider index as this function may cause decor_providers providers to be
@@ -47,9 +45,7 @@ static bool decor_provider_invoke(int provider_idx, const char *name, LuaRef ref
   Error err = ERROR_INIT;
 
   textlock++;
-  provider_active = true;
   Object ret = nlua_call_ref(ref, name, args, kRetNilBool, NULL, &err);
-  provider_active = false;
   textlock--;
 
   // We get the provider here via an index in case the above call to nlua_call_ref causes
@@ -61,11 +57,11 @@ static bool decor_provider_invoke(int provider_idx, const char *name, LuaRef ref
     return true;
   }
 
-  if (ERROR_SET(&err) && provider->error_count < DP_MAX_ERROR) {
+  if (ERROR_SET(&err) && provider->error_count < CB_MAX_ERROR) {
     decor_provider_error(provider, name, err.msg);
     provider->error_count++;
 
-    if (provider->error_count >= DP_MAX_ERROR) {
+    if (provider->error_count >= CB_MAX_ERROR) {
       provider->state = kDecorProviderDisabled;
     }
   }
@@ -90,6 +86,23 @@ void decor_providers_invoke_spell(win_T *wp, int start_row, int start_col, int e
       decor_provider_invoke((int)i, "spell", p->spell_nav, args, true);
     }
   }
+}
+
+/// @return whether a provider placed any marks in the callback.
+bool decor_providers_invoke_conceal_line(win_T *wp, int row)
+{
+  size_t keys = wp->w_buffer->b_marktree->n_keys;
+  for (size_t i = 0; i < kv_size(decor_providers); i++) {
+    DecorProvider *p = &kv_A(decor_providers, i);
+    if (p->state != kDecorProviderDisabled && p->conceal_line != LUA_NOREF) {
+      MAXSIZE_TEMP_ARRAY(args, 4);
+      ADD_C(args, INTEGER_OBJ(wp->handle));
+      ADD_C(args, INTEGER_OBJ(wp->w_buffer->handle));
+      ADD_C(args, INTEGER_OBJ(row));
+      decor_provider_invoke((int)i, "conceal_line", p->conceal_line, args, true);
+    }
+  }
+  return wp->w_buffer->b_marktree->n_keys > keys;
 }
 
 /// For each provider invoke the 'start' callback
@@ -262,6 +275,7 @@ void decor_provider_clear(DecorProvider *p)
   NLUA_CLEAR_REF(p->redraw_line);
   NLUA_CLEAR_REF(p->redraw_end);
   NLUA_CLEAR_REF(p->spell_nav);
+  NLUA_CLEAR_REF(p->conceal_line);
   p->state = kDecorProviderDisabled;
 }
 

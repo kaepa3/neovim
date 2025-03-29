@@ -88,6 +88,7 @@ func s:GetFilenameChecks() abort
     \ 'abap': ['file.abap'],
     \ 'abc': ['file.abc'],
     \ 'abel': ['file.abl'],
+    \ 'abnf': ['file.abnf'],
     \ 'acedb': ['file.wrm'],
     \ 'ada': ['file.adb', 'file.ads', 'file.ada', 'file.gpr'],
     \ 'ahdl': ['file.tdf'],
@@ -305,7 +306,7 @@ func s:GetFilenameChecks() abort
     \ 'gitattributes': ['file.git/info/attributes', '.gitattributes', '/.config/git/attributes', '/etc/gitattributes', '/usr/local/etc/gitattributes', 'some.git/info/attributes'] + s:WhenConfigHome('$XDG_CONFIG_HOME/git/attributes'),
     \ 'gitcommit': ['COMMIT_EDITMSG', 'MERGE_MSG', 'TAG_EDITMSG', 'NOTES_EDITMSG', 'EDIT_DESCRIPTION'],
     \ 'gitconfig': ['file.git/config', 'file.git/config.worktree', 'file.git/worktrees/x/config.worktree', '.gitconfig', '.gitmodules', 'file.git/modules//config', '/.config/git/config', '/etc/gitconfig', '/usr/local/etc/gitconfig', '/etc/gitconfig.d/file', 'any/etc/gitconfig.d/file', '/.gitconfig.d/file', 'any/.config/git/config', 'any/.gitconfig.d/file', 'some.git/config', 'some.git/modules/any/config'] + s:WhenConfigHome('$XDG_CONFIG_HOME/git/config'),
-    \ 'gitignore': ['file.git/info/exclude', '.gitignore', '/.config/git/ignore', 'some.git/info/exclude'] + s:WhenConfigHome('$XDG_CONFIG_HOME/git/ignore') + ['.prettierignore', '.fdignore', '/.config/fd/ignore', '.ignore', '.rgignore', '.dockerignore', '.npmignore', '.vscodeignore'],
+    \ 'gitignore': ['file.git/info/exclude', '.gitignore', '/.config/git/ignore', 'some.git/info/exclude'] + s:WhenConfigHome('$XDG_CONFIG_HOME/git/ignore') + ['.prettierignore', '.fdignore', '/.config/fd/ignore', '.ignore', '.rgignore', '.dockerignore', '.containerignore', '.npmignore', '.vscodeignore'],
     \ 'gitolite': ['gitolite.conf', '/gitolite-admin/conf/file', 'any/gitolite-admin/conf/file'],
     \ 'gitrebase': ['git-rebase-todo'],
     \ 'gitsendemail': ['.gitsendemail.msg.xxxxxx'],
@@ -446,6 +447,9 @@ func s:GetFilenameChecks() abort
     \ 'luau': ['file.luau'],
     \ 'lynx': ['lynx.cfg'],
     \ 'lyrics': ['file.lrc'],
+    \ 'm17ndb': ['any/m17n/file.ali', 'any/m17n/file.cs', 'any/m17n/file.dir', 'any/m17n/file.flt', 'any/m17n/file.fst', 'any/m17n/file.lnm', 'any/m17n/file.mic', 'any/m17n/file.mim', 'any/m17n/file.tbl',
+    \            'any/.m17n.d/file.ali', 'any/.m17n.d/file.cs', 'any/.m17n.d/file.dir', 'any/.m17n.d/file.flt', 'any/.m17n.d/file.fst', 'any/.m17n.d/file.lnm', 'any/.m17n.d/file.mic', 'any/.m17n.d/file.mim', 'any/.m17n.d/file.tbl',
+    \            'any/m17n-db/file.ali', 'any/m17n-db/file.cs', 'any/m17n-db/file.dir', 'any/m17n-db/FLT/file.flt', 'any/m17n-db/file.fst', 'any/m17n-db/LANGDATA/file.lnm', 'any/m17n-db/file.mic', 'any/m17n-db/MIM/file.mim', 'any/m17n-db/file.tbl'],
     \ 'm3build': ['m3makefile', 'm3overrides'],
     \ 'm3quake': ['file.quake', 'cm3.cfg'],
     \ 'm4': ['file.at', '.m4_history'],
@@ -672,7 +676,7 @@ func s:GetFilenameChecks() abort
     \ 'sass': ['file.sass'],
     \ 'sbt': ['file.sbt'],
     \ 'scala': ['file.scala', 'file.mill'],
-    \ 'scheme': ['file.scm', 'file.ss', 'file.sld', 'file.stsg', 'any/local/share/supertux2/config', '.lips_repl_history'],
+    \ 'scheme': ['file.scm', 'file.ss', 'file.sld', 'file.stsg', 'any/local/share/supertux2/config', '.lips_repl_history', '.guile'],
     \ 'scilab': ['file.sci', 'file.sce'],
     \ 'screen': ['.screenrc', 'screenrc'],
     \ 'scss': ['file.scss'],
@@ -715,6 +719,8 @@ func s:GetFilenameChecks() abort
     \ 'snobol4': ['file.sno', 'file.spt'],
     \ 'solidity': ['file.sol'],
     \ 'solution': ['file.sln'],
+    \ 'spajson': ['any/pipewire/file.conf', 'any/pipewire/file.conf.d/other.conf',
+    \             'any/wireplumber/file.conf', 'any/wireplumber/file.conf.d/other.conf'],
     \ 'sparql': ['file.rq', 'file.sparql'],
     \ 'spec': ['file.spec'],
     \ 'spice': ['file.sp', 'file.spice'],
@@ -797,6 +803,7 @@ func s:GetFilenameChecks() abort
     \ 'teal': ['file.tl'],
     \ 'templ': ['file.templ'],
     \ 'template': ['file.tmpl'],
+    \ 'tera': ['file.tera', 'file.toml.tera', 'file.html.tera', 'file.css.tera'],
     \ 'teraterm': ['file.ttl'],
     \ 'terminfo': ['file.ti'],
     \ 'terraform-vars': ['file.tfvars'],
@@ -811,7 +818,11 @@ func s:GetFilenameChecks() abort
     \ 'tla': ['file.tla'],
     \ 'tli': ['file.tli'],
     \ 'tmux': ['tmuxfile.conf', '.tmuxfile.conf', '.tmux-file.conf', '.tmux.conf', 'tmux-file.conf', 'tmux.conf', 'tmux.conf.local'],
-    \ 'toml': ['file.toml', 'Gopkg.lock', 'Pipfile', '/home/user/.cargo/config', '.black'],
+    \ 'toml': ['file.toml', 'uv.lock', 'Gopkg.lock', 'Pipfile', '/home/user/.cargo/config', '.black',
+    \          'any/containers/containers.conf', 'any/containers/containers.conf.d/file.conf',
+    \          'any/containers/containers.conf.modules/file.conf', 'any/containers/containers.conf.modules/any/file.conf',
+    \          'any/containers/registries.conf', 'any/containers/registries.conf.d/file.conf',
+    \          'any/containers/storage.conf'],
     \ 'tpp': ['file.tpp'],
     \ 'trace32': ['file.cmm', 'file.cmmt', 'file.t32'],
     \ 'treetop': ['file.treetop'],
@@ -880,7 +891,8 @@ func s:GetFilenameChecks() abort
     \ 'xf86conf': ['xorg.conf', 'xorg.conf-4'],
     \ 'xhtml': ['file.xhtml', 'file.xht'],
     \ 'xinetd': ['/etc/xinetd.conf', '/etc/xinetd.d/file', 'any/etc/xinetd.conf', 'any/etc/xinetd.d/file'],
-    \ 'xkb': ['/usr/share/X11/xkb/compat/pc', '/usr/share/X11/xkb/geometry/pc', '/usr/share/X11/xkb/keycodes/evdev', '/usr/share/X11/xkb/symbols/pc', '/usr/share/X11/xkb/types/pc'],
+    \ 'xkb': ['any/xkb/compat/pc', 'any/xkb/geometry/pc', 'any/xkb/keycodes/evdev', 'any/xkb/symbols/pc', 'any/xkb/types/pc',
+    \         'any/.xkb/compat/pc', 'any/.xkb/geometry/pc', 'any/.xkb/keycodes/evdev', 'any/.xkb/symbols/pc', 'any/.xkb/types/pc'],
     \ 'xmath': ['file.msc', 'file.msf'],
     \ 'xml': ['/etc/blkid.tab', '/etc/blkid.tab.old', 'file.xmi', 'file.csproj', 'file.csproj.user', 'file.fsproj', 'file.fsproj.user', 'file.vbproj', 'file.vbproj.user', 'file.ui',
     \         'file.tpm', '/etc/xdg/menus/file.menu', 'fglrxrc', 'file.xlf', 'file.xliff', 'file.xul', 'file.wsdl', 'file.wpl', 'any/etc/blkid.tab', 'any/etc/blkid.tab.old',
@@ -910,8 +922,6 @@ func s:GetFilenameChecks() abort
     \         '.zcompdump', '.zlogin', '.zlogout', '.zshenv', '.zshrc', '.zsh_history',
     \         '.zcompdump-file', '.zlog', '.zlog-file', '.zsh', '.zsh-file',
     \         'any/etc/zprofile', 'zlog', 'zlog-file', 'zsh', 'zsh-file'],
-    \
-    \ 'help': [$VIMRUNTIME .. '/doc/help.txt'],
     \ }
 endfunc
 
@@ -926,6 +936,9 @@ func CheckItems(checks)
   set noswapfile
   for [ft, names] in items(a:checks)
     for i in range(0, len(names) - 1)
+      if isdirectory(fnameescape(names[i]))
+        continue
+      endif
       new
       try
         exe 'edit ' .. fnameescape(names[i])
@@ -1612,6 +1625,36 @@ func Test_haredoc_file()
   unlet g:haredoc_search_depth
 
   filetype off
+endfunc
+
+func Test_help_file()
+  set nomodeline
+  filetype on
+  call assert_true(mkdir('doc', 'pR'))
+
+  call writefile(['some text', 'vim:ft=help:'], 'doc/help.txt', 'D')
+  split doc/help.txt
+  call assert_equal('help', &filetype)
+  bwipe!
+
+  call writefile(['some text', 'Copyright: |manual-copyright| vim:ft=help:'],
+        \ 'doc/help1.txt', 'D')
+  split doc/help1.txt
+  call assert_equal('help', &filetype)
+  bwipe!
+
+  call writefile(['some text'], 'doc/nothelp.txt', 'D')
+  split doc/nothelp.txt
+  call assert_notequal('help', &filetype)
+  bwipe!
+
+  call writefile(['some text', '`vim:ft=help`'], 'doc/nothelp1.txt', 'D')
+  split doc/nothelp1.txt
+  call assert_notequal('help', &filetype)
+  bwipe!
+
+  filetype off
+  set modeline&
 endfunc
 
 func Test_hook_file()

@@ -1225,12 +1225,13 @@ M.funcs = {
     args = 1,
     base = 1,
     desc = [=[
-      Get the amount of indent for line {lnum} according the C
-      indenting rules, as with 'cindent'.
+      Get the amount of indent for line {lnum} according the
+      |C-indenting| rules, as with 'cindent'.
       The indent is counted in spaces, the value of 'tabstop' is
       relevant.  {lnum} is used just like in |getline()|.
       When {lnum} is invalid -1 is returned.
-      See |C-indenting|.
+
+      To get or set indent of lines in a string, see |vim.text.indent()|.
 
     ]=],
     name = 'cindent',
@@ -2481,7 +2482,8 @@ M.funcs = {
       When {expr3} is omitted then "force" is assumed.
 
       {expr1} is changed when {expr2} is not empty.  If necessary
-      make a copy of {expr1} first.
+      make a copy of {expr1} first or use |extendnew()| to return a
+      new List/Dictionary.
       {expr2} remains unchanged.
       When {expr1} is locked and {expr2} is not empty the operation
       fails.
@@ -5472,6 +5474,8 @@ M.funcs = {
       |getline()|.
       When {lnum} is invalid -1 is returned.
 
+      To get or set indent of lines in a string, see |vim.text.indent()|.
+
     ]=],
     name = 'indent',
     params = { { 'lnum', 'integer|string' } },
@@ -6490,7 +6494,9 @@ M.funcs = {
     base = 1,
     desc = [=[
       Evaluate Lua expression {expr} and return its result converted
-      to Vim data structures. See |lua-eval| for more details.
+      to Vim data structures. See |lua-eval| for details.
+
+      See also |v:lua-call|.
 
     ]=],
     lua = false,
@@ -6594,9 +6600,8 @@ M.funcs = {
       When {abbr} is there and it is |TRUE| use abbreviations
       instead of mappings.
 
-      When {dict} is there and it is |TRUE| return a dictionary
-      containing all the information of the mapping with the
-      following items:			*mapping-dict*
+      When {dict} is |TRUE|, return a dictionary describing the
+      mapping, with these items:		*mapping-dict*
         "lhs"	     The {lhs} of the mapping as it would be typed
         "lhsraw"   The {lhs} of the mapping as raw bytes
         "lhsrawalt" The {lhs} of the mapping as raw bytes, alternate
@@ -6658,7 +6663,7 @@ M.funcs = {
       { 'abbr', 'boolean' },
       { 'dict', 'true' },
     },
-    returns = 'string|table<string,any>',
+    returns = 'table<string,any>',
   },
   mapcheck = {
     args = { 1, 3 },
@@ -7145,6 +7150,9 @@ M.funcs = {
       		given sequence.
           limit	Maximum number of matches in {list} to be
       		returned.  Zero means no limit.
+          camelcase	Use enhanced camel case scoring making results
+      		better suited for completion related to
+      		programming languages.  Defaults to v:true.
 
       If {list} is a list of dictionaries, then the optional {dict}
       argument supports the following additional items:
@@ -7197,7 +7205,7 @@ M.funcs = {
       <results in `['two one']`.
     ]=],
     name = 'matchfuzzy',
-    params = { { 'list', 'any[]' }, { 'str', 'string' }, { 'dict', 'string' } },
+    params = { { 'list', 'any[]' }, { 'str', 'string' }, { 'dict', 'table' } },
     signature = 'matchfuzzy({list}, {str} [, {dict}])',
   },
   matchfuzzypos = {
@@ -7226,7 +7234,7 @@ M.funcs = {
       <results in `[[{"id": 10, "text": "hello"}], [[2, 3]], [127]]`
     ]=],
     name = 'matchfuzzypos',
-    params = { { 'list', 'any[]' }, { 'str', 'string' }, { 'dict', 'string' } },
+    params = { { 'list', 'any[]' }, { 'str', 'string' }, { 'dict', 'table' } },
     signature = 'matchfuzzypos({list}, {str} [, {dict}])',
   },
   matchlist = {
@@ -7547,10 +7555,9 @@ M.funcs = {
       If {prot} is given it is used to set the protection bits of
       the new directory.  The default is 0o755 (rwxr-xr-x: r/w for
       the user, readable for others).  Use 0o700 to make it
-      unreadable for others.
-
-      {prot} is applied for all parts of {name}.  Thus if you create
-      /tmp/foo/bar then /tmp/foo will be created with 0o700. Example: >vim
+      unreadable for others.  This is used for the newly created
+      directories.  Note: umask is applied to {prot} (on Unix).
+      Example: >vim
       	call mkdir($HOME .. "/tmp/foo/bar", "p", 0o700)
 
       <This function is not available in the |sandbox|.
@@ -8277,7 +8284,7 @@ M.funcs = {
            endif
          endfunc
          call prompt_setcallback(bufnr(), function('s:TextEntered'))
-
+      <
     ]=],
     name = 'prompt_setcallback',
     params = { { 'buf', 'integer|string' }, { 'expr', 'string|function' } },
@@ -11224,7 +11231,9 @@ M.funcs = {
     tags = { 'E6100' },
     desc = [=[
       Returns |standard-path| locations of various default files and
-      directories.
+      directories. The locations are driven by |base-directories|
+      which you can configure via |$NVIM_APPNAME| or the `$XDG_…`
+      environment variables.
 
       {what}       Type    Description ~
       cache        String  Cache directory: arbitrary temporary
@@ -11249,6 +11258,20 @@ M.funcs = {
     params = { { 'what', "'cache'|'config'|'config_dirs'|'data'|'data_dirs'|'log'|'run'|'state'" } },
     returns = 'string|string[]',
     signature = 'stdpath({what})',
+  },
+  stdpath__1 = {
+    args = 1,
+    fast = true,
+    name = 'stdpath',
+    params = { { 'what', "'cache'|'config'|'data'|'log'|'run'|'state'" } },
+    returns = 'string',
+  },
+  stdpath__2 = {
+    args = 1,
+    fast = true,
+    name = 'stdpath',
+    params = { { 'what', "'config_dirs'|'data_dirs'" } },
+    returns = 'string[]',
   },
   str2float = {
     args = 1,

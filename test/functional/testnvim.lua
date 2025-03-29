@@ -366,7 +366,7 @@ end
 --- @param ... string
 function M.feed(...)
   for _, v in ipairs({ ... }) do
-    nvim_feed(dedent(v))
+    nvim_feed(v)
   end
 end
 
@@ -609,16 +609,19 @@ function M._new_argv(...)
   return args, env, io_extra
 end
 
+--- Dedents string arguments and inserts the resulting text into the current buffer.
 --- @param ... string
 function M.insert(...)
   nvim_feed('i')
   for _, v in ipairs({ ... }) do
     local escaped = v:gsub('<', '<lt>')
-    M.feed(escaped)
+    nvim_feed(dedent(escaped))
   end
   nvim_feed('<ESC>')
 end
 
+--- @deprecated Use `command()` or `feed()` instead.
+---
 --- Executes an ex-command by user input. Because nvim_input() is used, Vimscript
 --- errors will not manifest as client (lua) errors. Use command() for that.
 --- @param ... string
@@ -812,6 +815,7 @@ function M.rmdir(path)
   end
 end
 
+--- @deprecated Use `t.pcall_err()` to check failure, or `n.command()` to check success.
 function M.exc_exec(cmd)
   M.command(([[
     try
@@ -903,11 +907,6 @@ function M.testprg(name)
   return ('%s/%s%s'):format(M.nvim_dir, name, ext)
 end
 
-function M.is_asan()
-  local version = M.eval('execute("verbose version")')
-  return version:match('-fsanitize=[a-z,]*address')
-end
-
 --- Returns a valid, platform-independent Nvim listen address.
 --- Useful for communicating with child instances.
 ---
@@ -976,18 +975,6 @@ end
 function M.add_builddir_to_rtp()
   -- Add runtime from build dir for doc/tags (used with :help).
   M.command(string.format([[set rtp+=%s/runtime]], t.paths.test_build_dir))
-end
-
---- Kill (reap) a process by PID.
---- @param pid string
---- @return boolean?
-function M.os_kill(pid)
-  return os.execute(
-    (
-      is_os('win') and 'taskkill /f /t /pid ' .. pid .. ' > nul'
-      or 'kill -9 ' .. pid .. ' > /dev/null'
-    )
-  )
 end
 
 --- Create folder with non existing parents

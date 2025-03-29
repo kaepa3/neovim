@@ -282,9 +282,9 @@ gr{char}		Replace the virtual characters under the cursor with
 			most CTRL-keys, cannot be used.
 
 							*gr-default*
-			Nvim creates default mappings with "gr" as a prefix,
-			which may inhibit the behavior of |gr|. Use the
-			following to restore the builtin behavior: >
+			Nvim creates |lsp-defaults| mappings which may inhibit
+			the builtin behavior of |gr|. Use this to restore the
+			builtin behavior: >
 				nnoremap <nowait> gr gr
 <
 
@@ -1104,6 +1104,11 @@ inside of strings can change!  Also see 'softtabstop' option. >
 
 :[line]pu[t]! [x]	Put the text [from register x] before [line] (default
 			current line).
+
+							*:ip* *:iput*
+:[line]ip[ut] [x]	like |:put|, but adjust indent to the current line
+
+:[line]ip[ut]! [x]	like |:put|!, but adjust indent to the current line
 
 ["x]]p		    or					*]p* *]<MiddleMouse>*
 ["x]]<MiddleMouse>	Like "p", but adjust the indent to the current line.

@@ -272,6 +272,8 @@ notation        meaning             equivalent  decimal value(s)        ~
 <S-F1> - <S-F12> shift-function keys 1 to 12    *<S-F1>*
 <Help>          help key
 <Undo>          undo key
+<Find>          find key
+<Select>        select key
 <Insert>        insert key
 <Home>          home                            *home*
 <End>           end                             *end*
@@ -449,7 +451,7 @@ CTRL-O in Insert mode you get a beep but you are still in Insert mode, type
  >
  FROM mode      TO mode
                 Normal  Visual  Select  Insert    Replace   Cmd-line  Ex >
- Normal                 v V ^V    *4     *1        R gR     : / ? !   Q
+ Normal                 v V ^V    *4     *1        R gR     : / ? !   gQ
  Visual          *2               ^G     c C        --        :       --
  Select          *5     ^O ^G            *6         --        --      --
  Insert          <Esc>    --      --              <Insert>    --      --
