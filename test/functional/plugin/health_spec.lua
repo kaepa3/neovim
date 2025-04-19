@@ -86,23 +86,23 @@ describe('vim.health', function()
   end)
 
   describe(':checkhealth', function()
-    it('functions report_*() render correctly', function()
+    it('report_xx() renders correctly', function()
       command('checkhealth full_render')
       n.expect([[
 
       ==============================================================================
-      test_plug.full_render:         require("test_plug.full_render.health").check()
+      test_plug.full_render:                                              1 ⚠️  1 ❌
 
       report 1 ~
-      - OK life is fine
-      - WARNING no what installed
+      - ✅ OK life is fine
+      - ⚠️ WARNING no what installed
         - ADVICE:
           - pip what
           - make what
 
       report 2 ~
       - stuff is stable
-      - ERROR why no hardcopy
+      - ❌ ERROR why no hardcopy
         - ADVICE:
           - :help |:hardcopy|
           - :help |:TOhtml|
@@ -114,28 +114,28 @@ describe('vim.health', function()
       n.expect([[
 
         ==============================================================================
-        test_plug:                                 require("test_plug.health").check()
+        test_plug:                                                                  ✅
 
         report 1 ~
-        - OK everything is fine
+        - ✅ OK everything is fine
 
         report 2 ~
-        - OK nothing to see here
+        - ✅ OK nothing to see here
 
         ==============================================================================
-        test_plug.success1:               require("test_plug.success1.health").check()
+        test_plug.success1:                                                         ✅
 
         report 1 ~
-        - OK everything is fine
+        - ✅ OK everything is fine
 
         report 2 ~
-        - OK nothing to see here
+        - ✅ OK nothing to see here
 
         ==============================================================================
-        test_plug.success2:               require("test_plug.success2.health").check()
+        test_plug.success2:                                                         ✅
 
         another 1 ~
-        - OK ok
+        - ✅ OK ok
         ]])
     end)
 
@@ -144,13 +144,13 @@ describe('vim.health', function()
       n.expect([[
 
         ==============================================================================
-        test_plug.submodule:             require("test_plug.submodule.health").check()
+        test_plug.submodule:                                                        ✅
 
         report 1 ~
-        - OK everything is fine
+        - ✅ OK everything is fine
 
         report 2 ~
-        - OK nothing to see here
+        - ✅ OK nothing to see here
         ]])
     end)
 
@@ -159,9 +159,9 @@ describe('vim.health', function()
       n.expect([[
 
       ==============================================================================
-      test_plug.submodule_empty: require("test_plug.submodule_empty.health").check()
+      test_plug.submodule_empty:                                                1 ❌
 
-      - ERROR The healthcheck report for "test_plug.submodule_empty" plugin is empty.
+      - ❌ ERROR The healthcheck report for "test_plug.submodule_empty" plugin is empty.
       ]])
     end)
 
@@ -182,13 +182,13 @@ describe('vim.health', function()
         {Bar:                                                  }|
         {h1:foo:                                              }|
                                                           |
-        - {Error:ERROR} No healthcheck found for "foo" plugin.    |
+        - ❌ {Error:ERROR} No healthcheck found for "foo" plugin. |
                                                           |
         {Bar:                                                  }|
-        {h1:test_plug.success1:               require("test_pl}|
+        {h1:test_plug.success1:                               }|
                                                           |
         {h2:report 1}                                          |
-        - {Ok:OK} everything is fine                           |
+        - ✅ {Ok:OK} everything is fine                        |
                                                           |
       ]],
       }
@@ -200,13 +200,13 @@ describe('vim.health', function()
       n.expect([[
 
         ==============================================================================
-        non_existent_healthcheck:                                                     
+        non_existent_healthcheck:                                                 1 ❌
 
-        - ERROR No healthcheck found for "non_existent_healthcheck" plugin.
+        - ❌ ERROR No healthcheck found for "non_existent_healthcheck" plugin.
         ]])
     end)
 
-    it('does not use vim.health as a healtcheck', function()
+    it('does not use vim.health as a healthcheck', function()
       -- vim.health is not a healthcheck
       command('checkhealth vim')
       n.expect([[
@@ -218,10 +218,10 @@ describe('vim.health', function()
       n.expect([[
 
       ==============================================================================
-      test_plug.lua:                         require("test_plug.lua.health").check()
+      test_plug.lua:                                                              ✅
 
       nested lua/ directory ~
-      - OK everything is ok
+      - ✅ OK everything is ok
       ]])
     end)
 
@@ -236,10 +236,10 @@ describe('vim.health', function()
       n.expect([[
 
       ==============================================================================
-      nest:                                           require("nest.health").check()
+      nest:                                                                       ✅
 
       healthy pack ~
-      - OK healthy ok
+      - ✅ OK healthy ok
       ]])
     end)
   end)
@@ -281,14 +281,14 @@ describe(':checkhealth window', function()
       ^                                                  |
       {14:                                                  }|
       {14:                            }                      |
-      {h1:test_plug.success1:                               }|
-      {h1:require("test_plug.success1.health").check()}      |
+      {h1:test_plug.                                        }|
+      {h1:success1:                                         }|
+      {h1:                ✅}                                |
                                                         |
       {h2:report 1}                                          |
-      - {32:OK} everything is fine                           |
+      - ✅ {32:OK} everything is fine                        |
                                                         |
       {h2:report 2}                                          |
-      - {32:OK} nothing to see here                          |
     ## grid 3
                                                         |
     ]],
@@ -324,16 +324,18 @@ describe(':checkhealth window', function()
       {14:   }                      |
       {h1:test_plug.               }|
       {h1:success1:                }|
-      {h1:require("test_plug.      }|
-      {h1:success1.health").check()}|
+      {h1:                         }|
+      {h1:                ✅}       |
                                |
       {h2:report 1}                 |
-      - {32:OK} everything is fine  |
+      - ✅ {32:OK} everything is    |
+      fine                     |
                                |
       {h2:report 2}                 |
-      - {32:OK} nothing to see here |
+      - ✅ {32:OK} nothing to see   |
+      here                     |
                                |
-      {1:~                        }|*3
+      {1:~                        }|
     ]]):format(
         left and '[4:-------------------------]│[2:------------------------]|*19'
           or '[2:------------------------]│[4:-------------------------]|*19',
@@ -381,15 +383,15 @@ describe(':checkhealth window', function()
       ^                                                  |
                                                         |
                                                         |
-      test_plug.success1:                               |
-      require("test_plug.success1.health").check()      |
+      test_plug.                                        |
+      success1:                                         |
+                      ✅                                |
                                                         |
       report 1                                          |
-      - OK everything is fine                           |
+      - ✅ OK everything is fine                        |
                                                         |
       report 2                                          |
-      - OK nothing to see here                          |
-                                                        |
+      - ✅ OK nothing to see here                       |
     ]]):format(
         top
             and [[

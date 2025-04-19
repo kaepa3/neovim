@@ -1143,7 +1143,7 @@ static int diff_file(diffio_T *dio)
   char *const cmd = xmalloc(len);
 
   // We don't want $DIFF_OPTIONS to get in the way.
-  if (os_getenv("DIFF_OPTIONS")) {
+  if (os_env_exists("DIFF_OPTIONS", true)) {
     os_unsetenv("DIFF_OPTIONS");
   }
 
@@ -2916,7 +2916,7 @@ static void diff_refine_inline_char_highlight(diff_T *dp_orig, garray_T *linemap
   } while (pass++ < 4);  // use limited number of passes to avoid excessive looping
 }
 
-/// Find the inline difference within a diff block among differnt buffers.  Do
+/// Find the inline difference within a diff block among different buffers.  Do
 /// this by splitting each block's content into characters or words, and then
 /// use internal xdiff to calculate the per-character/word diff.  The result is
 /// stored in dp instead of returned by the function.
@@ -2990,10 +2990,15 @@ static void diff_find_change_inline_diff(diff_T *dp)
 
       char *s = curline;
       while (*s != NUL) {
-        // Always use the first buffer's 'iskeyword' to have a consistent diff
         bool new_in_keyword = false;
         if (diff_flags & DIFF_INLINE_WORD) {
-          new_in_keyword = vim_iswordp_buf(s, curtab->tp_diffbuf[file1_idx]);
+          // Always use the first buffer's 'iskeyword' to have a
+          // consistent diff.
+          // For multibyte chars, only treat alphanumeric chars
+          // (class 2) as "word", as other classes such as emojis and
+          // CJK ideographs do not usually benefit from word diff as
+          // Vim doesn't have a good way to segment them.
+          new_in_keyword = (mb_get_class_tab(s, curtab->tp_diffbuf[file1_idx]->b_chartab) == 2);
         }
         if (in_keyword && !new_in_keyword) {
           ga_append(curstr, NL);
@@ -4071,7 +4076,7 @@ void f_diff_hlID(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
   diffline_T diffline = { 0 };
   // Remember the results if using simple since it's recalculated per
   // call. Otherwise just call diff_find_change() every time since
-  // internally the result is cached interally.
+  // internally the result is cached internally.
   const bool cache_results = !(diff_flags & ALL_INLINE_DIFF);
 
   linenr_T lnum = tv_get_lnum(argvars);

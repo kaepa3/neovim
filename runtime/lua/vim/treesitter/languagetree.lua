@@ -43,8 +43,10 @@
 local query = require('vim.treesitter.query')
 local language = require('vim.treesitter.language')
 local Range = require('vim.treesitter._range')
+local hrtime = vim.uv.hrtime
 
-local default_parse_timeout_ms = 3
+-- Parse in 3ms chunks.
+local default_parse_timeout_ns = 3 * 1000000
 
 ---@type Range2
 local entire_document_range = { 0, math.huge }
@@ -198,16 +200,16 @@ function LanguageTree:_set_logger()
   self._parser:_set_logger(log_lex, log_parse, self._logger)
 end
 
----Measure execution time of a function
+---Measure execution time of a function, in nanoseconds.
 ---@generic R1, R2, R3
 ---@param f fun(): R1, R2, R3
 ---@return number, R1, R2, R3
 local function tcall(f, ...)
-  local start = vim.uv.hrtime()
+  local start = hrtime()
   ---@diagnostic disable-next-line
   local r = { f(...) }
   --- @type number
-  local duration = (vim.uv.hrtime() - start) / 1000000
+  local duration = hrtime() - start
   --- @diagnostic disable-next-line: redundant-return-value
   return duration, unpack(r)
 end
@@ -388,18 +390,29 @@ function LanguageTree:_parse_regions(range, thread_state)
       )
     then
       self._parser:set_included_ranges(ranges)
-      self._parser:set_timeout(thread_state.timeout and thread_state.timeout * 1000 or 0) -- ms -> micros
 
-      local parse_time, tree, tree_changes =
-        tcall(self._parser.parse, self._parser, self._trees[i], self._source, true)
+      local parse_time, tree, tree_changes = tcall(
+        self._parser.parse,
+        self._parser,
+        self._trees[i],
+        self._source,
+        true,
+        thread_state.timeout
+      )
       while true do
         if tree then
           break
         end
         coroutine.yield(self._trees, false)
 
-        parse_time, tree, tree_changes =
-          tcall(self._parser.parse, self._parser, self._trees[i], self._source, true)
+        parse_time, tree, tree_changes = tcall(
+          self._parser.parse,
+          self._parser,
+          self._trees[i],
+          self._source,
+          true,
+          thread_state.timeout
+        )
       end
 
       self:_subtract_time(thread_state, parse_time)
@@ -503,7 +516,7 @@ function LanguageTree:_async_parse(range, on_parse)
   local buf = is_buffer_parser and vim.b[source] or nil
   local ct = is_buffer_parser and buf.changedtick or nil
   local total_parse_time = 0
-  local redrawtime = vim.o.redrawtime
+  local redrawtime = vim.o.redrawtime * 1000000
 
   local thread_state = {} ---@type ParserThreadState
 
@@ -526,7 +539,7 @@ function LanguageTree:_async_parse(range, on_parse)
       end
     end
 
-    thread_state.timeout = not vim.g._ts_force_sync_parsing and default_parse_timeout_ms or nil
+    thread_state.timeout = not vim.g._ts_force_sync_parsing and default_parse_timeout_ns or nil
     local parse_time, trees, finished = tcall(parse, self, range, thread_state)
     total_parse_time = total_parse_time + parse_time
 
@@ -861,6 +874,39 @@ local function get_node_ranges(node, source, metadata, include_children)
   return ranges
 end
 
+---Finds the intersection between two regions, assuming they are sorted in ascending order by
+---starting point.
+---@param region1 Range6[]
+---@param region2 Range6[]?
+---@return Range6[]
+local function clip_regions(region1, region2)
+  if not region2 then
+    return region1
+  end
+
+  local result = {}
+  local i, j = 1, 1
+
+  while i <= #region1 and j <= #region2 do
+    local r1 = region1[i]
+    local r2 = region2[j]
+
+    local intersection = Range.intersection(r1, r2)
+    if intersection then
+      table.insert(result, intersection)
+    end
+
+    -- Advance the range that ends earlier
+    if Range.cmp_pos.le(r1[3], r1[4], r2[3], r2[4]) then
+      i = i + 1
+    else
+      j = j + 1
+    end
+  end
+
+  return result
+end
+
 ---@nodoc
 ---@class vim.treesitter.languagetree.InjectionElem
 ---@field combined boolean
@@ -873,8 +919,9 @@ end
 ---@param lang string
 ---@param combined boolean
 ---@param ranges Range6[]
+---@param parent_ranges Range6[]?
 ---@param result table<string,Range6[][]>
-local function add_injection(t, pattern, lang, combined, ranges, result)
+local function add_injection(t, pattern, lang, combined, ranges, parent_ranges, result)
   if #ranges == 0 then
     -- Make sure not to add an empty range set as this is interpreted to mean the whole buffer.
     return
@@ -885,7 +932,7 @@ local function add_injection(t, pattern, lang, combined, ranges, result)
   end
 
   if not combined then
-    table.insert(result[lang], ranges)
+    table.insert(result[lang], clip_regions(ranges, parent_ranges))
     return
   end
 
@@ -901,7 +948,7 @@ local function add_injection(t, pattern, lang, combined, ranges, result)
     table.insert(result[lang], regions)
   end
 
-  for _, range in ipairs(ranges) do
+  for _, range in ipairs(clip_regions(ranges, parent_ranges)) do
     table.insert(t[lang][pattern], range)
   end
 end
@@ -987,17 +1034,18 @@ function LanguageTree:_get_injections(range, thread_state)
     return {}
   end
 
-  local start = vim.uv.hrtime()
+  local start = hrtime()
 
   ---@type table<string,Range6[][]>
   local result = {}
 
   local full_scan = range == true or self._injection_query.has_combined_injections
 
-  for _, tree in pairs(self._trees) do
+  for tree_index, tree in pairs(self._trees) do
     ---@type vim.treesitter.languagetree.Injection
     local injections = {}
     local root_node = tree:root()
+    local parent_ranges = self._regions and self._regions[tree_index] or nil
     local start_line, end_line ---@type integer, integer
     if full_scan then
       start_line, _, end_line = root_node:range()
@@ -1010,15 +1058,15 @@ function LanguageTree:_get_injections(range, thread_state)
     do
       local lang, combined, ranges = self:_get_injection(match, metadata)
       if lang then
-        add_injection(injections, pattern, lang, combined, ranges, result)
+        add_injection(injections, pattern, lang, combined, ranges, parent_ranges, result)
       else
         self:_log('match from injection query failed for pattern', pattern)
       end
 
       -- Check the current function duration against the timeout, if it exists.
-      local current_time = vim.uv.hrtime()
-      self:_subtract_time(thread_state, (current_time - start) / 1000000)
-      start = current_time
+      local current_time = hrtime()
+      self:_subtract_time(thread_state, current_time - start)
+      start = hrtime()
     end
   end
 

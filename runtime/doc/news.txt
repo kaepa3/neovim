@@ -66,7 +66,7 @@ EVENTS
 
 HIGHLIGHTS
 
-• |hl-DiffTextAdd| highlights added text within a changed line.
+• todo
 
 LSP
 
@@ -78,8 +78,11 @@ LUA
 
 OPTIONS
 
+• 'chistory' and 'lhistory' set size of the |quickfix-stack|.
+• 'completeopt' flag "nearset" sorts completion results by distance to cursor.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
 • 'pummaxwidth' sets maximum width for the completion popup menu.
+• 'shelltemp' defaults to "false".
 
 PLUGINS
 
@@ -104,7 +107,7 @@ The following new features were added.
 
 API
 
-• todo
+• |vim.hl.range()| now allows multiple timed highlights
 
 DEFAULTS
 
@@ -117,23 +120,33 @@ DIAGNOSTICS
 EDITOR
 
 • |:iput| works like |:put| but adjusts indent.
+• |omnicompletion| in `help` buffer. |ft-help-omni|
 
 EVENTS
 
 • todo
 
+HIGHLIGHTS
+
+• |hl-DiffTextAdd| highlights added text within a changed line.
+
 LSP
 
-• todo
+• |vim.lsp.ClientConfig| gained `workspace_required`.
 
 LUA
 
-• todo
+• Lua type annotations for `vim.uv`.
 
 OPTIONS
 
+• 'autowriteall' writes all buffers upon receiving `SIGHUP`, `SIGQUIT` or `SIGTSTP`.
 • 'completefuzzycollect' enables fuzzy collection of candidates for (some)
   |ins-completion| modes.
+• 'diffopt' `inline:` configures diff highlighting for changes within a line.
+• 'pummaxwidth' sets maximum width for the completion popup menu.
+• 'winborder' "bold" style.
+• |g:clipboard| accepts a string name to force any builtin clipboard tool.
 
 PERFORMANCE
 
@@ -161,7 +174,8 @@ TUI
 
 UI
 
-• todo
+• |:checkhealth| shows a summary in the header for every healthcheck.
+• |ui-multigrid| provides composition information and absolute coordinates.
 
 VIMSCRIPT
 
@@ -172,7 +186,9 @@ CHANGED FEATURES                                                 *news-changed*
 
 These existing features changed their behavior.
 
-• todo
+• 'spellfile' location defaults to `stdpath("data").."/site/spell/"` instead of the
+  first writable directoy in 'runtimepath'.
+• |vim.version.range()| doesn't exclude `to` if it is equal to `from`.
 
 ==============================================================================
 REMOVED FEATURES                                                 *news-removed*
@@ -184,6 +200,6 @@ These deprecated features were removed.
 ==============================================================================
 DEPRECATIONS                                                *news-deprecations*
 
-See |deprecated-0.11|.
+See |deprecated-0.12|.
 
  vim:tw=78:ts=8:sw=2:et:ft=help:norl:

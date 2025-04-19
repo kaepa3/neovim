@@ -24,6 +24,7 @@ local border_size = {
   rounded = { 2, 2 },
   solid = { 2, 2 },
   shadow = { 1, 1 },
+  bold = { 2, 2 },
 }
 
 --- Check the border given by opts or the default border for the additional
@@ -1079,6 +1080,7 @@ local function get_markdown_fences()
   return fences
 end
 
+--- @deprecated
 --- Converts markdown into syntax highlighted regions by stripping the code
 --- blocks and converting them into highlighted code.
 --- This will by default insert a blank line separator after those code block
@@ -1099,6 +1101,7 @@ end
 ---  - separator insert separator after code block
 ---@return table stripped content
 function M.stylize_markdown(bufnr, contents, opts)
+  vim.deprecate('vim.lsp.util.stylize_markdown', nil, '0.14')
   validate('contents', contents, 'table')
   validate('opts', opts, 'table', true)
   opts = opts or {}
@@ -1138,10 +1141,8 @@ function M.stylize_markdown(bufnr, contents, opts)
   -- Clean up
   contents = vim.split(table.concat(contents, '\n'), '\n', { trimempty = true })
 
-  local stripped = {}
+  local stripped = {} --- @type string[]
   local highlights = {} --- @type {ft:string,start:integer,finish:integer}[]
-  -- keep track of lnums that contain markdown
-  local markdown_lines = {} --- @type table<integer,boolean>
 
   local i = 1
   while i <= #contents do
@@ -1156,7 +1157,7 @@ function M.stylize_markdown(bufnr, contents, opts)
           i = i + 1
           break
         end
-        table.insert(stripped, line)
+        stripped[#stripped + 1] = line
         i = i + 1
       end
       table.insert(highlights, {
@@ -1166,30 +1167,23 @@ function M.stylize_markdown(bufnr, contents, opts)
       })
       -- add a separator, but not on the last line
       if opts.separator and i < #contents then
-        table.insert(stripped, '---')
-        markdown_lines[#stripped] = true
+        stripped[#stripped + 1] = '---'
       end
     else
       -- strip any empty lines or separators prior to this separator in actual markdown
       if line:match('^---+$') then
         while
-          markdown_lines[#stripped]
+          stripped[#stripped]
           and (stripped[#stripped]:match('^%s*$') or stripped[#stripped]:match('^---+$'))
         do
-          markdown_lines[#stripped] = false
-          table.remove(stripped, #stripped)
+          stripped[#stripped] = nil
         end
       end
       -- add the line if its not an empty line following a separator
       if
-        not (
-          line:match('^%s*$')
-          and markdown_lines[#stripped]
-          and stripped[#stripped]:match('^---+$')
-        )
+        not (line:match('^%s*$') and stripped[#stripped] and stripped[#stripped]:match('^---+$'))
       then
-        table.insert(stripped, line)
-        markdown_lines[#stripped] = true
+        stripped[#stripped + 1] = line
       end
       i = i + 1
     end
@@ -1220,7 +1214,7 @@ function M.stylize_markdown(bufnr, contents, opts)
 
   local sep_line = string.rep('─', math.min(width, opts.wrap_at or width))
 
-  for l in pairs(markdown_lines) do
+  for l in ipairs(stripped) do
     if stripped[l]:match('^---+$') then
       stripped[l] = sep_line
     end
@@ -2170,7 +2164,7 @@ end
 ---@class (private) vim.lsp.util._cancel_requests.Filter
 ---@field bufnr? integer
 ---@field clients? vim.lsp.Client[]
----@field method? string
+---@field method? vim.lsp.protocol.Method.ClientToServer.Request
 ---@field type? string
 
 ---@private
