@@ -4462,7 +4462,7 @@ local options = {
         <
         Also used for the |gf| command if an unmodified file name can't be
         found.  Allows doing "gf" on the name after an 'include' statement.
-        Also used for |<cfile>|.
+        Note: Not used for |<cfile>|.
 
         If the expression starts with s: or |<SID>|, then it is replaced with
         the script ID (|local-function|). Example: >vim
@@ -8541,7 +8541,14 @@ local options = {
     {
       abbreviation = 'stl',
       cb = 'did_set_statusline',
-      defaults = '',
+      defaults = table.concat({
+        '%<',
+        '%f %h%w%m%r ',
+        '%=',
+        "%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}",
+        "%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}",
+        "%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}",
+      }),
       desc = [=[
         When non-empty, this option determines the content of the status line.
         Also see |status-line|.

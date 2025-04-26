@@ -3281,7 +3281,7 @@ vim.go.inc = vim.go.include
 ---
 --- Also used for the `gf` command if an unmodified file name can't be
 --- found.  Allows doing "gf" on the name after an 'include' statement.
---- Also used for `<cfile>`.
+--- Note: Not used for `<cfile>`.
 ---
 --- If the expression starts with s: or `<SID>`, then it is replaced with
 --- the script ID (`local-function`). Example:
@@ -6685,7 +6685,7 @@ vim.wo.stc = vim.wo.statuscolumn
 ---
 ---
 --- @type string
-vim.o.statusline = ""
+vim.o.statusline = "%<%f %h%w%m%r %=%{% &showcmdloc == 'statusline' ? '%-10.S ' : '' %}%{% exists('b:keymap_name') ? '<'..b:keymap_name..'> ' : '' %}%{% &ruler ? ( &rulerformat == '' ? '%-14.(%l,%c%V%) %P' : &rulerformat ) : '' %}"
 vim.o.stl = vim.o.statusline
 vim.wo.statusline = vim.o.statusline
 vim.wo.stl = vim.wo.statusline
