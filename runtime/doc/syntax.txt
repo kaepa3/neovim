@@ -1091,15 +1091,47 @@ ERLANG						*erlang.vim* *ft-erlang-syntax*
 Erlang is a functional programming language developed by Ericsson.  Files with
 the following extensions are recognized as Erlang files: erl, hrl, yaws.
 
-The BIFs (built-in functions) are highlighted by default. To disable this,
-put the following line in your vimrc: >
+Vim highlights triple-quoted docstrings as comments by default.
 
-      :let g:erlang_highlight_bifs = 0
+If you want triple-quoted docstrings highlighted as Markdown, add the
+following line to your |vimrc|: >
 
-To enable highlighting some special atoms, put this in your vimrc: >
+	:let g:erlang_use_markdown_for_docs = 1
 
-      :let g:erlang_highlight_special_atoms = 1
+The plain text inside the docstrings (that is, the characters that are not
+highlighted by the Markdown syntax) is still highlighted as a comment.
 
+If you want to highlight the plain text inside the docstrings using a
+different highlight group, add the following line to your |vimrc| (the
+example highlights plain text using the String highlight group): >
+
+	:let g:erlang_docstring_default_highlight = 'String'
+
+If you don't enable Markdown, this line highlights the full docstrings
+according to the specified highlight group.
+
+Use the following line to disable highlighting for the plain text: >
+
+	:let g:erlang_docstring_default_highlight = ''
+
+Configuration examples: >
+
+	" Highlight docstrings as Markdown.
+	:let g:erlang_use_markdown_for_docs = 1
+
+	" 1. Highlight Markdown elements in docstrings as Markdown.
+	" 2. Highlight the plain text in docstrings as String.
+	:let g:erlang_use_markdown_for_docs = 1
+	:let g:erlang_docstring_default_highlight = 'String'
+
+	" Highlight docstrings as strings (no Markdown).
+	:let g:erlang_docstring_default_highlight = 'String'
+
+	" 1. Highlight Markdown elements in docstrings as Markdown.
+	" 2. Don't highlight the plain text in docstrings.
+	:let g:erlang_use_markdown_for_docs = 1
+	:let g:erlang_docstring_default_highlight = ''
+<
 
 ELIXIR						*elixir.vim* *ft-elixir-syntax*
 
@@ -1582,13 +1614,8 @@ old way, put the following line into your Vim startup file: >
 All (exported) public types declared in `java.lang` are always automatically
 imported and available as simple names.  To highlight them, use: >
 	:let g:java_highlight_java_lang_ids = 1
-
-You can also highlight types of most standard Java packages if you download
-the javaid.vim script at https://www.fleiner.com/vim/download.html.  If you
-prefer to only highlight types of a certain package, say `java.io`, use the
-following: >
-	:let g:java_highlight_java_io = 1
-Check the javaid.vim file for a list of all the packages that are supported.
+You can also generate syntax items for other public and protected types and
+opt in to highlight some of their names; see |java-package-info-url|.
 
 Headers of indented function declarations can be highlighted (along with parts
 of lambda expressions and method reference expressions), but it depends on how
@@ -1652,7 +1679,7 @@ diverge as follows:
   1. The first sentence (all characters up to the first period `.`, which is
      followed by a whitespace character or a line terminator, or up to the
      first block tag, e.g. `@param`, `@return`) is colored as
-	*SpecialComment	special comments.
+	`*SpecialComment`	special comments.
   2. The text is colored as
 	`*Comment`	comments.
   3. HTML comments are colored as
@@ -1688,6 +1715,13 @@ default 'foldtext' value; you may opt for showing the contents of a second
 line for any comments written in this way, and showing the contents of a first
 line otherwise, with >
 	:let g:java_foldtext_show_first_or_second_line = 1
+
+HTML tags in Javadoc comments can additionally be folded by following the
+instructions listed under |html-folding| and giving explicit consent with >
+	:let g:java_consent_to_html_syntax_folding = 1
+Do not default to this kind of folding unless ALL start tags and optional end
+tags are balanced in Javadoc comments; otherwise, put up with creating runaway
+folds that break syntax highlighting.
 
 Trailing whitespace characters or a run of space characters before a tab
 character can be marked as an error with >
@@ -1733,7 +1767,8 @@ The supported JEP numbers are to be drawn from this table:
 Note that as soon as the particular preview feature will have been integrated
 into the Java platform, its entry will be removed from the table and related
 optionality will be discontinued.
-
+						*java-package-info-url*
+https://github.com/zzzyxwvut/java-vim/blob/master/tools/javaid/src/javaid/package-info.java
 
 JSON			*json.vim* *ft-json-syntax* *g:vim_json_conceal*
 						*g:vim_json_warnings*
@@ -1891,9 +1926,9 @@ quoted text and URLs / email addresses).  In keeping with standard conventions,
 signatures begin in a line containing only "--" followed optionally by
 whitespaces and end with a newline.
 
-Vim treats lines beginning with ']', '}', '|', '>' or a word followed by '>'
+Vim treats lines beginning with "]", "}", "|", ">" or a word followed by ">"
 as quoted text.  However Vim highlights headers and signatures in quoted text
-only if the text is quoted with '>' (optionally followed by one space).
+only if the text is quoted with ">" (optionally followed by one space).
 
 By default mail.vim synchronises syntax to 100 lines before the first
 displayed line.  If you have a slow machine, and generally deal with emails
@@ -2057,8 +2092,8 @@ To disable highlighting of pronoun substitution patterns inside strings: >
 
 	:let moo_no_pronoun_sub = 1
 
-To disable highlighting of the regular expression operator '%|', and matching
-'%(' and '%)' inside strings: >
+To disable highlighting of the regular expression operator "%|", and matching
+"%(" and "%)" inside strings: >
 
 	:let moo_no_regexp = 1
 
@@ -2612,7 +2647,7 @@ PRINTCAP + TERMCAP	*ft-ptcap-syntax* *ft-termcap-syntax*
 This syntax file applies to the printcap and termcap databases.
 
 In order for Vim to recognize printcap/termcap files that do not match
-the patterns *printcap*, or *termcap*, you must put additional patterns
+the patterns "*printcap*", or "*termcap*", you must put additional patterns
 appropriate to your system in your |myfiletypefile| file.  For these
 patterns, you must set the variable "b:ptcap_type" to either "print" or
 "term", and then the 'filetype' option to ptcap.
@@ -2887,7 +2922,7 @@ The value is a space-separated list of keywords:
     [	       Array literal
     %	       Literal with "%" notation, e.g.: %w(STRING), %!STRING!
     /	       Regexp
-    string     String and shell command output (surrounded by ', ", `)
+    string     String and shell command output (surrounded by ', ", "`")
     :	       Symbol
     #	       Multiline comment
     <<	       Here documents
@@ -3058,6 +3093,10 @@ variables in your vimrc:
 	let g:is_dash	   = 1
 <   sh: Bourne shell >
 	let g:is_sh	   = 1
+
+Specific shell features are automatically enabled based on the shell detected
+from the shebang line ("#! ...").  For KornShell Vim detects different shell
+features for mksh, ksh88, ksh93, ksh93u, ksh93v, and ksh2020.
 
 If there's no "#! ..." line, and the user hasn't availed themself of a default
 sh.vim syntax setting as just shown, then syntax/sh.vim will assume the POSIX
@@ -3500,6 +3539,7 @@ names whose syntax definitions will be included in Typst files. Example: >
 
 VIM			*vim.vim*		*ft-vim-syntax*
 			*g:vimsyn_minlines*	*g:vimsyn_maxlines*
+
 There is a trade-off between more accurate syntax highlighting versus screen
 updating speed.  To improve accuracy, you may wish to increase the
 g:vimsyn_minlines variable.  The g:vimsyn_maxlines variable may be used to
@@ -3518,18 +3558,19 @@ embedded script highlighting they wish to have. >
    g:vimsyn_embed == 0      : disable (don't embed any scripts)
    g:vimsyn_embed == 'lpPr' : support embedded Lua, Perl, Python and Ruby
 <
-This option is disabled by default.
+By default, g:vimsyn_embed is unset, and embedded Lua scripts are supported.
+
 						*g:vimsyn_folding*
 Some folding is now supported with when 'foldmethod' is set to "syntax": >
 
    g:vimsyn_folding == 0 or doesn't exist: no syntax-based folding
    g:vimsyn_folding =~ 'a' : fold augroups
    g:vimsyn_folding =~ 'f' : fold functions
-   g:vimsyn_folding =~ 'h' : fold heredocs
-   g:vimsyn_folding =~ 'l' : fold Lua      script
-   g:vimsyn_folding =~ 'p' : fold Perl     script
-   g:vimsyn_folding =~ 'P' : fold Python   script
-   g:vimsyn_folding =~ 'r' : fold Ruby     script
+   g:vimsyn_folding =~ 'h' : fold let heredocs
+   g:vimsyn_folding =~ 'l' : fold Lua      heredocs
+   g:vimsyn_folding =~ 'p' : fold Perl     heredocs
+   g:vimsyn_folding =~ 'P' : fold Python   heredocs
+   g:vimsyn_folding =~ 'r' : fold Ruby     heredocs
 <
 
 By default, g:vimsyn_folding is unset.  Concatenate the indicated characters
@@ -4607,11 +4648,11 @@ two different ways:
 	  that list. >
 
    " In perl.vim:
-   :syntax include @Pod <sfile>:p:h/pod.vim
+   :syntax include @Pod <script>:p:h/pod.vim
    :syntax region perlPOD start="^=head" end="^=cut" contains=@Pod
 <
 	  When {file-name} is an absolute path (starts with "/", "c:", "$VAR"
-	  or "<sfile>") that file is sourced.  When it is a relative path
+	  or "<script>") that file is sourced.  When it is a relative path
 	  (e.g., "syntax/pod.vim") the file is searched for in 'runtimepath'.
 	  All matching files are loaded.  Using a relative path is
 	  recommended, because it allows a user to replace the included file
@@ -5198,6 +5239,10 @@ EndOfBuffer	Filler lines (~) after the last line in the buffer.
 TermCursor	Cursor in a focused terminal.
 							*hl-ErrorMsg*
 ErrorMsg	Error messages on the command line.
+							*hl-StderrMsg*
+StderrMsg	Messages in stderr from shell commands.
+							*hl-StdoutMsg*
+StdoutMsg	Messages in stdout from shell commands.
 							*hl-WinSeparator*
 WinSeparator	Separators between window splits.
 							*hl-Folded*
@@ -5492,38 +5537,7 @@ And put these lines in your vimrc: >
    autocmd BufRead,BufNewFile *.[ch] endif
 
 ==============================================================================
-17. Window-local syntax				*:ownsyntax*
-
-Normally all windows on a buffer share the same syntax settings. It is
-possible, however, to set a particular window on a file to have its own
-private syntax setting. A possible example would be to edit LaTeX source
-with conventional highlighting in one window, while seeing the same source
-highlighted differently (so as to hide control sequences and indicate bold,
-italic etc regions) in another. The 'scrollbind' option is useful here.
-
-To set the current window to have the syntax "foo", separately from all other
-windows on the buffer: >
-   :ownsyntax foo
-<						*w:current_syntax*
-This will set the "w:current_syntax" variable to "foo".  The value of
-"b:current_syntax" does not change.  This is implemented by saving and
-restoring "b:current_syntax", since the syntax files do set
-"b:current_syntax".  The value set by the syntax file is assigned to
-"w:current_syntax".
-Note: This resets the 'spell', 'spellcapcheck', 'spellfile' and 'spelloptions'
-options.
-
-Once a window has its own syntax, syntax commands executed from other windows
-on the same buffer (including :syntax clear) have no effect. Conversely,
-syntax commands executed from that window do not affect other windows on the
-same buffer.
-
-A window with its own syntax reverts to normal behavior when another buffer
-is loaded into that window or the file is reloaded.
-When splitting the window, the new window will use the original syntax.
-
-==============================================================================
-18. Color xterms				*xterm-color* *color-xterm*
+17. Color xterms				*xterm-color* *color-xterm*
 
 							*colortest.vim*
 To test your color setup, a file has been included in the Vim distribution.
@@ -5533,7 +5547,7 @@ To use it, execute this command: >
 Nvim uses 256-color and |true-color| terminal capabilities wherever possible.
 
 ==============================================================================
-19. When syntax is slow						*:syntime*
+18. When syntax is slow						*:syntime*
 
 This is aimed at authors of a syntax file.
 

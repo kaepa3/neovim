@@ -16,6 +16,7 @@
 #include "nvim/autocmd_defs.h"
 #include "nvim/buffer.h"
 #include "nvim/buffer_defs.h"
+#include "nvim/change.h"
 #include "nvim/charset.h"
 #include "nvim/cursor.h"
 #include "nvim/drawscreen.h"
@@ -31,6 +32,7 @@
 #include "nvim/ex_eval.h"
 #include "nvim/ex_eval_defs.h"
 #include "nvim/ex_getln.h"
+#include "nvim/extmark.h"
 #include "nvim/fileio.h"
 #include "nvim/fold.h"
 #include "nvim/garray.h"
@@ -50,6 +52,7 @@
 #include "nvim/message.h"
 #include "nvim/move.h"
 #include "nvim/normal.h"
+#include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/option_defs.h"
 #include "nvim/option_vars.h"
@@ -2668,7 +2671,7 @@ static win_T *qf_find_help_win(void)
   FUNC_ATTR_PURE FUNC_ATTR_WARN_UNUSED_RESULT
 {
   FOR_ALL_WINDOWS_IN_TAB(wp, curtab) {
-    if (bt_help(wp->w_buffer)) {
+    if (bt_help(wp->w_buffer) && !wp->w_config.hide && wp->w_config.focusable) {
       return wp;
     }
   }
@@ -3874,14 +3877,10 @@ static int qf_open_new_cwindow(qf_info_T *qi, int height)
   // The current window becomes the previous window afterwards.
   win_T *const win = curwin;
 
-  if (IS_QF_STACK(qi) && cmdmod.cmod_split == 0) {
-    // Create the new quickfix window at the very bottom, except when
-    // :belowright or :aboveleft is used.
-    win_goto(lastwin);
-  }
-  // Default is to open the window below the current window
+  // Default is to open the window below the current window or at the bottom,
+  // except when :belowright or :aboveleft is used.
   if (cmdmod.cmod_split == 0) {
-    flags = WSP_BELOW;
+    flags = IS_QF_STACK(qi) ? WSP_BOT : WSP_BELOW;
   }
   flags |= WSP_NEWLOC;
   if (win_split(height, flags) == FAIL) {
@@ -4153,6 +4152,8 @@ static void qf_update_buffer(qf_info_T *qi, qfline_T *old_last)
   }
 
   linenr_T old_line_count = buf->b_ml.ml_line_count;
+  colnr_T old_endcol = ml_get_buf_len(buf, old_line_count);
+  bcount_t old_bytecount = get_region_bytecount(buf, 1, old_line_count, 0, old_endcol);
   int qf_winid = 0;
 
   win_T *win;
@@ -4186,7 +4187,25 @@ static void qf_update_buffer(qf_info_T *qi, qfline_T *old_last)
   qf_update_win_titlevar(qi);
 
   qf_fill_buffer(qf_get_curlist(qi), buf, old_last, qf_winid);
-  buf_inc_changedtick(buf);
+
+  linenr_T new_line_count = buf->b_ml.ml_line_count;
+  colnr_T new_endcol = ml_get_buf_len(buf, new_line_count);
+  bcount_t new_byte_count = 0;
+  linenr_T delta = new_line_count - old_line_count;
+
+  if (old_last == NULL) {
+    new_byte_count = get_region_bytecount(buf, 1, new_line_count, 0, new_endcol);
+    extmark_splice(buf, 0, 0, old_line_count - 1, 0, old_bytecount, new_line_count - 1, new_endcol,
+                   new_byte_count, kExtmarkNoUndo);
+    changed_lines(buf, 1, 0, old_line_count > 0 ? old_line_count + 1 : 1, delta, true);
+  } else if (delta > 0) {
+    linenr_T start_lnum = old_line_count + 1;
+    new_byte_count = get_region_bytecount(buf, start_lnum, new_line_count, 0, new_endcol);
+    extmark_splice(buf, old_line_count - 1, old_endcol, 0, 0, 0, delta, new_endcol, new_byte_count,
+                   kExtmarkNoUndo);
+    changed_lines(buf, start_lnum, 0, start_lnum, delta, true);
+  }
+  buf->b_changed = false;
 
   if (old_last == NULL) {
     qf_win_pos_update(qi, 0);
@@ -4599,7 +4618,7 @@ void ex_make(exarg_T *eap)
   incr_quickfix_busy();
 
   char *errorformat = (eap->cmdidx != CMD_make && eap->cmdidx != CMD_lmake)
-                      ? p_gefm
+                      ? *curbuf->b_p_gefm != NUL ? curbuf->b_p_gefm : p_gefm
                       : p_efm;
 
   bool newlist = eap->cmdidx != CMD_grepadd && eap->cmdidx != CMD_lgrepadd;
@@ -5952,7 +5971,9 @@ static buf_T *load_dummy_buffer(char *fname, char *dirname_start, char *resultin
     aucmd_restbuf(&aco);
 
     if (newbuf_to_wipe.br_buf != NULL && bufref_valid(&newbuf_to_wipe)) {
-      wipe_buffer(newbuf_to_wipe.br_buf, false);
+      block_autocmds();
+      wipe_dummy_buffer(newbuf_to_wipe.br_buf, NULL);
+      unblock_autocmds();
     }
 
     // Add back the "dummy" flag, otherwise buflist_findname_file_id()
@@ -5976,11 +5997,11 @@ static buf_T *load_dummy_buffer(char *fname, char *dirname_start, char *resultin
   return newbuf;
 }
 
-// Wipe out the dummy buffer that load_dummy_buffer() created. Restores
-// directory to "dirname_start" prior to returning, if autocmds or the
-// 'autochdir' option have changed it.
+/// Wipe out the dummy buffer that load_dummy_buffer() created. Restores
+/// directory to "dirname_start" if not NULL prior to returning, if autocmds or
+/// the 'autochdir' option have changed it.
 static void wipe_dummy_buffer(buf_T *buf, char *dirname_start)
-  FUNC_ATTR_NONNULL_ALL
+  FUNC_ATTR_NONNULL_ARG(1)
 {
   // If any autocommand opened a window on the dummy buffer, close that
   // window.  If we can't close them all then give up.
@@ -5998,7 +6019,7 @@ static void wipe_dummy_buffer(buf_T *buf, char *dirname_start)
       }
     }
     if (!did_one) {
-      return;
+      goto fail;
     }
   }
 
@@ -6015,14 +6036,23 @@ static void wipe_dummy_buffer(buf_T *buf, char *dirname_start)
     // Restore the error/interrupt/exception state if not discarded by a
     // new aborting error, interrupt, or uncaught exception.
     leave_cleanup(&cs);
-    // When autocommands/'autochdir' option changed directory: go back.
-    restore_start_dir(dirname_start);
+
+    if (dirname_start != NULL) {
+      // When autocommands/'autochdir' option changed directory: go back.
+      restore_start_dir(dirname_start);
+    }
+
+    return;
   }
+
+fail:
+  // Keeping the buffer, remove the dummy flag.
+  buf->b_flags &= ~BF_DUMMY;
 }
 
-// Unload the dummy buffer that load_dummy_buffer() created. Restores
-// directory to "dirname_start" prior to returning, if autocmds or the
-// 'autochdir' option have changed it.
+/// Unload the dummy buffer that load_dummy_buffer() created. Restores
+/// directory to "dirname_start" prior to returning, if autocmds or the
+/// 'autochdir' option have changed it.
 static void unload_dummy_buffer(buf_T *buf, char *dirname_start)
 {
   if (curbuf == buf) {          // safety check

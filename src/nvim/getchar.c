@@ -1866,6 +1866,9 @@ int vpeekc_any(void)
 /// @return  true if a character is available, false otherwise.
 bool char_avail(void)
 {
+  if (test_disable_char_avail) {
+    return false;
+  }
   no_mapping++;
   int retval = vpeekc();
   no_mapping--;
@@ -2197,7 +2200,6 @@ static int handle_mapping(int *keylenp, const bool *timedout, int *mapdepth)
       && !(p_paste && (State & (MODE_INSERT | MODE_CMDLINE)))
       && !(State == MODE_HITRETURN && (tb_c1 == CAR || tb_c1 == ' '))
       && State != MODE_ASKMORE
-      && State != MODE_CONFIRM
       && !at_ins_compl_key()) {
     int mlen;
     int nolmaplen;
@@ -2749,8 +2751,8 @@ static int vgetorpeek(bool advance)
                 }
 
                 curwin->w_wrow = curwin->w_cline_row
-                                 + curwin->w_wcol / curwin->w_width_inner;
-                curwin->w_wcol %= curwin->w_width_inner;
+                                 + curwin->w_wcol / curwin->w_view_width;
+                curwin->w_wcol %= curwin->w_view_width;
                 curwin->w_wcol += win_col_off(curwin);
                 col = 0;  // no correction needed
               } else {
@@ -2759,7 +2761,7 @@ static int vgetorpeek(bool advance)
               }
             } else if (curwin->w_p_wrap && curwin->w_wrow) {
               curwin->w_wrow--;
-              curwin->w_wcol = curwin->w_width_inner - 1;
+              curwin->w_wcol = curwin->w_view_width - 1;
               col = curwin->w_cursor.col - 1;
             }
             if (col > 0 && curwin->w_wcol > 0) {

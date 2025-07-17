@@ -1450,6 +1450,7 @@ M.funcs = {
          "omni"	     Omni completion |i_CTRL-X_CTRL-O|
          "spell"	     Spelling suggestions |i_CTRL-X_s|
          "eval"	     |complete()| completion
+         "register"	     Words from registers |i_CTRL-X_CTRL-R|
          "unknown"	     Other internal modes
 
       If the optional {what} list argument is supplied, then only
@@ -1476,6 +1477,57 @@ M.funcs = {
     params = { { 'what', 'any[]' } },
     returns = 'table',
     signature = 'complete_info([{what}])',
+  },
+  complete_match = {
+    args = { 0, 2 },
+    base = 0,
+    desc = [=[
+      Searches backward from the given position and returns a List
+      of matches according to the 'isexpand' option. When no
+      arguments are provided, uses the current cursor position.
+
+      Each match is represented as a List containing
+      [startcol, trigger_text] where:
+      - startcol: column position where completion should start,
+        or -1 if no trigger position is found. For multi-character
+        triggers, returns the column of the first character.
+      - trigger_text: the matching trigger string from 'isexpand',
+        or empty string if no match was found or when using the
+        default 'iskeyword' pattern.
+
+      When 'isexpand' is empty, uses the 'iskeyword' pattern "\k\+$"
+      to find the start of the current keyword.
+
+      Examples: >vim
+        set isexpand=.,->,/,/*,abc
+        func CustomComplete()
+          let res = complete_match()
+          if res->len() == 0 | return | endif
+          let [col, trigger] = res[0]
+          let items = []
+          if trigger == '/*'
+            let items = ['/** */']
+          elseif trigger == '/'
+            let items = ['/*! */', '// TODO:', '// fixme:']
+          elseif trigger == '.'
+            let items = ['length()']
+          elseif trigger =~ '^\->'
+            let items = ['map()', 'reduce()']
+          elseif trigger =~ '^\abc'
+            let items = ['def', 'ghk']
+          endif
+          if items->len() > 0
+            let startcol = trigger =~ '^/' ? col : col + len(trigger)
+            call complete(startcol, items)
+          endif
+        endfunc
+        inoremap <Tab> <Cmd>call CustomComplete()<CR>
+      <
+    ]=],
+    name = 'complete_match',
+    params = { { 'lnum', 'integer' }, { 'col', 'integer' } },
+    returns = 'table',
+    signature = 'complete_match([{lnum}, {col}])',
   },
   confirm = {
     args = { 1, 4 },
@@ -2361,7 +2413,7 @@ M.funcs = {
       	<abuf>		autocmd buffer number (as a String!)
       	<amatch>	autocmd matched name
       	<cexpr>		C expression under the cursor
-      	<sfile>		sourced script file or function name
+      	<sfile>		deprecated, use <script> or <stack>
       	<slnum>		sourced script line number or function
       			line number
       	<sflnum>	script file line number, also when in
@@ -2369,7 +2421,8 @@ M.funcs = {
       	<SID>		"<SNR>123_"  where "123" is the
       			current script ID  |<SID>|
       	<script>	sourced script file, or script file
-      			where the current function was defined
+      			where the current function was defined.
+      			Use |debug.getinfo()| in Lua scripts.
       	<stack>		call stack
       	<cword>		word under the cursor
       	<cWORD>		WORD under the cursor
@@ -2744,6 +2797,7 @@ M.funcs = {
     ]=],
     name = 'finddir',
     params = { { 'name', 'string' }, { 'path', 'string' }, { 'count', 'integer' } },
+    returns = 'string|string[]',
     signature = 'finddir({name} [, {path} [, {count}]])',
   },
   findfile = {
@@ -2759,7 +2813,8 @@ M.funcs = {
 
     ]=],
     name = 'findfile',
-    params = { { 'name', 'string' }, { 'path', 'string' }, { 'count', 'any' } },
+    params = { { 'name', 'string' }, { 'path', 'string' }, { 'count', 'integer' } },
+    returns = 'string|string[]',
     signature = 'findfile({name} [, {path} [, {count}]])',
   },
   flatten = {
@@ -3457,7 +3512,7 @@ M.funcs = {
       Examples: >vim
       	let bufmodified = getbufvar(1, "&mod")
       	echo "todo myvar = " .. getbufvar("todo", "myvar")
-
+      <
     ]=],
     name = 'getbufvar',
     params = { { 'buf', 'integer|string' }, { 'varname', 'string' }, { 'def', 'any' } },
@@ -3509,8 +3564,7 @@ M.funcs = {
       	Return zero otherwise.
       If {expr} is 1, only check if a character is available, it is
       	not consumed.  Return zero if no character available.
-      If you prefer always getting a string use |getcharstr()|, or
-      specify |FALSE| as "number" in {opts}.
+      To always get a string, specify "number" as |FALSE| in {opts}.
 
       Without {expr} and when {expr} is 0 a whole character or
       special key is returned.  If it is a single character, the
@@ -3679,7 +3733,7 @@ M.funcs = {
     name = 'getcharstr',
     params = { { 'expr', '-1|0|1' }, { 'opts', 'table' } },
     returns = 'string',
-    signature = 'getcharstr([{expr}])',
+    signature = 'getcharstr([{expr} [, {opts}]])',
   },
   getcmdcomplpat = {
     desc = [=[
@@ -3704,6 +3758,9 @@ M.funcs = {
       Also see |getcmdtype()|, |setcmdpos()|, |getcmdline()|,
       |getcmdprompt()|, |getcmdcomplpat()| and |setcmdline()|.
       Returns an empty string when completion is not defined.
+
+      To get the type of the command-line completion for a specified
+      string, use |getcompletiontype()|.
     ]=],
     name = 'getcmdcompltype',
     params = {},
@@ -3885,6 +3942,21 @@ M.funcs = {
     returns = 'string[]',
     signature = 'getcompletion({pat}, {type} [, {filtered}])',
   },
+  getcompletiontype = {
+    args = 1,
+    base = 1,
+    desc = [=[
+      Return the type of the command-line completion using {pat}.
+      When no corresponding completion type is found, an empty
+      string is returned.
+      To get the current command-line completion type, use
+      |getcmdcompltype()|.
+    ]=],
+    name = 'getcompletiontype',
+    params = { { 'pat', 'string' } },
+    returns = 'string',
+    signature = 'getcompletiontype({pat})',
+  },
   getcurpos = {
     args = { 0, 1 },
     base = 1,
@@ -3916,6 +3988,7 @@ M.funcs = {
     ]=],
     name = 'getcurpos',
     params = { { 'winid', 'integer' } },
+    returns = '[integer, integer, integer, integer, integer]',
     signature = 'getcurpos([{winid}])',
   },
   getcursorcharpos = {
@@ -4259,6 +4332,7 @@ M.funcs = {
     ]=],
     name = 'getmatches',
     params = { { 'win', 'integer' } },
+    returns = 'vim.fn.getmatches.ret.item[]',
     signature = 'getmatches([{win}])',
   },
   getmousepos = {
@@ -4374,7 +4448,7 @@ M.funcs = {
     ]=],
     name = 'getpos',
     params = { { 'expr', 'string' } },
-    returns = 'integer[]',
+    returns = '[integer, integer, integer, integer]',
     signature = 'getpos({expr})',
   },
   getqflist = {
@@ -4515,7 +4589,7 @@ M.funcs = {
 
     ]=],
     name = 'getreg',
-    params = { { 'regname', 'string' }, { 'list', 'nil|false' } },
+    params = { { 'regname', 'string' }, { 'expr', 'any' }, { 'list', 'nil|false' } },
     signature = 'getreg([{regname} [, 1 [, {list}]]])',
     returns = 'string',
   },
@@ -4523,8 +4597,8 @@ M.funcs = {
     args = { 3 },
     base = 1,
     name = 'getreg',
-    params = { { 'regname', 'string' }, { 'list', 'true|number|string|table' } },
-    returns = 'string|string[]',
+    params = { { 'regname', 'string' }, { 'expr', 'any' }, { 'list', 'true|number|string|table' } },
+    returns = 'string[]',
   },
   getreginfo = {
     args = { 0, 1 },
@@ -4606,6 +4680,10 @@ M.funcs = {
       - It is evaluated in current window context, which makes a
         difference if the buffer is displayed in a window with
         different 'virtualedit' or 'list' values.
+      - When specifying an exclusive selection and {pos1} and {pos2}
+        are equal, the returned list contains a single character as
+        if selection is inclusive, to match the behavior of an empty
+        exclusive selection in Visual mode.
 
       Examples: >vim
       	xnoremap <CR>
@@ -4614,7 +4692,11 @@ M.funcs = {
       <
     ]=],
     name = 'getregion',
-    params = { { 'pos1', 'table' }, { 'pos2', 'table' }, { 'opts', 'table' } },
+    params = {
+      { 'pos1', '[integer, integer, integer, integer]' },
+      { 'pos2', '[integer, integer, integer, integer]' },
+      { 'opts', '{type?:string, exclusive?:boolean}' },
+    },
     returns = 'string[]',
     signature = 'getregion({pos1}, {pos2} [, {opts}])',
   },
@@ -4654,8 +4736,12 @@ M.funcs = {
       			(default: |FALSE|)
     ]=],
     name = 'getregionpos',
-    params = { { 'pos1', 'table' }, { 'pos2', 'table' }, { 'opts', 'table' } },
-    returns = 'integer[][][]',
+    params = {
+      { 'pos1', '[integer, integer, integer, integer]' },
+      { 'pos2', '[integer, integer, integer, integer]' },
+      { 'opts', '{type?:string, exclusive?:boolean, eol?:boolean}' },
+    },
+    returns = '[ [integer, integer, integer, integer], [integer, integer, integer, integer] ][]',
     signature = 'getregionpos({pos1}, {pos2} [, {opts}])',
   },
   getregtype = {
@@ -4979,7 +5065,7 @@ M.funcs = {
       Examples: >vim
       	let list_is_on = getwinvar(2, '&list')
       	echo "myvar = " .. getwinvar(1, 'myvar')
-
+      <
     ]=],
     name = 'getwinvar',
     params = { { 'winnr', 'integer' }, { 'varname', 'string' }, { 'def', 'any' } },
@@ -5753,7 +5839,7 @@ M.funcs = {
       Example: >vim
       	let color = inputlist(['Select color:', '1. red',
       		\ '2. green', '3. blue'])
-
+      <
     ]=],
     name = 'inputlist',
     params = { { 'textlist', 'string[]' } },
@@ -6332,7 +6418,7 @@ M.funcs = {
       object code must be compiled as position-independent ('PIC').
       Examples: >vim
       	echo libcall("libc.so", "getenv", "HOME")
-
+      <
     ]=],
     name = 'libcall',
     params = { { 'libname', 'string' }, { 'funcname', 'string' }, { 'argument', 'any' } },
@@ -8264,6 +8350,21 @@ M.funcs = {
     signature = 'printf({fmt}, {expr1} ...)',
     returns = 'string',
   },
+  prompt_getinput = {
+    args = 1,
+    base = 1,
+    desc = [=[
+      Gets the current user-input in |prompt-buffer| {buf} without invoking
+      prompt_callback. {buf} can be a buffer name or number.
+
+      If the buffer doesn't exist or isn't a prompt buffer, an empty
+      string is returned.
+
+    ]=],
+    name = 'prompt_getinput',
+    params = { { 'buf', 'integer|string' } },
+    signature = 'prompt_getinput({buf})',
+  },
   prompt_getprompt = {
     args = 1,
     base = 1,
@@ -8590,6 +8691,7 @@ M.funcs = {
     ]=],
     name = 'readfile',
     params = { { 'fname', 'string' }, { 'type', 'string' }, { 'max', 'integer' } },
+    returns = 'string[]',
     signature = 'readfile({fname} [, {type} [, {max}]])',
   },
   reduce = {
@@ -9266,11 +9368,12 @@ M.funcs = {
 
       To get the last search count when |n| or |N| was pressed, call
       this function with `recompute: 0` . This sometimes returns
-      wrong information because |n| and |N|'s maximum count is 99.
-      If it exceeded 99 the result must be max count + 1 (100). If
-      you want to get correct information, specify `recompute: 1`: >vim
+      wrong information because of 'maxsearchcount'.
+      If the count exceeded 'maxsearchcount', the result must be
+      'maxsearchcount' + 1. If you want to get correct information,
+      specify `recompute: 1`: >vim
 
-      	" result == maxcount + 1 (100) when many matches
+      	" result == 'maxsearchcount' + 1 when many matches
       	let result = searchcount(#{recompute: 0})
 
       	" Below returns correct result (recompute defaults
@@ -9357,7 +9460,7 @@ M.funcs = {
       				result.  if search exceeded
       				total count, "total" value
       				becomes `maxcount + 1`
-      				(default: 0)
+      				(default: 'maxsearchcount')
         pos		|List|		`[lnum, col, off]` value
       				when recomputing the result.
       				this changes "current" result
@@ -9821,6 +9924,7 @@ M.funcs = {
       	call cursor(4, 3)
       <positions the cursor on the first character '여'.
 
+      Returns 0 when the position could be set, -1 otherwise.
     ]=],
     name = 'setcursorcharpos',
     params = { { 'list', 'integer[]' } },
@@ -9939,7 +10043,7 @@ M.funcs = {
 
     ]=],
     name = 'setmatches',
-    params = { { 'list', 'any' }, { 'win', 'integer' } },
+    params = { { 'list', 'vim.fn.getmatches.ret.item[]' }, { 'win', 'integer' } },
     signature = 'setmatches({list} [, {win}])',
   },
   setpos = {
@@ -10186,7 +10290,7 @@ M.funcs = {
       You can also change the type of a register by appending
       nothing: >vim
       	call setreg('a', '', 'al')
-
+      <
     ]=],
     name = 'setreg',
     params = { { 'regname', 'string' }, { 'value', 'any' }, { 'options', 'string' } },
@@ -10286,7 +10390,7 @@ M.funcs = {
       Examples: >vim
       	call setwinvar(1, "&list", 0)
       	call setwinvar(2, "myvar", "foobar")
-
+      <
     ]=],
     name = 'setwinvar',
     params = { { 'nr', 'integer' }, { 'varname', 'string' }, { 'val', 'any' } },
@@ -10791,7 +10895,7 @@ M.funcs = {
 
       	" Remove all the placed signs from all the buffers
       	call sign_unplace('*')
-
+      <
     ]=],
     name = 'sign_unplace',
     params = { { 'group', 'string' }, { 'dict', 'vim.fn.sign_unplace.dict' } },
@@ -11502,7 +11606,7 @@ M.funcs = {
         echo strftime("%H:%M")		   " 11:55
         echo strftime("%c", getftime("file.c"))
       				   " Show mod time of file.c.
-
+      <
     ]=],
     name = 'strftime',
     params = { { 'format', 'string' }, { 'time', 'number' } },
@@ -11891,6 +11995,7 @@ M.funcs = {
       	let &directory = '.'
       	let swapfiles = swapfilelist()
       	let &directory = save_dir
+      <
     ]=],
     name = 'swapfilelist',
     params = {},
@@ -12748,6 +12853,7 @@ M.funcs = {
       	let newlist = uniq(copy(mylist))
       <The default compare function uses the string representation of
       each item.  For the use of {func} and {dict} see |sort()|.
+      For deduplicating text in the current buffer see |:uniq|.
 
       Returns zero if {list} is not a |List|.
 
@@ -12865,6 +12971,7 @@ M.funcs = {
     ]=],
     name = 'virtcol',
     params = { { 'expr', 'string|any[]' }, { 'list', 'boolean' }, { 'winid', 'integer' } },
+    returns = 'integer|[integer, integer]',
     signature = 'virtcol({expr} [, {list} [, {winid}]])',
   },
   virtcol2col = {
@@ -13270,7 +13377,7 @@ M.funcs = {
     ]=],
     name = 'winlayout',
     params = { { 'tabnr', 'integer' } },
-    returns = 'any[]',
+    returns = 'vim.fn.winlayout.ret',
     signature = 'winlayout([{tabnr}])',
   },
   winline = {
@@ -13292,7 +13399,8 @@ M.funcs = {
     desc = [=[
       The result is a Number, which is the number of the current
       window.  The top window has number 1.
-      Returns zero for a popup window.
+      Returns zero for a hidden or non |focusable| window, unless
+      it is the current window.
 
       The optional argument {arg} supports the following values:
       	$	the number of the last window (the window

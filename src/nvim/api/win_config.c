@@ -124,8 +124,7 @@
 ///       - `row=0` and `col=0` if `anchor` is "SW" or "SE"
 ///         (thus like a tooltip near the buffer text).
 ///   - row: Row position in units of "screen cell height", may be fractional.
-///   - col: Column position in units of "screen cell width", may be
-///            fractional.
+///   - col: Column position in units of screen cell width, may be fractional.
 ///   - focusable: Enable focus by user actions (wincmds, mouse events).
 ///       Defaults to true. Non-focusable windows can be entered by
 ///       |nvim_set_current_win()|, or, when the `mouse` field is set to true,
@@ -205,6 +204,8 @@
 ///           focused on it.
 ///   - vertical: Split vertically |:vertical|.
 ///   - split: Split direction: "left", "right", "above", "below".
+///   - _cmdline_offset: (EXPERIMENTAL) When provided, anchor the |cmdline-completion|
+///     popupmenu to this window, with an offset in screen cell width.
 ///
 /// @param[out] err Error details, if any
 ///
@@ -235,8 +236,9 @@ Window nvim_open_win(Buffer buffer, Boolean enter, Dict(win_config) *config, Err
 
   win_T *wp = NULL;
   tabpage_T *tp = curtab;
-  win_T *parent = NULL;
-  if (config->win != -1) {
+  assert(curwin != NULL);
+  win_T *parent = config->win == 0 ? curwin : NULL;
+  if (config->win > 0) {
     parent = find_window_by_handle(fconfig.window, err);
     if (!parent) {
       // find_window_by_handle has already set the error
@@ -286,6 +288,10 @@ Window nvim_open_win(Buffer buffer, Boolean enter, Dict(win_config) *config, Err
       api_set_error(err, kErrorTypeException, "Failed to create window");
     }
     goto cleanup;
+  }
+
+  if (fconfig._cmdline_offset < INT_MAX) {
+    cmdline_win = wp;
   }
 
   // Autocommands may close `wp` or move it to another tabpage, so update and check `tp` after each
@@ -408,8 +414,8 @@ void nvim_win_set_config(Window window, Dict(win_config) *config, Error *err)
   if (!parse_win_config(win, config, &fconfig, !was_split || to_split, err)) {
     return;
   }
-  win_T *parent = NULL;
-  if (config->win != -1) {
+  win_T *parent = config->win == 0 ? curwin : NULL;
+  if (config->win > 0) {
     parent = find_window_by_handle(fconfig.window, err);
     if (!parent) {
       return;
@@ -636,6 +642,11 @@ restore_curwin:
       didset_window_options(win, true);
     }
   }
+  if (fconfig._cmdline_offset < INT_MAX) {
+    cmdline_win = win;
+  } else if (win == cmdline_win && fconfig._cmdline_offset == INT_MAX) {
+    cmdline_win = NULL;
+  }
 #undef HAS_KEY_X
 }
 
@@ -757,6 +768,8 @@ Dict(win_config) nvim_win_get_config(Window window, Arena *arena, Error *err)
       if (config->footer) {
         config_put_bordertext(&rv, config, kBorderTextFooter, arena);
       }
+    } else {
+      PUT_KEY_X(rv, border, STRING_OBJ(cstr_as_string("none")));
     }
   } else if (!config->external) {
     PUT_KEY_X(rv, width, wp->w_width);
@@ -768,6 +781,9 @@ Dict(win_config) nvim_win_get_config(Window window, Arena *arena, Error *err)
   const char *rel = (wp->w_floating && !config->external
                      ? float_relative_str[config->relative] : "");
   PUT_KEY_X(rv, relative, cstr_as_string(rel));
+  if (config->_cmdline_offset < INT_MAX) {
+    PUT_KEY_X(rv, _cmdline_offset, config->_cmdline_offset);
+  }
 
   return rv;
 }
@@ -1048,6 +1064,52 @@ static void generate_api_error(win_T *wp, const char *attribute, Error *err)
   }
 }
 
+/// Parses a border style name or custom (comma-separated) style.
+bool parse_winborder(WinConfig *fconfig, Error *err)
+{
+  if (!fconfig) {
+    return false;
+  }
+  Object style = OBJECT_INIT;
+
+  if (strchr(p_winborder, ',')) {
+    Array border_chars = ARRAY_DICT_INIT;
+    char *p = p_winborder;
+    char part[MAX_SCHAR_SIZE] = { 0 };
+    int count = 0;
+
+    while (*p != NUL) {
+      if (count >= 8) {
+        api_free_array(border_chars);
+        return false;
+      }
+
+      size_t part_len = copy_option_part(&p, part, sizeof(part), ",");
+      if (part_len == 0 || part[0] == NUL) {
+        api_free_array(border_chars);
+        return false;
+      }
+
+      String str = cstr_to_string(part);
+      ADD(border_chars, STRING_OBJ(str));
+      count++;
+    }
+
+    if (count != 8) {
+      api_free_array(border_chars);
+      return false;
+    }
+
+    style = ARRAY_OBJ(border_chars);
+  } else {
+    style = CSTR_TO_OBJ(p_winborder);
+  }
+
+  parse_border_style(style, fconfig, err);
+  api_free_object(style);
+  return !ERROR_SET(err);
+}
+
 static bool parse_win_config(win_T *wp, Dict(win_config) *config, WinConfig *fconfig, bool reconf,
                              Error *err)
 {
@@ -1281,14 +1343,15 @@ static bool parse_win_config(win_T *wp, Dict(win_config) *config, WinConfig *fco
       goto fail;
     }
     border_style = config->border;
-  } else if (*p_winborder != NUL && (wp == NULL || !wp->w_floating)) {
-    border_style = CSTR_AS_OBJ(p_winborder);
-  }
-  if (border_style.type != kObjectTypeNil) {
-    parse_border_style(border_style, fconfig, err);
-    if (ERROR_SET(err)) {
-      goto fail;
+    if (border_style.type != kObjectTypeNil) {
+      parse_border_style(border_style, fconfig, err);
+      if (ERROR_SET(err)) {
+        goto fail;
+      }
     }
+  } else if (*p_winborder != NUL && (wp == NULL || !wp->w_floating)
+             && !parse_winborder(fconfig, err)) {
+    goto fail;
   }
 
   if (HAS_KEY_X(config, style)) {
@@ -1316,6 +1379,10 @@ static bool parse_win_config(win_T *wp, Dict(win_config) *config, WinConfig *fco
 
   if (HAS_KEY_X(config, hide)) {
     fconfig->hide = config->hide;
+  }
+
+  if (HAS_KEY_X(config, _cmdline_offset)) {
+    fconfig->_cmdline_offset = (int)config->_cmdline_offset;
   }
 
   return true;

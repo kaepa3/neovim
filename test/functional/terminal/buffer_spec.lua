@@ -69,7 +69,7 @@ describe(':terminal buffer', function()
       feed('<c-\\><c-n>:set bufhidden=wipe<cr>:enew<cr>')
       screen:expect([[
         ^                                                  |
-        {4:~                                                 }|*5
+        {100:~                                                 }|*5
         :enew                                             |
       ]])
     end)
@@ -78,7 +78,7 @@ describe(':terminal buffer', function()
       feed(':bnext:l<esc>')
       screen:expect([[
         ^                                                  |
-        {4:~                                                 }|*5
+        {100:~                                                 }|*5
                                                           |
       ]])
     end)
@@ -111,7 +111,7 @@ describe(':terminal buffer', function()
       tty ready                                         |
       ^                                                  |
                                                         |*4
-      {8:E21: Cannot make changes, 'modifiable' is off}     |
+      {101:E21: Cannot make changes, 'modifiable' is off}     |
     ]])
   end)
 
@@ -162,13 +162,13 @@ describe(':terminal buffer', function()
     feed('<c-\\><c-n>:bd!<cr>')
     screen:expect([[
       ^                                                  |
-      {4:~                                                 }|*5
+      {100:~                                                 }|*5
       :bd!                                              |
     ]])
     feed_command('bnext')
     screen:expect([[
       ^                                                  |
-      {4:~                                                 }|*5
+      {100:~                                                 }|*5
       :bnext                                            |
     ]])
   end)
@@ -195,11 +195,11 @@ describe(':terminal buffer', function()
     -- We should be in a new buffer now.
     screen:expect([[
       ab^c                                               |
-      {4:~                                                 }|
-      {5:==========                                        }|
+      {100:~                                                 }|
+      {3:==========                                        }|
       rows: 2, cols: 50                                 |
                                                         |
-      {18:==========                                        }|
+      {119:==========                                        }|
                                                         |
     ]])
 
@@ -236,7 +236,7 @@ describe(':terminal buffer', function()
                                                ydaer ytt|
       ^aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa|
                                                         |*4
-      {3:-- TERMINAL --}                                    |
+      {5:-- TERMINAL --}                                    |
     ]])
     command('bdelete!')
   end)
@@ -274,35 +274,29 @@ describe(':terminal buffer', function()
   it([[can use temporary normal mode <c-\><c-o>]], function()
     eq('t', fn.mode(1))
     feed [[<c-\><c-o>]]
-    screen:expect {
-      grid = [[
+    screen:expect([[
       tty ready                                         |
       ^                                                  |
                                                         |*4
-      {3:-- (terminal) --}                                  |
-    ]],
-    }
+      {5:-- (terminal) --}                                  |
+    ]])
     eq('ntT', fn.mode(1))
 
     feed [[:let g:x = 17]]
-    screen:expect {
-      grid = [[
+    screen:expect([[
       tty ready                                         |
                                                         |
                                                         |*4
       :let g:x = 17^                                     |
-    ]],
-    }
+    ]])
 
     feed [[<cr>]]
-    screen:expect {
-      grid = [[
+    screen:expect([[
       tty ready                                         |
       ^                                                  |
                                                         |*4
-      {3:-- TERMINAL --}                                    |
-    ]],
-    }
+      {5:-- TERMINAL --}                                    |
+    ]])
     eq('t', fn.mode(1))
   end)
 
@@ -321,6 +315,27 @@ describe(':terminal buffer', function()
     feed([[<C-\><C-N>]])
     eq({ mode = 'nt', blocking = false }, api.nvim_get_mode())
     command('bd!')
+  end)
+
+  it('correct size when switching buffers', function()
+    local term_buf = api.nvim_get_current_buf()
+    command('file foo | enew | vsplit')
+    api.nvim_set_current_buf(term_buf)
+    screen:expect([[
+      tty ready                │                        |
+      ^rows: 5, cols: 25        │{100:~                       }|
+                               │{100:~                       }|*3
+      {120:foo [-]                   }{2:[No Name]               }|
+                                                        |
+    ]])
+
+    feed('<C-^><C-W><C-O><C-^>')
+    screen:expect([[
+      tty ready                                         |
+      ^rows: 5, cols: 25                                 |
+      rows: 6, cols: 50                                 |
+                                                        |*4
+    ]])
   end)
 end)
 
@@ -663,10 +678,10 @@ describe('terminal input', function()
     })
     screen:expect([[
       ^                                                  |
-      {4:~                                                 }|*3
-      {5:[No Name]                       0,0-1          All}|
+      {100:~                                                 }|*3
+      {3:[No Name]                       0,0-1          All}|
                                                         |
-      {3:-- TERMINAL --}                                    |
+      {5:-- TERMINAL --}                                    |
     ]])
     local keys = {
       '<Tab>',
@@ -748,10 +763,10 @@ describe('terminal input', function()
       feed(key)
       screen:expect(([[
                                                           |
-        {4:~                                                 }|*3
-        {5:[No Name]                       0,0-1          All}|
+        {100:~                                                 }|*3
+        {3:[No Name]                       0,0-1          All}|
         %s^ {MATCH: *}|
-        {3:-- TERMINAL --}                                    |
+        {5:-- TERMINAL --}                                    |
       ]]):format(key:gsub('<%d+,%d+>$', '')))
     end
   end)

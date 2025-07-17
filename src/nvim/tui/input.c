@@ -21,6 +21,7 @@
 #include "nvim/tui/input_defs.h"
 #include "nvim/tui/termkey/driver-csi.h"
 #include "nvim/tui/termkey/termkey.h"
+#include "nvim/tui/termkey/termkey_defs.h"
 #include "nvim/tui/tui.h"
 #include "nvim/ui_client.h"
 
@@ -137,16 +138,14 @@ void tinput_init(TermInput *input, Loop *loop)
     pmap_put(int)(&kitty_key_map, kitty_key_map_entry[i].key, (ptr_t)kitty_key_map_entry[i].name);
   }
 
-  input->in_fd = STDIN_FILENO;
-
   const char *term = os_getenv_noalloc("TERM");
 
   if (!term) {
     term = "";  // termkey_new_abstract assumes non-null (#2745)
   }
 
-  input->tk = termkey_new_abstract(term,
-                                   TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_NOSTART);
+  input->tk = termkey_new_abstract(term, (TERMKEY_FLAG_UTF8 | TERMKEY_FLAG_NOSTART
+                                          | TERMKEY_FLAG_KEEPC0));
   termkey_set_buffer_size(input->tk, INPUT_BUFFER_SIZE);
   termkey_hook_terminfo_getstr(input->tk, input->tk_ti_hook_fn, input);
   termkey_start(input->tk);
@@ -249,6 +248,20 @@ static size_t handle_termkey_modifiers(TermKeyKey *key, char *buf, size_t buflen
   return len;
 }
 
+enum {
+  KEYMOD_SUPER      = 1 << 3,
+  KEYMOD_META       = 1 << 5,
+#ifdef _MSC_VER
+# pragma warning(push)
+# pragma warning(disable : 5287)
+#endif
+  KEYMOD_RECOGNIZED = (TERMKEY_KEYMOD_SHIFT | TERMKEY_KEYMOD_ALT | TERMKEY_KEYMOD_CTRL
+                       | KEYMOD_SUPER | KEYMOD_META),
+#ifdef _MSC_VER
+# pragma warning(pop)
+#endif
+};
+
 /// Handle modifiers not handled by libtermkey.
 /// Currently only Super ("D-") and Meta ("T-") are supported in Nvim.
 ///
@@ -257,10 +270,10 @@ static size_t handle_more_modifiers(TermKeyKey *key, char *buf, size_t buflen)
   FUNC_ATTR_WARN_UNUSED_RESULT
 {
   size_t len = 0;
-  if (key->modifiers & 8) {  // Super
+  if (key->modifiers & KEYMOD_SUPER) {
     len += (size_t)snprintf(buf + len, buflen - len, "D-");
   }
-  if (key->modifiers & 32) {  // Meta
+  if (key->modifiers & KEYMOD_META) {
     len += (size_t)snprintf(buf + len, buflen - len, "T-");
   }
   assert(len < buflen);
@@ -445,7 +458,7 @@ static void tk_getkeys(TermInput *input, bool force)
       continue;
     }
 
-    if (key.type == TERMKEY_TYPE_UNICODE && !key.modifiers) {
+    if (key.type == TERMKEY_TYPE_UNICODE && !(key.modifiers & KEYMOD_RECOGNIZED)) {
       forward_simple_utf8(input, &key);
     } else if (key.type == TERMKEY_TYPE_UNICODE
                || key.type == TERMKEY_TYPE_FUNCTION
@@ -457,7 +470,8 @@ static void tk_getkeys(TermInput *input, bool force)
       handle_modereport(input, &key);
     } else if (key.type == TERMKEY_TYPE_UNKNOWN_CSI) {
       handle_unknown_csi(input, &key);
-    } else if (key.type == TERMKEY_TYPE_OSC || key.type == TERMKEY_TYPE_DCS) {
+    } else if (key.type == TERMKEY_TYPE_OSC || key.type == TERMKEY_TYPE_DCS
+               || key.type == TERMKEY_TYPE_APC) {
       handle_term_response(input, &key);
     }
   }
@@ -594,6 +608,9 @@ static void handle_term_response(TermInput *input, const TermKeyKey *key)
     case TERMKEY_TYPE_DCS:
       kv_printf(response, "\x1bP%s", str);
       break;
+    case TERMKEY_TYPE_APC:
+      kv_printf(response, "\x1b_%s", str);
+      break;
     default:
       // Key type already checked for OSC/DCS in termkey_interpret_string
       UNREACHABLE;
@@ -652,8 +669,10 @@ static void handle_unknown_csi(TermInput *input, const TermKeyKey *key)
     case '?':
       // Primary Device Attributes (DA1) response
       if (input->callbacks.primary_device_attr) {
-        input->callbacks.primary_device_attr(input->tui_data);
+        void (*cb_save)(TUIData *) = input->callbacks.primary_device_attr;
+        // Clear the callback before invoking it, as it may set a new callback. #34031
         input->callbacks.primary_device_attr = NULL;
+        cb_save(input->tui_data);
       }
 
       break;

@@ -277,6 +277,23 @@ func Test_complete()
   call feedkeys("i\<C-N>\<Esc>", 'xt')
   bwipe!
   call assert_fails('set complete=ix', 'E535:')
+  call assert_fails('set complete=x', 'E539:')
+  call assert_fails('set complete=..', 'E535:')
+  set complete=.,w,b,u,k,\ s,i,d,],t,U,F,o
+  call assert_fails('set complete=i^-10', 'E535:')
+  call assert_fails('set complete=i^x', 'E535:')
+  call assert_fails('set complete=k^2,t^-1,s^', 'E535:')
+  call assert_fails('set complete=t^-1', 'E535:')
+  call assert_fails('set complete=kfoo^foo2', 'E535:')
+  call assert_fails('set complete=kfoo^', 'E535:')
+  call assert_fails('set complete=.^', 'E535:')
+  set complete=.,w,b,u,k,s,i,d,],t,U,F,o
+  set complete=.
+  set complete=.^10,t^0
+  set complete+=Ffuncref('foo'\\,\ [10])
+  set complete=Ffuncref('foo'\\,\ [10])^10
+  set complete&
+  set complete+=Ffunction('g:foo'\\,\ [10\\,\ 20])
   set complete&
 endfun
 
@@ -597,6 +614,7 @@ func Test_set_completion_string_values()
 
   " Other string options that queries the system rather than fixed enum names
   call assert_equal(['all', 'BufAdd'], getcompletion('set eventignore=', 'cmdline')[0:1])
+  call assert_equal(['-BufAdd', '-BufCreate'], getcompletion('set eventignore=all,-', 'cmdline')[0:1])
   call assert_equal(['WinLeave', 'WinResized', 'WinScrolled'], getcompletion('set eiw=', 'cmdline')[-3:-1])
   call assert_equal('latin1', getcompletion('set fileencodings=', 'cmdline')[1])
   " call assert_equal('top', getcompletion('set printoptions=', 'cmdline')[0])
@@ -2247,7 +2265,7 @@ func Test_VIM_POSIX()
     qall
   [CODE]
   if RunVim([], after, '')
-    call assert_equal(['aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\.;',
+    call assert_equal(['aAbBcCdDeEfFgHiIjJkKlLmMnoOpPqrRsStuvwWxXyZ$!%*-+<>#{|&/\.;~',
           \            'AS'], readfile('X_VIM_POSIX'))
   endif
 
@@ -2509,8 +2527,8 @@ func Test_string_option_revert_on_failure()
         \ ['completeopt', 'preview', 'a123'],
         "\ ['completepopup', 'width:20', 'border'],
         \ ['concealcursor', 'v', 'xyz'],
-        "\ ['cpoptions', 'HJ', '~'],
-        \ ['cpoptions', 'J', '~'],
+        "\ ['cpoptions', 'HJ', 'Q'],
+        \ ['cpoptions', 'J', 'Q'],
         "\ ['cryptmethod', 'zip', 'a123'],
         \ ['cursorlineopt', 'screenline', 'a123'],
         \ ['debug', 'throw', 'a123'],

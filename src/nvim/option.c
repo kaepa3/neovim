@@ -2807,7 +2807,7 @@ static const char *check_num_option_bounds(OptIndex opt_idx, OptInt *newval, cha
     }
     break;
   case kOptScroll:
-    if ((*newval <= 0 || (*newval > curwin->w_height_inner && curwin->w_height_inner > 0))
+    if ((*newval <= 0 || (*newval > curwin->w_view_height && curwin->w_view_height > 0))
         && full_screen) {
       if (*newval != 0) {
         errmsg = e_scroll;
@@ -2839,6 +2839,9 @@ static const char *validate_num_option(OptIndex opt_idx, OptInt *newval, char *e
   if (value < INT_MIN || value > INT_MAX) {
     return e_invarg;
   }
+
+  // if you increase this, also increase SEARCH_STAT_BUF_LEN in search.c
+  enum { MAX_SEARCH_COUNT = 9999, };
 
   switch (opt_idx) {
   case kOptHelpheight:
@@ -2970,6 +2973,13 @@ static const char *validate_num_option(OptIndex opt_idx, OptInt *newval, char *e
       return e_cannot_have_negative_or_zero_number_of_quickfix;
     } else if (value > 100) {
       return e_cannot_have_more_than_hundred_quickfix;
+    }
+    break;
+  case kOptMaxsearchcount:
+    if (value <= 0) {
+      return e_positive;
+    } else if (value > MAX_SEARCH_COUNT) {
+      return e_invarg;
     }
     break;
   default:
@@ -4436,6 +4446,8 @@ void *get_varp_scope_from(vimoption_T *p, int opt_flags, buf_T *buf, win_T *win)
       return &(buf->b_p_ffu);
     case kOptErrorformat:
       return &(buf->b_p_efm);
+    case kOptGrepformat:
+      return &(buf->b_p_gefm);
     case kOptGrepprg:
       return &(buf->b_p_gp);
     case kOptMakeprg:
@@ -4462,6 +4474,8 @@ void *get_varp_scope_from(vimoption_T *p, int opt_flags, buf_T *buf, win_T *win)
       return &(buf->b_p_inc);
     case kOptCompleteopt:
       return &(buf->b_p_cot);
+    case kOptIsexpand:
+      return &(buf->b_p_ise);
     case kOptDictionary:
       return &(buf->b_p_dict);
     case kOptThesaurus:
@@ -4547,6 +4561,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return *buf->b_p_inc != NUL ? &(buf->b_p_inc) : p->var;
   case kOptCompleteopt:
     return *buf->b_p_cot != NUL ? &(buf->b_p_cot) : p->var;
+  case kOptIsexpand:
+    return *buf->b_p_ise != NUL ? &(buf->b_p_ise) : p->var;
   case kOptDictionary:
     return *buf->b_p_dict != NUL ? &(buf->b_p_dict) : p->var;
   case kOptThesaurus:
@@ -4559,6 +4575,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return *buf->b_p_ffu != NUL ? &(buf->b_p_ffu) : p->var;
   case kOptErrorformat:
     return *buf->b_p_efm != NUL ? &(buf->b_p_efm) : p->var;
+  case kOptGrepformat:
+    return *buf->b_p_gefm != NUL ? &(buf->b_p_gefm) : p->var;
   case kOptGrepprg:
     return *buf->b_p_gp != NUL ? &(buf->b_p_gp) : p->var;
   case kOptMakeprg:
@@ -4673,6 +4691,8 @@ void *get_varp_from(vimoption_T *p, buf_T *buf, win_T *win)
     return &(buf->b_p_bt);
   case kOptBuflisted:
     return &(buf->b_p_bl);
+  case kOptBusy:
+    return &(buf->b_p_busy);
   case kOptChannel:
     return &(buf->b_p_channel);
   case kOptCopyindent:
@@ -5220,6 +5240,7 @@ void buf_copy_options(buf_T *buf, int flags)
       buf->b_p_ul = NO_LOCAL_UNDOLEVEL;
       buf->b_p_bkc = empty_string_option;
       buf->b_bkc_flags = 0;
+      buf->b_p_gefm = empty_string_option;
       buf->b_p_gp = empty_string_option;
       buf->b_p_mp = empty_string_option;
       buf->b_p_efm = empty_string_option;
@@ -5238,6 +5259,7 @@ void buf_copy_options(buf_T *buf, int flags)
       buf->b_cot_flags = 0;
       buf->b_p_dict = empty_string_option;
       buf->b_p_tsr = empty_string_option;
+      buf->b_p_ise = empty_string_option;
       buf->b_p_tsrfu = empty_string_option;
       buf->b_p_qe = xstrdup(p_qe);
       COPY_OPT_SCTX(buf, kBufOptQuoteescape);
@@ -6311,7 +6333,8 @@ dict_T *get_winbuf_options(const int bufopt)
 int get_scrolloff_value(win_T *wp)
 {
   // Disallow scrolloff in terminal-mode. #11915
-  if (State & MODE_TERMINAL) {
+  // Still allow 'scrolloff' for non-terminal buffers. #34447
+  if ((State & MODE_TERMINAL) && wp->w_buffer->terminal) {
     return 0;
   }
   return (int)(wp->w_p_so < 0 ? p_so : wp->w_p_so);

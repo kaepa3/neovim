@@ -391,7 +391,7 @@ int ignorecase(char *pat)
   return ignorecase_opt(pat, p_ic, p_scs);
 }
 
-/// As ignorecase() put pass the "ic" and "scs" flags.
+/// As ignorecase() but pass the "ic" and "scs" flags.
 int ignorecase_opt(char *pat, int ic_in, int scs)
 {
   int ic = ic_in;
@@ -1264,6 +1264,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, size_t patlen
       // do not fill the msgbuf buffer, if cmd_silent is set, leave it
       // empty for the search_stat feature.
       if (!cmd_silent) {
+        ui_busy_start();
         msgbuf[0] = (char)dirc;
         if (utf_iscomposing_first(utf_ptr2char(p))) {
           // Use a space to draw the composing char on.
@@ -1310,6 +1311,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, size_t patlen
 
         gotocmdline(false);
         ui_flush();
+        ui_busy_stop();
         msg_nowait = true;  // don't wait for this message
       }
 
@@ -1425,7 +1427,7 @@ int do_search(oparg_T *oap, int dirc, int search_delim, char *pat, size_t patlen
                            || (!(fdo_flags & kOptFdoFlagSearch)
                                && hasFolding(curwin, curwin->w_cursor.lnum, NULL,
                                              NULL))),
-                          SEARCH_STAT_DEF_MAX_COUNT,
+                          (int)p_msc,
                           SEARCH_STAT_DEF_TIMEOUT);
     }
 
@@ -2363,7 +2365,7 @@ void showmatch(int c)
 
   bool col_visible = curwin->w_p_wrap
                      || (vcol >= curwin->w_leftcol
-                         && vcol < curwin->w_leftcol + curwin->w_width_inner);
+                         && vcol < curwin->w_leftcol + curwin->w_view_width);
   if (!col_visible) {
     return;
   }
@@ -2679,6 +2681,7 @@ static void cmdline_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, bool sh
 
   // keep the message even after redraw, but don't put in history
   msg_hist_off = true;
+  msg_ext_overwrite = true;
   msg_ext_set_kind("search_count");
   give_warning(msgbuf, false);
   msg_hist_off = false;
@@ -2701,7 +2704,7 @@ static void update_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, searchst
   static int cnt = 0;
   static bool exact_match = false;
   static int incomplete = 0;
-  static int last_maxcount = SEARCH_STAT_DEF_MAX_COUNT;
+  static int last_maxcount = 0;
   static int chgtick = 0;
   static char *lastpat = NULL;
   static size_t lastpatlen = 0;
@@ -2714,7 +2717,7 @@ static void update_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, searchst
     stat->cnt = cnt;
     stat->exact_match = exact_match;
     stat->incomplete = incomplete;
-    stat->last_maxcount = last_maxcount;
+    stat->last_maxcount = (int)p_msc;
     return;
   }
   last_maxcount = maxcount;
@@ -2722,12 +2725,9 @@ static void update_search_stat(int dirc, pos_T *pos, pos_T *cursor_pos, searchst
                 || (dirc == '/' && lt(p, lastpos)));
 
   // If anything relevant changed the count has to be recomputed.
-  // STRNICMP ignores case, but we should not ignore case.
-  // Unfortunately, there is no STRNICMP function.
-  // XXX: above comment should be "no MB_STRCMP function" ?
   if (!(chgtick == buf_get_changedtick(curbuf)
         && (lastpat != NULL  // suppress clang/NULL passed as nonnull parameter
-            && mb_strnicmp(lastpat, spats[last_idx].pat, lastpatlen) == 0
+            && strncmp(lastpat, spats[last_idx].pat, lastpatlen) == 0
             && lastpatlen == spats[last_idx].patlen)
         && equalpos(lastpos, *cursor_pos)
         && lbuf == curbuf)
@@ -2801,7 +2801,7 @@ void f_searchcount(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
 {
   pos_T pos = curwin->w_cursor;
   char *pattern = NULL;
-  int maxcount = SEARCH_STAT_DEF_MAX_COUNT;
+  int maxcount = (int)p_msc;
   int timeout = SEARCH_STAT_DEF_TIMEOUT;
   bool recompute = true;
   searchstat_T stat;
@@ -3022,6 +3022,11 @@ static int fuzzy_match_compute_score(const char *const fuzpat, const char *const
   // Apply unmatched penalty
   const int unmatched = strSz - numMatches;
   score += UNMATCHED_LETTER_PENALTY * unmatched;
+  // In a long string, not all matches may be found due to the recursion limit.
+  // If at least one match is found, reset the score to a non-negative value.
+  if (score < 0 && numMatches > 0) {
+    score = 0;
+  }
 
   // Apply ordering bonuses
   for (int i = 0; i < numMatches; i++) {

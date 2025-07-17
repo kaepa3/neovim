@@ -124,7 +124,7 @@ describe('completion', function()
         foo                                                         |
         ^                                                            |
         {1:~                                                           }|*5
-        {5:-- ^X mode (^]^D^E^F^I^K^L^N^O^Ps^U^V^Y)}                    |
+        {5:-- ^X mode (^]^D^E^F^I^K^L^N^O^P^Rs^U^V^Y)}                  |
       ]])
       feed('<C-n>')
       screen:expect([[
@@ -1372,5 +1372,34 @@ describe('completion', function()
       {1:~                                                           }|*5
       {5:-- Keyword completion (^N^P) The only match}                 |
     ]])
+  end)
+
+  -- oldtest: Test_shortmess()
+  it('shortmess+=c turns off completion messages', function()
+    command([[call setline(1, ['hello', 'hullo', 'heee'])]])
+    feed('Goh<C-N>')
+    screen:expect([[
+      hello                                                       |
+      hullo                                                       |
+      heee                                                        |
+      hello^                                                       |
+      {12:hello          }{1:                                             }|
+      {4:hullo          }{1:                                             }|
+      {4:heee           }{1:                                             }|
+      {5:-- Keyword completion (^N^P) }{6:match 1 of 3}                   |
+    ]])
+    feed('<Esc>')
+    command('set shm+=c')
+    feed('Sh<C-N>')
+    screen:expect([[
+      hello                                                       |
+      hullo                                                       |
+      heee                                                        |
+      hello^                                                       |
+      {12:hello          }{1:                                             }|
+      {4:hullo          }{1:                                             }|
+      {4:heee           }{1:                                             }|
+      {5:-- INSERT --}                                                |
+   ]])
   end)
 end)
