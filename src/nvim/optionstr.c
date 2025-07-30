@@ -43,6 +43,7 @@
 #include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
 #include "nvim/regexp_defs.h"
+#include "nvim/shada.h"
 #include "nvim/spell.h"
 #include "nvim/spellfile.h"
 #include "nvim/spellsuggest.h"
@@ -170,6 +171,7 @@ void check_buf_options(buf_T *buf)
   check_string_option(&buf->b_p_tfu);
   check_string_option(&buf->b_p_tc);
   check_string_option(&buf->b_p_dict);
+  check_string_option(&buf->b_p_dia);
   check_string_option(&buf->b_p_tsr);
   check_string_option(&buf->b_p_tsrfu);
   check_string_option(&buf->b_p_lw);
@@ -1032,6 +1034,16 @@ const char *did_set_cursorlineopt(optset_T *args)
 
   // This could be changed to use opt_strings_flags() instead.
   if (**varp == NUL || fill_culopt_flags(*varp, win) != OK) {
+    return e_invarg;
+  }
+
+  return NULL;
+}
+
+/// The 'diffanchors' option is changed.
+const char *did_set_diffanchors(optset_T *args)
+{
+  if (diffanchors_changed(args->os_flags & OPT_LOCAL) == FAIL) {
     return e_invarg;
   }
 

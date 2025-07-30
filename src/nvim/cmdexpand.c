@@ -254,6 +254,7 @@ int nextwild(expand_T *xp, int type, int options, bool escape)
 {
   CmdlineInfo *const ccline = get_cmdline_info();
   char *p;
+  bool from_wildtrigger_func = options & WILD_FUNC_TRIGGER;
 
   if (xp->xp_numfiles == -1) {
     pre_incsearch_pos = xp->xp_pre_incsearch_pos;
@@ -280,16 +281,23 @@ int nextwild(expand_T *xp, int type, int options, bool escape)
     return FAIL;
   }
 
-  // If cmd_silent is set then don't show the dots, because redrawcmd() below
-  // won't remove them.
-  if (!cmd_silent && !(ui_has(kUICmdline) || ui_has(kUIWildmenu))) {
-    msg_puts("...");  // show that we are busy
-    ui_flush();
-  }
-
   int i = (int)(xp->xp_pattern - ccline->cmdbuff);
   assert(ccline->cmdpos >= i);
   xp->xp_pattern_len = (size_t)ccline->cmdpos - (size_t)i;
+
+  // Skip showing matches if prefix is invalid during wildtrigger()
+  if (from_wildtrigger_func && xp->xp_context == EXPAND_COMMANDS
+      && xp->xp_pattern_len == 0) {
+    return FAIL;
+  }
+
+  // If cmd_silent is set then don't show the dots, because redrawcmd() below
+  // won't remove them.
+  if (!cmd_silent && !from_wildtrigger_func
+      && !(ui_has(kUICmdline) || ui_has(kUIWildmenu))) {
+    msg_puts("...");  // show that we are busy
+    ui_flush();
+  }
 
   if (type == WILD_NEXT || type == WILD_PREV
       || type == WILD_PAGEUP || type == WILD_PAGEDOWN
@@ -2287,6 +2295,10 @@ static const char *set_context_by_cmdname(const char *cmd, cmdidx_T cmdidx, expa
     break;
   case CMD_checkhealth:
     xp->xp_context = EXPAND_CHECKHEALTH;
+    break;
+
+  case CMD_retab:
+    xp->xp_context = EXPAND_RETAB;
     xp->xp_pattern = (char *)arg;
     break;
 
@@ -2769,6 +2781,16 @@ static char *get_scriptnames_arg(expand_T *xp FUNC_ATTR_UNUSED, int idx)
 }
 
 /// Function given to ExpandGeneric() to obtain the possible arguments of the
+/// ":retab {-indentonly}" option.
+static char *get_retab_arg(expand_T *xp FUNC_ATTR_UNUSED, int idx)
+{
+  if (idx == 0) {
+    return "-indentonly";
+  }
+  return NULL;
+}
+
+/// Function given to ExpandGeneric() to obtain the possible arguments of the
 /// ":messages {clear}" command.
 static char *get_messages_arg(expand_T *xp FUNC_ATTR_UNUSED, int idx)
 {
@@ -2853,6 +2875,7 @@ static int ExpandOther(char *pat, expand_T *xp, regmatch_T *rmp, char ***matches
     { EXPAND_ARGLIST, get_arglist_name, true, false },
     { EXPAND_BREAKPOINT, get_breakadd_arg, true, true },
     { EXPAND_SCRIPTNAMES, get_scriptnames_arg, true, false },
+    { EXPAND_RETAB, get_retab_arg, true, true },
     { EXPAND_CHECKHEALTH, get_healthcheck_names, true, false },
   };
   int ret = FAIL;
@@ -3150,12 +3173,13 @@ void ExpandGeneric(const char *const pat, expand_T *xp, regmatch_T *regmatch, ch
 
 /// Expand shell command matches in one directory of $PATH.
 ///
-/// @param pathlen  length of the path portion of pat.
-static void expand_shellcmd_onedir(char *pat, size_t pathlen, char ***matches, int *numMatches,
-                                   int flags, hashtab_T *ht, garray_T *gap)
+/// @param pathed_pattern  fully pathed pattern
+/// @param pathlen         length of the path portion of pathed_pattern (0 if no path)
+static void expand_shellcmd_onedir(char *pathed_pattern, size_t pathlen, char ***matches,
+                                   int *numMatches, int flags, hashtab_T *ht, garray_T *gap)
 {
   // Expand matches in one directory of $PATH.
-  if (expand_wildcards(1, &pat, numMatches, matches, flags) != OK) {
+  if (expand_wildcards(1, &pathed_pattern, numMatches, matches, flags) != OK) {
     return;
   }
 
@@ -3274,6 +3298,9 @@ static void expand_shellcmd(char *filepat, char ***matches, int *numMatches, int
       seplen = !after_pathsep(s, e) ? STRLEN_LITERAL(PATHSEPSTR) : 0;
     }
 
+    // Make sure that the pathed pattern (ie the path and pattern concatenated
+    // together) will fit inside the buffer. If not skip it and move on to the
+    // next path.
     if (pathlen + seplen + patlen + 1 <= MAXPATHL) {
       if (pathlen > 0) {
         xmemcpyz(buf, s, pathlen);

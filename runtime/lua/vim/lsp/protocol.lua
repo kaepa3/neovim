@@ -350,6 +350,7 @@ function protocol.make_client_capabilities()
         },
         dataSupport = true,
         relatedInformation = true,
+        relatedDocumentSupport = true,
       },
       inlayHint = {
         dynamicRegistration = true,
@@ -554,6 +555,9 @@ function protocol.make_client_capabilities()
         dynamicRegistration = true,
       },
       selectionRange = {
+        dynamicRegistration = false,
+      },
+      linkedEditingRange = {
         dynamicRegistration = false,
       },
     },

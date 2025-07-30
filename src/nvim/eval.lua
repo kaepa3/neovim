@@ -2405,35 +2405,35 @@ M.funcs = {
       done like for the |cmdline-special| variables with their
       associated modifiers.  Here is a short overview:
 
-      	%		current file name
-      	#		alternate file name
-      	#n		alternate file name n
-      	<cfile>		file name under the cursor
-      	<afile>		autocmd file name
-      	<abuf>		autocmd buffer number (as a String!)
-      	<amatch>	autocmd matched name
+      	%		Current file name
+      	#		Alternate file name
+      	#n		Alternate file name n
+      	<cfile>		File name under the cursor
+      	<afile>		Autocmd file name
+      	<abuf>		Autocmd buffer number (as a String!)
+      	<amatch>	Autocmd matched name
       	<cexpr>		C expression under the cursor
-      	<sfile>		deprecated, use <script> or <stack>
-      	<slnum>		sourced script line number or function
+      	<sfile>		Deprecated, use <script> or <stack>
+      	<slnum>		Sourced script line number or function
       			line number
-      	<sflnum>	script file line number, also when in
+      	<sflnum>	Script file line number, also when in
       			a function
       	<SID>		"<SNR>123_"  where "123" is the
       			current script ID  |<SID>|
-      	<script>	sourced script file, or script file
+      	<script>	Sourced script file, or script file
       			where the current function was defined.
-      			Use |debug.getinfo()| in Lua scripts.
-      	<stack>		call stack
-      	<cword>		word under the cursor
+      			For Lua see |lua-script-location|.
+      	<stack>		Call stack
+      	<cword>		Word under the cursor
       	<cWORD>		WORD under the cursor
-      	<client>	the {clientid} of the last received
+      	<client>	The {clientid} of the last received
       			message
       Modifiers:
-      	:p		expand to full path
-      	:h		head (last path component removed)
-      	:t		tail (last path component only)
-      	:r		root (one extension removed)
-      	:e		extension only
+      	:p		Expand to full path
+      	:h		Head (last path component removed)
+      	:t		Tail (last path component only)
+      	:r		Root (one extension removed)
+      	:e		Extension only
 
       Example: >vim
       	let &tags = expand("%:p:h") .. "/tags"
@@ -3901,6 +3901,7 @@ M.funcs = {
       messages	|:messages| suboptions
       option		options
       packadd		optional package |pack-add| names
+      retab		|:retab| suboptions
       runtime		|:runtime| completion
       scriptnames	sourced script names |:scriptnames|
       shellcmd	Shell command
@@ -9654,17 +9655,25 @@ M.funcs = {
     signature = 'searchpos({pattern} [, {flags} [, {stopline} [, {timeout} [, {skip}]]]])',
   },
   serverlist = {
+    args = { 0, 1 },
     desc = [=[
       Returns a list of server addresses, or empty if all servers
       were stopped. |serverstart()| |serverstop()|
+
+      The optional argument {opts} is a Dict and supports the following items:
+
+        peer  : If |TRUE|, servers not started by |serverstart()| 
+                will also be returned. (default: |FALSE|)
+                Not supported on Windows yet.
+
       Example: >vim
       	echo serverlist()
       <
     ]=],
     name = 'serverlist',
-    params = {},
+    params = { { 'opts', 'table' } },
     returns = 'string[]',
-    signature = 'serverlist()',
+    signature = 'serverlist([{opts}])',
   },
   serverstart = {
     args = { 0, 1 },
@@ -12847,6 +12856,8 @@ M.funcs = {
     base = 1,
     tags = { 'E882' },
     desc = [=[
+      Note: Prefer |vim.list.unique()| in Lua.
+
       Remove second and succeeding copies of repeated adjacent
       {list} items in-place.  Returns {list}.  If you want a list
       to remain unmodified make a copy first: >vim
@@ -13067,6 +13078,36 @@ M.funcs = {
     name = 'wildmenumode',
     params = {},
     signature = 'wildmenumode()',
+  },
+  wildtrigger = {
+    desc = [==[
+      Start wildcard expansion in the command-line, using the
+      behavior defined by the 'wildmode' and 'wildoptions' settings.
+      See |cmdline-completion|.
+
+      This function also enables completion in search patterns such
+      as |/|, |?|, |:s|, |:g|, |:v| and |:vimgrep|.
+
+      Unlike pressing 'wildchar' manually, this function does not
+      produce a beep when no matches are found and generally
+      operates more quietly.  This makes it suitable for triggering
+      completion automatically, such as from an |:autocmd|.
+      				*cmdline-autocompletion*
+      Example: To make the completion menu pop up automatically as
+      you type on the command line, use: >vim
+      	autocmd CmdlineChanged [:/?] call wildtrigger()
+      	set wildmode=noselect:lastused,full wildoptions=pum
+      <
+      To retain normal history navigation (up/down keys): >vim
+      	cnoremap <Up>   <C-U><Up>
+      	cnoremap <Down> <C-U><Down>
+      <
+      Return value is always 0.
+    ]==],
+    name = 'wildtrigger',
+    params = {},
+    returns = 'number',
+    signature = 'wildtrigger()',
   },
   win_execute = {
     args = { 2, 3 },

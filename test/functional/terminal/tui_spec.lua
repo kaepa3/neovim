@@ -264,6 +264,16 @@ describe('TUI :restart', function()
     restart_pid_check()
     gui_running_check()
 
+    -- Check ":restart +qall" on an unmodified buffer.
+    tt.feed_data(':restart +qall\013')
+    screen_expect(s0)
+    restart_pid_check()
+    gui_running_check()
+
+    -- Check ":restart +echo" cannot restart server.
+    tt.feed_data(':restart +echo\013')
+    screen:expect({ any = vim.pesc('+cmd did not quit the server') })
+
     tt.feed_data('ithis will be removed\027')
     screen_expect([[
       this will be remove^d                              |
@@ -273,20 +283,15 @@ describe('TUI :restart', function()
       {5:-- TERMINAL --}                                    |
     ]])
 
-    -- Check ":restart" on a modified buffer.
-    tt.feed_data(':restart\013')
-    screen_expect([[
-      this will be removed                              |
-      {3:                                                  }|
-      {101:E37: No write since last change}                   |
-      {101:E162: No write since last change for buffer "[No N}|
-      {101:ame]"}                                             |
-      {102:Press ENTER or type command to continue}^           |
-      {5:-- TERMINAL --}                                    |
-    ]])
+    -- Check ":confirm restart" on a modified buffer.
+    tt.feed_data(':confirm restart\013')
+    screen:expect({ any = vim.pesc('Save changes to "Untitled"?') })
 
-    -- Check ":restart!".
-    tt.feed_data(':restart!\013')
+    -- Cancel the operation (abandons restart).
+    tt.feed_data('C\013')
+
+    -- Check ":restart" on the modified buffer.
+    tt.feed_data(':restart\013')
     screen_expect(s0)
     restart_pid_check()
     gui_running_check()
@@ -3410,9 +3415,24 @@ describe('TUI', function()
     end)
   end)
 
-  it('queries the terminal for OSC 52 support', function()
+  it('queries the terminal for OSC 52 support with XTGETTCAP', function()
     clear()
+    if not exec_lua('return pcall(require, "ffi")') then
+      pending('missing LuaJIT FFI')
+    end
+
+    -- Change vterm's DA1 response so that it doesn't include 52
+    exec_lua(function()
+      local ffi = require('ffi')
+      ffi.cdef [[
+        extern char vterm_primary_device_attr[]
+      ]]
+
+      ffi.copy(ffi.C.vterm_primary_device_attr, '61;22')
+    end)
+
     exec_lua([[
+      _G.query = false
       vim.api.nvim_create_autocmd('TermRequest', {
         callback = function(args)
           local req = args.data.sequence
@@ -3420,6 +3440,7 @@ describe('TUI', function()
           if sequence and vim.text.hexdecode(sequence) == 'Ms' then
             local resp = string.format('\027P1+r%s=%s\027\\', sequence, vim.text.hexencode('\027]52;;\027\\'))
             vim.api.nvim_chan_send(vim.bo[args.buf].channel, resp)
+            _G.query = true
             return true
           end
         end,
@@ -3430,7 +3451,6 @@ describe('TUI', function()
     screen = tt.setup_child_nvim({
       '--listen',
       child_server,
-      -- Use --clean instead of -u NONE to load the osc52 plugin
       '--clean',
     }, {
       env = {
@@ -3444,6 +3464,7 @@ describe('TUI', function()
     retry(nil, 1000, function()
       eq({ true, { osc52 = true } }, { child_session:request('nvim_eval', 'g:termfeatures') })
     end)
+    eq(true, exec_lua([[return _G.query]]))
 
     -- Attach another (non-TUI) UI to the child instance
     local alt = Screen.new(nil, nil, nil, child_session)
@@ -3462,6 +3483,43 @@ describe('TUI', function()
     eq({ true, {} }, { child_session:request('nvim_eval', 'g:termfeatures') })
   end)
 
+  it('determines OSC 52 support from DA1 response', function()
+    clear()
+    exec_lua([[
+      -- Check that we do not emit an XTGETTCAP request when DA1 indicates support
+      _G.query = false
+      vim.api.nvim_create_autocmd('TermRequest', {
+        callback = function(args)
+          local req = args.data.sequence
+          local sequence = req:match('^\027P%+q([%x;]+)$')
+          if sequence and vim.text.hexdecode(sequence) == 'Ms' then
+            _G.query = true
+            return true
+          end
+        end,
+      })
+    ]])
+
+    local child_server = new_pipename()
+    screen = tt.setup_child_nvim({
+      '--listen',
+      child_server,
+      '--clean',
+    }, {
+      env = {
+        VIMRUNTIME = os.getenv('VIMRUNTIME'),
+      },
+    })
+
+    screen:expect({ any = '%[No Name%]' })
+
+    local child_session = n.connect(child_server)
+    retry(nil, 1000, function()
+      eq({ true, { osc52 = true } }, { child_session:request('nvim_eval', 'g:termfeatures') })
+    end)
+    eq(false, exec_lua([[return _G.query]]))
+  end)
+
   it('does not query the terminal for OSC 52 support when disabled', function()
     clear()
     exec_lua([[
@@ -3472,6 +3530,7 @@ describe('TUI', function()
           local sequence = req:match('^\027P%+q([%x;]+)$')
           if sequence and vim.text.hexdecode(sequence) == 'Ms' then
             _G.query = true
+            return true
           end
         end,
       })
@@ -3481,7 +3540,6 @@ describe('TUI', function()
     screen = tt.setup_child_nvim({
       '--listen',
       child_server,
-      -- Use --clean instead of -u NONE to load the osc52 plugin
       '--clean',
       '--cmd',
       'let g:termfeatures = #{osc52: v:false}',
@@ -3675,9 +3733,9 @@ describe('TUI client', function()
     screen_client:expect(s1)
     screen_server:expect(s1)
 
-    -- Run :restart! on the remote client.
+    -- Run :restart on the remote client.
     -- The remote client should start a new server while the original one should exit.
-    feed_data(':restart!\n')
+    feed_data(':restart\n')
     screen_client:expect([[
       ^                                                  |
       {100:~                                                 }|*3
@@ -3752,9 +3810,9 @@ describe('TUI client', function()
     feed_data(':echo "GUI Running: " .. has("gui_running")\013')
     screen_client:expect({ any = 'GUI Running: 1' })
 
-    -- Run :restart! on the client.
+    -- Run :restart on the client.
     -- The client should start a new server while the original server should exit.
-    feed_data(':restart!\n')
+    feed_data(':restart\n')
     screen_client:expect([[
       ^                                                  |
       {100:~                                                 }|*4

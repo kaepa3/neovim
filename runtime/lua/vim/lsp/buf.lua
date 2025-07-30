@@ -61,19 +61,32 @@ function M.hover(config)
 
     -- Filter errors from results
     local results1 = {} --- @type table<integer,lsp.Hover>
+    local empty_response = false
 
     for client_id, resp in pairs(results) do
       local err, result = resp.err, resp.result
       if err then
         lsp.log.error(err.code, err.message)
-      elseif result then
-        results1[client_id] = result
+      elseif result and result.contents then
+        -- Make sure the response is not empty
+        if
+          (type(result.contents) == 'table' and #(vim.tbl_get(result.contents, 'value') or '') > 0)
+          or type(result.contents == 'string') and #result.contents > 0
+        then
+          results1[client_id] = result
+        else
+          empty_response = true
+        end
       end
     end
 
     if vim.tbl_isempty(results1) then
       if config.silent ~= true then
-        vim.notify('No information available', vim.log.levels.INFO)
+        if empty_response then
+          vim.notify('Empty hover response', vim.log.levels.INFO)
+        else
+          vim.notify('No information available', vim.log.levels.INFO)
+        end
       end
       return
     end
@@ -394,11 +407,9 @@ function M.signature_help(config)
       local sfx = total > 1
           and string.format(' (%d/%d)%s', idx, total, can_cycle and ' (<C-s> to cycle)' or '')
         or ''
-      local title = string.format('Signature Help: %s%s', client.name, sfx)
-      if config.border then
-        config.title = title
-      else
-        table.insert(lines, 1, '# ' .. title)
+      config.title = config.title or string.format('Signature Help: %s%s', client.name, sfx)
+      if not config.border then
+        table.insert(lines, 1, '# ' .. config.title)
         if hl then
           hl[1] = hl[1] + 1
           hl[3] = hl[3] + 1
