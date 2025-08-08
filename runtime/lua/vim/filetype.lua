@@ -2220,6 +2220,7 @@ local pattern = {
     ['/gitolite%-admin/conf/'] = starsetf('gitolite'),
     ['/%.i3/config$'] = 'i3config',
     ['/i3/config$'] = 'i3config',
+    ['/waybar/config$'] = 'jsonc',
     ['/%.mplayer/config$'] = 'mplayerconf',
     ['/supertux2/config$'] = 'scheme',
     ['/neofetch/config%.conf$'] = 'sh',
@@ -2342,6 +2343,7 @@ local pattern = {
   },
   ['require'] = {
     ['%-requirements%.txt$'] = 'requirements',
+    ['requirements%-.*%.txt$'] = 'requirements',
     ['^requirements/.*%.txt$'] = 'requirements',
     ['^requires/.*%.txt$'] = 'requirements',
   },
