@@ -16,8 +16,10 @@ local lsp = vim._defer_require('vim.lsp', {
   document_color = ..., --- @module 'vim.lsp.document_color'
   handlers = ..., --- @module 'vim.lsp.handlers'
   inlay_hint = ..., --- @module 'vim.lsp.inlay_hint'
+  inline_completion = ..., --- @module 'vim.lsp.inline_completion'
   linked_editing_range = ..., --- @module 'vim.lsp.linked_editing_range'
   log = ..., --- @module 'vim.lsp.log'
+  on_type_formatting = ..., --- @module 'vim.lsp.on_type_formatting'
   protocol = ..., --- @module 'vim.lsp.protocol'
   rpc = ..., --- @module 'vim.lsp.rpc'
   semantic_tokens = ..., --- @module 'vim.lsp.semantic_tokens'
@@ -1375,7 +1377,7 @@ function lsp.formatexpr(opts)
       local response =
         client:request_sync(ms.textDocument_rangeFormatting, params, timeout_ms, bufnr)
       if response and response.result then
-        lsp.util.apply_text_edits(response.result, bufnr, client.offset_encoding)
+        util.apply_text_edits(response.result, bufnr, client.offset_encoding)
         return 0
       end
     end
@@ -1504,10 +1506,13 @@ lsp.log_levels = log.levels
 ---
 --- Use `lsp.log_levels` for reverse lookup.
 ---
+---@deprecated
 ---@see |vim.lsp.log_levels|
 ---
 ---@param level (integer|string) the case insensitive level name or number
 function lsp.set_log_level(level)
+  vim.deprecate('vim.lsp.set_log_level()', 'vim.lsp.log.set_level()', '0.13')
+
   if type(level) == 'string' or type(level) == 'number' then
     log.set_level(level)
   else
@@ -1516,8 +1521,12 @@ function lsp.set_log_level(level)
 end
 
 --- Gets the path of the logfile used by the LSP client.
+---
+---@deprecated
 ---@return string path to log file
 function lsp.get_log_path()
+  vim.deprecate('vim.lsp.get_log_path()', 'vim.lsp.log.get_filename()', '0.13')
+
   return log.get_filename()
 end
 

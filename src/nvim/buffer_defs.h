@@ -399,7 +399,7 @@ struct file_buffer {
 
   varnumber_T b_last_changedtick;       // b:changedtick when TextChanged was
                                         // last triggered.
-  varnumber_T b_last_changedtick_i;     // b:changedtick for TextChangedI
+  varnumber_T b_last_changedtick_i;     // b:changedtick for TextChangedI/T
   varnumber_T b_last_changedtick_pum;   // b:changedtick for TextChangedP
 
   bool b_saving;                // Set to true if we are in the middle of
@@ -540,6 +540,8 @@ struct file_buffer {
 #ifdef BACKSLASH_IN_FILENAME
   char *b_p_csl;                ///< 'completeslash'
 #endif
+  Callback *b_p_cpt_cb;         ///< F{func} in 'complete' callback
+  int b_p_cpt_count;            ///< Count of values in 'complete'
   char *b_p_cfu;                ///< 'completefunc'
   Callback b_cfu_cb;            ///< 'completefunc' callback
   char *b_p_ofu;                ///< 'omnifunc'

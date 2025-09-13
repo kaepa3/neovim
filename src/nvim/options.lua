@@ -1,4 +1,4 @@
--- vim: tw=80
+-- vim: tw=78
 
 --- @class vim.option_meta
 --- @field full_name string
@@ -240,6 +240,41 @@ local options = {
       short_desc = N_('automatic completion in insert mode'),
       type = 'boolean',
       varname = 'p_ac',
+    },
+    {
+      abbreviation = 'acl',
+      defaults = 0,
+      desc = [=[
+        Delay in milliseconds before the autocomplete menu appears after
+        typing.  If you prefer it not to open too quickly, set this value
+        slightly above your typing speed.  See |ins-autocompletion|.
+      ]=],
+      full_name = 'autocompletedelay',
+      scope = { 'global' },
+      short_desc = N_('delay in msec before menu appears after typing'),
+      type = 'number',
+      varname = 'p_acl',
+    },
+    {
+      abbreviation = 'act',
+      defaults = 80,
+      desc = [=[
+        Initial timeout (in milliseconds) for the decaying time-sliced
+        completion algorithm.  Starts at this value, halves for each slower
+        source until a minimum is reached.  All sources run, but slower ones
+        are quickly de-prioritized.  The default is tuned so the popup menu
+        opens within ~200ms even with multiple slow sources on a slow system.
+        Changing this value is rarely needed.  Only 80 or higher is valid.
+        Special case: when 'complete' contains "F" or "o" (function sources),
+        a longer timeout is used, allowing up to ~1s for sources such as LSP
+        servers that may sometimes take longer (e.g., while loading modules).
+        See |ins-autocompletion|.
+      ]=],
+      full_name = 'autocompletetimeout',
+      scope = { 'global' },
+      short_desc = N_('initial decay timeout for autocompletion algorithm'),
+      type = 'number',
+      varname = 'p_act',
     },
     {
       abbreviation = 'ai',
@@ -1170,6 +1205,7 @@ local options = {
       full_name = 'chistory',
       scope = { 'global' },
       short_desc = N_('number of quickfix lists stored in history'),
+      tags = { 'E1542', 'E1543' },
       type = 'number',
       varname = 'p_chi',
     },
@@ -1447,10 +1483,11 @@ local options = {
       values = { '.', 'w', 'b', 'u', 'k', 'kspell', 's', 'i', 'd', ']', 't', 'U', 'f', 'F', 'o' },
       deny_duplicates = true,
       desc = [=[
-        This option specifies how keyword completion |ins-completion| works
-        when CTRL-P or CTRL-N are used.  It is also used for whole-line
-        completion |i_CTRL-X_CTRL-L|.  It indicates the type of completion
-        and the places to scan.  It is a comma-separated list of flags:
+        This option controls how completion |ins-completion| behaves when
+        using CTRL-P, CTRL-N, or |ins-autocompletion|.  It is also used for
+        whole-line completion |i_CTRL-X_CTRL-L|.  It indicates the type of
+        completion and the places to scan.  It is a comma-separated list of
+        flags:
         .	scan the current buffer ('wrapscan' is ignored)
         w	scan buffers from other windows
         b	scan other loaded buffers that are in the buffer list
@@ -1495,9 +1532,11 @@ local options = {
         (gzipped files for example).  Unloaded buffers are not scanned for
         whole-line completion.
 
-        As you can see, CTRL-N and CTRL-P can be used to do any 'iskeyword'-
-        based expansion (e.g., dictionary |i_CTRL-X_CTRL-K|, included patterns
-        |i_CTRL-X_CTRL-I|, tags |i_CTRL-X_CTRL-]| and normal expansions).
+        CTRL-N, CTRL-P, and |ins-autocompletion| can be used for any
+        'iskeyword'-based completion (dictionary |i_CTRL-X_CTRL-K|, included
+        patterns |i_CTRL-X_CTRL-I|, tags |i_CTRL-X_CTRL-]|, and normal
+        expansions).  With the "F" and "o" flags in 'complete', non-keywords
+        can also be completed.
 
         An optional match limit can be specified for a completion source by
         appending a caret ("^") followed by a {count} to the source flag.
@@ -1661,17 +1700,22 @@ local options = {
         	    with "menu" or "menuone".  Overrides "preview".
 
            preinsert
-        	    Preinsert the portion of the first candidate word that is
-        	    not part of the current completion leader and using the
-        	    |hl-ComplMatchIns| highlight group.  In order for it to
-        	    work, "fuzzy" must not be set and "menuone" must be set.
+        	    When 'autocomplete' is not active, inserts the part of the
+        	    first candidate word beyond the current completion leader,
+        	    highlighted with |hl-PreInsert|.  The cursor doesn't move.
+        	    Requires "fuzzy" unset and "menuone" in 'completeopt'.
+
+        	    When 'autocomplete' is active, inserts the longest common
+        	    prefix of matches (from all shown items or from the
+        	    current buffer items).  This occurs only when no menu item
+        	    is selected.  Press CTRL-Y to accept.
 
            preview  Show extra information about the currently selected
         	    completion in the preview window.  Only works in
         	    combination with "menu" or "menuone".
 
-        Only "fuzzy", "popup" and "preview" have an effect when 'autocomplete'
-        is enabled.
+        Only "fuzzy", "popup", "preinsert" and "preview" have an effect when
+        'autocomplete' is enabled.
 
         This option does not apply to |cmdline-completion|. See 'wildoptions'
         for that.
@@ -1707,6 +1751,19 @@ local options = {
       scope = { 'buf' },
       type = 'string',
       varname = 'p_csl',
+    },
+    {
+      abbreviation = 'cto',
+      defaults = 0,
+      desc = [=[
+        Like 'autocompletetimeout', but applies to |i_CTRL-N| and |i_CTRL-P|
+        completion.  Value of 0 disables the timeout; positive values allowed.
+      ]=],
+      full_name = 'completetimeout',
+      scope = { 'global' },
+      short_desc = N_('initial decay timeout for CTRL-N and CTRL-P'),
+      type = 'number',
+      varname = 'p_cto',
     },
     {
       abbreviation = 'cocu',
@@ -2317,7 +2374,7 @@ local options = {
     {
       abbreviation = 'dip',
       cb = 'did_set_diffopt',
-      defaults = 'internal,filler,closeoff,inline:simple,linematch:40',
+      defaults = 'internal,filler,closeoff,indent-heuristic,inline:char,linematch:40',
       -- Keep this in sync with diffopt_changed().
       values = {
         'filler',
@@ -4643,8 +4700,8 @@ local options = {
         autocmd.  Example: >vim
         	augroup vimrc-incsearch-highlight
         	  autocmd!
-        	  autocmd CmdlineEnter /,\? :set hlsearch
-        	  autocmd CmdlineLeave /,\? :set nohlsearch
+        	  autocmd CmdlineEnter [\/\?] :set hlsearch
+        	  autocmd CmdlineLeave [\/\?] :set nohlsearch
         	augroup END
         <
         CTRL-L can be used to add one character from after the current match
@@ -7088,12 +7145,9 @@ local options = {
            but are not part of the Nvim distribution. XDG_DATA_DIRS defaults
            to /usr/local/share/:/usr/share/, so system administrators are
            expected to install site plugins to /usr/share/nvim/site.
-        5. Session state directory, for state data such as swap, backupdir,
-           viewdir, undodir, etc.
-           Given by `stdpath("state")`.  |$XDG_STATE_HOME|
-        6. $VIMRUNTIME, for files distributed with Nvim.
+        5. $VIMRUNTIME, for files distributed with Nvim.
         						*after-directory*
-        7, 8, 9, 10. In after/ subdirectories of 1, 2, 3 and 4, with reverse
+        6, 7, 8, 9. In after/ subdirectories of 1, 2, 3 and 4, with reverse
            ordering.  This is for preferences to overrule or add to the
            distributed defaults or system-wide settings (rarely needed).
 
