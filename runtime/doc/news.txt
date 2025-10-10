@@ -77,7 +77,7 @@ EVENTS
 • |ui-messages| no longer emits the `msg_show.return_prompt`, and
   `msg_history_clear` events. The `msg_clear` event was repurposed and is now
   emitted after the screen is cleared. These events arbitrarily assumed a
-  message UI that mimicks the legacy message grid. Benefit: reduced UI event
+  message UI that mimics the legacy message grid. Benefit: reduced UI event
   traffic and more flexibility for UIs.
   The `msg_history_show` event has an additional "prev_cmd" argument.
 • A new `empty` message kind is emitted for an empty (e.g. `:echo ""`) message.
@@ -111,7 +111,7 @@ OPTIONS
 
 PLUGINS
 
-• todo
+• Removed "shellmenu" plugin, an old menu-based quasi-snippet plugin for shell scripts.
 
 TREESITTER
 
@@ -194,13 +194,17 @@ EDITOR
    and |:vimgrep| commands.
 • For security, 'exrc' no longer shows an "(a)llow" choice. Instead you must
   "(v)iew" then run `:trust`.
+• |gx| in help buffers opens the online documentation for the tag under the
+  cursor.
+• |:Undotree| for visually navigating the |undo-tree|
 
 EVENTS
 
 • |CmdlineLeave| sets |v:char| to the character that stops the Cmdline mode.
 • |CmdlineLeavePre| triggered before preparing to leave the command line.
-• New `append` paremeter for |ui-messages| `msg_show` event.
-• New `msg_id` paremeter for |ui-messages| `msg_show` event.
+• New `append` parameter for |ui-messages| `msg_show` event.
+• New `msg_id` parameter for |ui-messages| `msg_show` event.
+• 'rulerformat' is emitted as `msg_ruler` when not part of the statusline.
 • Creating or updating a progress message with |nvim_echo()| triggers a |Progress| event.
 
 HIGHLIGHTS
@@ -249,6 +253,7 @@ LSP
   See |lsp-inline_completion| for quickstart instructions.
 • Support for `textDocument/onTypeFormatting`: |lsp-on_type_formatting|
   https://microsoft.github.io/language-server-protocol/specification/#textDocument_onTypeFormatting
+• The filter option of |vim.lsp.buf.code_action()| now receives the client ID as an argument.
 
 LUA
 
@@ -265,6 +270,7 @@ LUA
 • |vim.list.bisect()| for binary search.
 • Experimental `vim.pos` and `vim.range` for Position/Range abstraction.
 • |vim.json.encode()| has an `indent` option for pretty-formatting.
+• |vim.json.encode()| has an `sort_keys` option.
 
 OPTIONS
 
@@ -278,9 +284,10 @@ OPTIONS
   • "F"         complete using 'completefunc'
   • "o"         complete using 'omnifunc'
 • 'complete' allows limiting matches for sources using "{flag}^<limit>".
-• 'completeopt' flag "nearset" sorts completion results by distance to cursor.
+• 'completeopt' flag "nearest" sorts completion results by distance to cursor.
 • 'diffanchors' specifies addresses to anchor a diff.
 • 'diffopt' `inline:` configures diff highlighting for changes within a line.
+• 'fillchars' has new flag "foldinner".
 • 'grepformat' is now a |global-local| option.
 • 'maxsearchcount' sets maximum value for |searchcount()| and defaults to 999.
 • 'pummaxwidth' sets maximum width for the completion popup menu.
@@ -323,6 +330,8 @@ TREESITTER
 TUI
 
 • |TermResponse| now supports DA1 and APC query responses.
+• Native progress bars are displayed for |Progress| events using the OSC 9;4
+  sequence.
 
 UI
 
@@ -338,6 +347,7 @@ UI
   • "Error executing Lua:" changed to "Lua:".
 • 'busy' status is shown in default statusline with symbol ◐
 • Improved LSP signature help rendering.
+• Multigrid UIs can call nvim_input_mouse with grid 0 to let Nvim decide the grid.
 
 VIMSCRIPT
 

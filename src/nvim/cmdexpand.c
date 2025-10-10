@@ -422,16 +422,16 @@ bool cmdline_pum_active(void)
 }
 
 /// Remove the cmdline completion popup menu (if present), free the list of items.
-void cmdline_pum_remove(void)
+void cmdline_pum_remove(bool defer_redraw)
 {
-  pum_undisplay(true);
+  pum_undisplay(!defer_redraw);
   XFREE_CLEAR(compl_match_array);
   compl_match_arraysize = 0;
 }
 
 void cmdline_pum_cleanup(CmdlineInfo *cclp)
 {
-  cmdline_pum_remove();
+  cmdline_pum_remove(false);
   wildmenu_cleanup(cclp);
 }
 
@@ -513,17 +513,13 @@ static int wildmenu_match_len(expand_T *xp, char *s)
 /// @param matches  list of matches
 static void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int match, bool showtail)
 {
-  int len;
-  int clen;                     // length in screen cells
-  int attr;
-  int i;
   bool highlight = true;
   char *selstart = NULL;
   int selstart_col = 0;
   char *selend = NULL;
   static int first_match = 0;
   bool add_left = false;
-  int l;
+  int i, l;
 
   if (matches == NULL) {        // interrupted completion?
     return;
@@ -536,7 +532,7 @@ static void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int m
     highlight = false;
   }
   // count 1 for the ending ">"
-  clen = wildmenu_match_len(xp, SHOW_MATCH(match)) + 3;
+  int clen = wildmenu_match_len(xp, SHOW_MATCH(match)) + 3;  // length in screen cells
   if (match == 0) {
     first_match = 0;
   } else if (match < first_match) {
@@ -577,7 +573,10 @@ static void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int m
     }
   }
 
-  schar_T fillchar = fillchar_status(&attr, curwin);
+  int len;
+  hlf_T group;
+  schar_T fillchar = fillchar_status(&group, curwin);
+  int attr = win_hl_attr(curwin, (int)group);
 
   if (first_match == 0) {
     *buf = NUL;
@@ -638,7 +637,7 @@ static void redraw_wildmenu(expand_T *xp, int num_matches, char **matches, int m
 
   int row = cmdline_row - 1;
   if (row >= 0) {
-    if (wild_menu_showing == 0 || wild_menu_showing == WM_LIST) {
+    if (wild_menu_showing == 0) {
       if (msg_scrolled > 0) {
         // Put the wildmenu just above the command line.  If there is
         // no room, scroll the screen one line up.
@@ -937,7 +936,7 @@ char *ExpandOne(expand_T *xp, char *str, char *orig, int options, int mode)
 
     // The entries from xp_files may be used in the PUM, remove it.
     if (compl_match_array != NULL) {
-      cmdline_pum_remove();
+      cmdline_pum_remove(false);
     }
   }
   xp->xp_selected = (options & WILD_NOSELECT) ? -1 : 0;
@@ -3797,13 +3796,10 @@ void wildmenu_cleanup(CmdlineInfo *cclp)
     redrawcmd();
     save_p_ls = -1;
     wild_menu_showing = 0;
-    // don't redraw statusline if WM_LIST is showing
-  } else if (wild_menu_showing != WM_LIST) {
+  } else {
     win_redraw_last_status(topframe);
     wild_menu_showing = 0;  // must be before redraw_statuslines #8385
     redraw_statuslines();
-  } else {
-    wild_menu_showing = 0;
   }
   KeyTyped = skt;
   if (cclp->input_fn) {

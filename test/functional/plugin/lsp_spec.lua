@@ -3,7 +3,6 @@ local n = require('test.functional.testnvim')()
 
 local t_lsp = require('test.functional.plugin.lsp.testutil')
 
-local assert_log = t.assert_log
 local buf_lines = n.buf_lines
 local command = n.command
 local dedent = t.dedent
@@ -278,7 +277,7 @@ describe('LSP', function()
         on_exit = function(code, signal)
           eq(101, code, 'exit code') -- See fake-lsp-server.lua
           eq(0, signal, 'exit signal')
-          assert_log(
+          t.assert_log(
             pesc([[assert_eq failed: left == "\"shutdown\"", right == "\"test\""]]),
             fake_lsp_logfile
           )
@@ -5314,22 +5313,18 @@ describe('LSP', function()
                 notify_msg = msg
               end
 
-              local handler = vim.lsp.handlers['textDocument/formatting']
-              local handler_called = false
-              vim.lsp.handlers['textDocument/formatting'] = function()
-                handler_called = true
-              end
-
+              _G.handler_called = false
               vim.lsp.buf.format({ bufnr = bufnr, async = true })
               vim.wait(1000, function()
-                return handler_called
+                return _G.handler_called
               end)
 
               vim.notify = notify
-              vim.lsp.handlers['textDocument/formatting'] = handler
-              return { notify = notify_msg, handler_called = handler_called }
+              return { notify_msg = notify_msg, handler_called = _G.handler_called }
             end)
             eq({ handler_called = true }, result)
+          elseif ctx.method == 'textDocument/formatting' then
+            exec_lua('_G.handler_called = true')
           elseif ctx.method == 'shutdown' then
             client:stop()
           end
@@ -6799,6 +6794,7 @@ describe('LSP', function()
     it('validates config on attach', function()
       local tmp1 = t.tmpname(true)
       exec_lua(function()
+        vim.fn.writefile({ '' }, fake_lsp_logfile)
         vim.lsp.log._set_filename(fake_lsp_logfile)
       end)
 
@@ -6808,22 +6804,32 @@ describe('LSP', function()
           vim.lsp.config('foo', cfg)
           vim.lsp.enable('foo')
           vim.cmd.edit(assert(tmp1))
+          vim.bo.filetype = 'non.applicable.filetype'
+        end)
+
+        -- Assert NO log for non-applicable 'filetype'. #35737
+        if type(cfg.filetypes) == 'table' then
+          t.assert_nolog(err, fake_lsp_logfile)
+        end
+
+        exec_lua(function()
           vim.bo.filetype = 'foo'
         end)
 
         retry(nil, 1000, function()
-          assert_log(err, fake_lsp_logfile)
+          t.assert_log(err, fake_lsp_logfile)
         end)
       end
 
       test_cfg({
+        filetypes = { 'foo' },
         cmd = { 'lolling' },
-      }, 'cannot start foo due to config error: .* lolling is not executable')
+      }, 'invalid "foo" config: .* lolling is not executable')
 
       test_cfg({
         cmd = { 'cat' },
         filetypes = true,
-      }, 'cannot start foo due to config error: .* filetypes: expected table, got boolean')
+      }, 'invalid "foo" config: .* filetypes: expected table, got boolean')
     end)
 
     it('does not start without workspace if workspace_required=true', function()

@@ -2442,6 +2442,9 @@ M.funcs = {
       	:r		Root (one extension removed)
       	:e		Extension only
 
+      More modifiers are supported, for the full list see
+      |filename-modifiers|.
+
       Example: >vim
       	let &tags = expand("%:p:h") .. "/tags"
       <Note that when expanding a string that starts with '%', '#' or
@@ -3854,7 +3857,7 @@ M.funcs = {
     ]=],
     name = 'getcmdtype',
     params = {},
-    returns = "':'|'>'|'/'|'?'|'@'|'-'|'='",
+    returns = "':'|'>'|'/'|'?'|'@'|'-'|'='|''",
     signature = 'getcmdtype()',
   },
   getcmdwintype = {
@@ -3865,7 +3868,7 @@ M.funcs = {
     ]=],
     name = 'getcmdwintype',
     params = {},
-    returns = "':'|'>'|'/'|'?'|'@'|'-'|'='",
+    returns = "':'|'>'|'/'|'?'|'@'|'-'|'='|''",
     signature = 'getcmdwintype()',
   },
   getcompletion = {
@@ -7011,6 +7014,7 @@ M.funcs = {
       { 'count', 'integer' },
     },
     signature = 'match({expr}, {pat} [, {start} [, {count}]])',
+    returns = 'integer',
   },
   matchadd = {
     args = { 2, 5 },
@@ -7080,10 +7084,11 @@ M.funcs = {
       { 'pattern', 'string' },
       { 'priority', 'integer' },
       { 'id', 'integer' },
-      { 'dict', 'string' },
+      { 'dict', 'table' },
     },
     signature = 'matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])',
     tags = { 'E798', 'E799', 'E801', 'E957' },
+    returns = 'integer',
   },
   matchaddpos = {
     args = { 2, 5 },
@@ -7132,9 +7137,10 @@ M.funcs = {
       { 'pos', 'any[]' },
       { 'priority', 'integer' },
       { 'id', 'integer' },
-      { 'dict', 'string' },
+      { 'dict', 'table' },
     },
     signature = 'matchaddpos({group}, {pos} [, {priority} [, {id} [, {dict}]]])',
+    returns = 'integer|table',
   },
   matcharg = {
     args = 1,
@@ -7155,6 +7161,7 @@ M.funcs = {
     name = 'matcharg',
     params = { { 'nr', 'integer' } },
     signature = 'matcharg({nr})',
+    returns = 'string[]',
   },
   matchbufline = {
     args = { 4, 5 },
@@ -7212,6 +7219,7 @@ M.funcs = {
       { 'dict', 'table' },
     },
     signature = 'matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict}])',
+    returns = 'string[]',
   },
   matchdelete = {
     args = { 1, 2 },
@@ -7261,6 +7269,7 @@ M.funcs = {
       { 'count', 'integer' },
     },
     signature = 'matchend({expr}, {pat} [, {start} [, {count}]])',
+    returns = 'integer',
   },
   matchfuzzy = {
     args = { 2, 3 },
@@ -7331,6 +7340,7 @@ M.funcs = {
     name = 'matchfuzzy',
     params = { { 'list', 'any[]' }, { 'str', 'string' }, { 'dict', 'table' } },
     signature = 'matchfuzzy({list}, {str} [, {dict}])',
+    returns = 'table',
   },
   matchfuzzypos = {
     args = { 2, 3 },
@@ -7360,6 +7370,7 @@ M.funcs = {
     name = 'matchfuzzypos',
     params = { { 'list', 'any[]' }, { 'str', 'string' }, { 'dict', 'table' } },
     signature = 'matchfuzzypos({list}, {str} [, {dict}])',
+    returns = 'table',
   },
   matchlist = {
     args = { 2, 4 },
@@ -7385,6 +7396,7 @@ M.funcs = {
       { 'count', 'integer' },
     },
     signature = 'matchlist({expr}, {pat} [, {start} [, {count}]])',
+    returns = 'string[]',
   },
   matchstr = {
     args = { 2, 4 },
@@ -7411,6 +7423,7 @@ M.funcs = {
       { 'count', 'integer' },
     },
     signature = 'matchstr({expr}, {pat} [, {start} [, {count}]])',
+    returns = 'string',
   },
   matchstrlist = {
     args = { 2, 3 },
@@ -7451,6 +7464,7 @@ M.funcs = {
     name = 'matchstrlist',
     params = { { 'list', 'string[]' }, { 'pat', 'string' }, { 'dict', 'table' } },
     signature = 'matchstrlist({list}, {pat} [, {dict}])',
+    returns = 'string[]',
   },
   matchstrpos = {
     args = { 2, 4 },
@@ -7482,6 +7496,7 @@ M.funcs = {
       { 'count', 'integer' },
     },
     signature = 'matchstrpos({expr}, {pat} [, {start} [, {count}]])',
+    returns = 'table',
   },
   max = {
     args = 1,
@@ -8008,6 +8023,18 @@ M.funcs = {
     params = { { 'x', 'number' }, { 'y', 'number' } },
     returns = 'number',
     signature = 'pow({x}, {y})',
+  },
+  preinserted = {
+    desc = [=[
+      Returns non-zero if text has been inserted after the cursor
+      because "preinsert" is present in 'completeopt', or because
+      "longest" is present in 'completeopt' while 'autocomplete'
+      is active.  Otherwise returns zero.
+    ]=],
+    name = 'preinserted',
+    params = {},
+    returns = 'number',
+    signature = 'preinserted()',
   },
   prevnonblank = {
     args = 1,
@@ -10419,13 +10446,14 @@ M.funcs = {
     base = 1,
     desc = [=[
       Returns a String with 64 hex characters, which is the SHA256
-      checksum of {string}.
+      checksum of {expr}.
+      {expr} is a String or a Blob.
 
     ]=],
     name = 'sha256',
-    params = { { 'string', 'string' } },
+    params = { { 'expr', 'string' } },
     returns = 'string',
-    signature = 'sha256({string})',
+    signature = 'sha256({expr})',
   },
   shellescape = {
     args = { 1, 2 },
@@ -12942,9 +12970,9 @@ M.funcs = {
     base = 1,
     desc = [=[
       The result is a Number, which is the screen column of the file
-      position given with {expr}.  That is, the last screen position
-      occupied by the character at that position, when the screen
-      would be of unlimited width.  When there is a <Tab> at the
+      position given with {expr}.  That is, the total number of
+      screen cells occupied by the part of the line until the end of
+      the character at that position.  When there is a <Tab> at the
       position, the returned Number will be the column at the end of
       the <Tab>.  For example, for a <Tab> in column 1, with 'ts'
       set to 8, it returns 8. |conceal| is ignored.

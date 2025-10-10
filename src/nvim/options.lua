@@ -236,7 +236,7 @@ local options = {
         |i_CTRL-N|, but triggered automatically.  See |ins-autocompletion|.
       ]=],
       full_name = 'autocomplete',
-      scope = { 'global' },
+      scope = { 'global', 'buf' },
       short_desc = N_('automatic completion in insert mode'),
       type = 'boolean',
       varname = 'p_ac',
@@ -408,8 +408,8 @@ local options = {
         eol	allow backspacing over line breaks (join lines)
         start	allow backspacing over the start of insert; CTRL-W and CTRL-U
         	stop once at the start of insert.
-        nostop	like start, except CTRL-W and CTRL-U do not stop at the start of
-        	insert.
+        nostop	like start, except CTRL-W and CTRL-U do not stop at the start
+        	of insert.
 
         When the value is empty, Vi compatible backspacing is used, none of
         the ways mentioned for the items above are possible.
@@ -545,11 +545,11 @@ local options = {
         - A directory name may end in an '/'.
         - For Unix and Win32, if a directory ends in two path separators "//",
           the swap file name will be built from the complete path to the file
-          with all path separators changed to percent '%' signs. This will
+          with all path separators changed to percent '%' signs.  This will
           ensure file name uniqueness in the backup directory.
           On Win32, it is also possible to end with "\\".  However, When a
           separating comma is following, you must use "//", since "\\" will
-          include the comma in the file name. Therefore it is recommended to
+          include the comma in the file name.  Therefore it is recommended to
           use '//', instead of '\\'.
         - Environment variables are expanded |:set_env|.
         - Careful with '\' characters, type one before a space, type two to
@@ -669,10 +669,10 @@ local options = {
       flags = true,
       deny_duplicates = true,
       desc = [=[
-        Specifies for which events the bell will not be rung. It is a comma-
-        separated list of items. For each item that is present, the bell
-        will be silenced. This is most useful to specify specific events in
-        insert mode to be silenced.
+        Specifies for which events the bell will not be rung.  It is a comma-
+        separated list of items.  For each item that is present, the bell will
+        be silenced.  This is most useful to specify specific events in insert
+        mode to be silenced.
         You can also make it flash by using 'visualbell'.
 
         item	    meaning when present	~
@@ -702,8 +702,8 @@ local options = {
         	    (depends on the 'wildmode' setting).
 
         This is most useful to fine tune when in Insert mode the bell should
-        be rung. For Normal mode and Ex commands, the bell is often rung to
-        indicate that an error occurred. It can be silenced by adding the
+        be rung.  For Normal mode and Ex commands, the bell is often rung to
+        indicate that an error occurred.  It can be silenced by adding the
         "error" keyword.
       ]=],
       full_name = 'belloff',
@@ -823,11 +823,11 @@ local options = {
       values = { 'shift:', 'min:', 'sbr', 'list:', 'column:' },
       deny_duplicates = true,
       desc = [=[
-        Settings for 'breakindent'. It can consist of the following optional
+        Settings for 'breakindent'.  It can consist of the following optional
         items and must be separated by a comma:
         	min:{n}	    Minimum text width that will be kept after
         		    applying 'breakindent', even if the resulting
-        		    text should normally be narrower. This prevents
+        		    text should normally be narrower.  This prevents
         		    text indented almost to the right window border
         		    occupying lots of vertical space when broken.
         		    (default: 20)
@@ -846,8 +846,8 @@ local options = {
         		    (default: 0)
         	list:-1	    Uses the width of a match with 'formatlistpat' for
         		    indentation.
-        	column:{n}  Indent at column {n}. Will overrule the other
-        		    sub-options. Note: an additional indent may be
+        	column:{n}  Indent at column {n}.  Will overrule the other
+        		    sub-options.  Note: an additional indent may be
         		    added for the 'showbreak' setting.
         		    (default: off)
       ]=],
@@ -1172,7 +1172,7 @@ local options = {
         faster, see |expr-option-function|.
 
         If the 'charconvert' expression starts with s: or |<SID>|, then it is
-        replaced with the script ID (|local-function|). Example: >vim
+        replaced with the script ID (|local-function|).  Example: >vim
         	set charconvert=s:MyConvert()
         	set charconvert=<SID>SomeConvert()
         <	Otherwise the expression is evaluated in the context of the script
@@ -1513,19 +1513,19 @@ local options = {
         	name of a function or a |Funcref|.  For |Funcref| values,
         	spaces must be escaped with a backslash ('\'), and commas with
         	double backslashes ('\\') (see |option-backslash|).
-        	Unlike other sources, functions can provide completions starting
-        	from a non-keyword character before the cursor, and their
-        	start position for replacing text may differ from other sources.
-        	If the Dict returned by the {func} includes {"refresh": "always"},
-        	the function will be invoked again whenever the leading text
-        	changes.
+        	Unlike other sources, functions can provide completions
+        	starting from a non-keyword character before the cursor, and
+        	their start position for replacing text may differ from other
+        	sources.  If the Dict returned by the {func} includes
+        	`{"refresh": "always"}`, the function will be invoked again
+        	whenever the leading text changes.
         	If generating matches is potentially slow, call
-        	|complete_check()| periodically to keep Vim responsive. This
+        	|complete_check()| periodically to keep Vim responsive.  This
         	is especially important for |ins-autocompletion|.
-        F	equivalent to using "F{func}", where the function is taken from
-        	the 'completefunc' option.
-        o	equivalent to using "F{func}", where the function is taken from
-        	the 'omnifunc' option.
+        F	equivalent to using "F{func}", where the function is taken
+        	from the 'completefunc' option.
+        o	equivalent to using "F{func}", where the function is taken
+        	from the 'omnifunc' option.
 
         Unloaded buffers are not loaded, thus their autocmds |:autocmd| are
         not executed, this may lead to unexpected completions from some files
@@ -1540,8 +1540,8 @@ local options = {
 
         An optional match limit can be specified for a completion source by
         appending a caret ("^") followed by a {count} to the source flag.
-        For example: ".^9,w,u,t^5" limits matches from the current buffer
-        to 9 and from tags to 5.  Other sources remain unlimited.
+        For example: ".^9,w,u,t^5" limits matches from the current buffer to 9
+        and from tags to 5.  Other sources remain unlimited.
         Note: The match limit takes effect only during forward completion
         (CTRL-N) and is ignored during backward completion (CTRL-P).
       ]=],
@@ -1562,7 +1562,7 @@ local options = {
         with CTRL-X CTRL-U. |i_CTRL-X_CTRL-U|
         See |complete-functions| for an explanation of how the function is
         invoked and what it should return.  The value can be the name of a
-        function, a |lambda| or a |Funcref|. See |option-value-function| for
+        function, a |lambda| or a |Funcref|.  See |option-value-function| for
         more information.
         This option cannot be set from a |modeline| or in the |sandbox|, for
         security reasons.
@@ -1653,7 +1653,7 @@ local options = {
         A comma-separated list of options for Insert mode completion
         |ins-completion|.  The supported values are:
 
-           fuzzy    Enable |fuzzy-matching| for completion candidates. This
+           fuzzy    Enable |fuzzy-matching| for completion candidates.  This
         	    allows for more flexible and intuitive matching, where
         	    characters can be skipped and matches can be found even
         	    if the exact sequence is not typed.  Note: This option
@@ -1663,11 +1663,21 @@ local options = {
         	    to gather more alternatives for your candidate list,
         	    see 'completefuzzycollect'.
 
-           longest  Only insert the longest common text of the matches.  If
-        	    the menu is displayed you can use CTRL-L to add more
-        	    characters.  Whether case is ignored depends on the kind
-        	    of completion.  For buffer text the 'ignorecase' option is
-        	    used.
+           longest
+        	    When 'autocomplete' is not active, only the longest common
+        	    prefix of the matches is inserted.  If the popup menu is
+        	    displayed, you can use CTRL-L to add more characters.
+        	    Whether case is ignored depends on the type of completion.
+        	    For buffer text the 'ignorecase' option applies.
+
+        	    When 'autocomplete' is active and no completion item is
+        	    selected, the longest common prefix of the matches is
+        	    inserted after the cursor.  The prefix is taken either
+        	    from all displayed items or only from items in the current
+        	    buffer.  The inserted text is highlighted with
+        	    |hl-PreInsert|, and the cursor position does not change
+        	    (similar to `"preinsert"`).  Press CTRL-Y to accept.
+        	    See also |preinserted()|.
 
            menu	    Use a popup menu to show the possible completions.  The
         	    menu is only shown when there is more than one match and
@@ -1689,7 +1699,9 @@ local options = {
 
            noselect Same as "noinsert", except that no menu item is
         	    pre-selected.  If both "noinsert" and "noselect" are
-        	    present, "noselect" has precedence.
+        	    present, "noselect" takes precedence.  This is enabled
+        	    automatically when 'autocomplete' is on, unless
+        	    "preinsert" is also enabled.
 
            nosort   Disable sorting of completion candidates based on fuzzy
         	    scores when "fuzzy" is enabled.  Candidates will appear
@@ -1700,24 +1712,23 @@ local options = {
         	    with "menu" or "menuone".  Overrides "preview".
 
            preinsert
-        	    When 'autocomplete' is not active, inserts the part of the
-        	    first candidate word beyond the current completion leader,
-        	    highlighted with |hl-PreInsert|.  The cursor doesn't move.
-        	    Requires "fuzzy" unset and "menuone" in 'completeopt'.
-
-        	    When 'autocomplete' is active, inserts the longest common
-        	    prefix of matches (from all shown items or from the
-        	    current buffer items).  This occurs only when no menu item
-        	    is selected.  Press CTRL-Y to accept.
+        	    Inserts the text of the first completion candidate beyond
+        	    the current leader, highlighted with |hl-PreInsert|.
+        	    The cursor does not move.
+        	    Requires "fuzzy" to be unset, and either "menuone" in
+        	    'completeopt' or 'autocomplete' enabled.  When
+        	    'autocomplete' is enabled, this does not work if
+        	    'ignorecase' is set without 'infercase'.
+        	    See also |preinserted()|.
 
            preview  Show extra information about the currently selected
         	    completion in the preview window.  Only works in
         	    combination with "menu" or "menuone".
 
-        Only "fuzzy", "popup", "preinsert" and "preview" have an effect when
-        'autocomplete' is enabled.
+        Only "fuzzy", "longest", "popup", "preinsert" and "preview" have an
+        effect when 'autocomplete' is enabled.
 
-        This option does not apply to |cmdline-completion|. See 'wildoptions'
+        This option does not apply to |cmdline-completion|.  See 'wildoptions'
         for that.
       ]=],
       full_name = 'completeopt',
@@ -1737,9 +1748,9 @@ local options = {
         		only modifiable in MS-Windows
         When this option is set it overrules 'shellslash' for completion:
         - When this option is set to "slash", a forward slash is used for path
-          completion in insert mode. This is useful when editing HTML tag, or
+          completion in insert mode.  This is useful when editing HTML tag, or
           Makefile with 'noshellslash' on MS-Windows.
-        - When this option is set to "backslash", backslash is used. This is
+        - When this option is set to "backslash", backslash is used.  This is
           useful when editing a batch file with 'shellslash' set on MS-Windows.
         - When this option is empty, same character is used as for
           'shellslash'.
@@ -2088,7 +2099,7 @@ local options = {
         							*cpo-;*
         	;	When using |,| or |;| to repeat the last |t| search
         		and the cursor is right in front of the searched
-        		character, the cursor won't move. When not included,
+        		character, the cursor won't move.  When not included,
         		the cursor would skip over it and jump to the
         		following occurrence.
         							*cpo-~*
@@ -2283,7 +2294,7 @@ local options = {
 
         When this option is empty or an entry "spell" is present, and spell
         checking is enabled, words in the word lists for the currently active
-        'spelllang' are used. See |spell|.
+        'spelllang' are used.  See |spell|.
 
         To include a comma in a file name precede it with a backslash.  Spaces
         after a comma are ignored, otherwise spaces are included in the file
@@ -2334,7 +2345,7 @@ local options = {
         Each anchor line splits the buffer (the split happens above the
         anchor), with each part being diff'ed separately before the final
         result is joined.  When more than one {address} are provided, the
-        anchors will be sorted interally by line number.  If using buffer
+        anchors will be sorted internally by line number.  If using buffer
         local options, each buffer should have the same number of anchors
         (extra anchors will be ignored).  This option is only used when
         'diffopt' has "anchor" set.  See |diff-anchors| for more details and
@@ -2403,7 +2414,7 @@ local options = {
         All are optional.  Items must be separated by a comma.
 
         	algorithm:{text} Use the specified diff algorithm with the
-        			internal diff engine. Currently supported
+        			internal diff engine.  Currently supported
         			algorithms are:
         			myers      the default algorithm
         			minimal    spend extra time to generate the
@@ -2426,7 +2437,7 @@ local options = {
         			When omitted a context of six lines is used.
         			When using zero the context is actually one,
         			since folds require a line in between, also
-        			for a deleted line. Set it to a very large
+        			for a deleted line.  Set it to a very large
         			value (999999) to disable folding completely.
         			See |fold-diff|.
 
@@ -2509,14 +2520,14 @@ local options = {
         			exactly.
 
         	linematch:{n}   Align and mark changes between the most
-        			similar lines between the buffers. When the
+        			similar lines between the buffers.  When the
         			total number of lines in the diff hunk exceeds
         			{n}, the lines will not be aligned because for
         			very large diff hunks there will be a
-        			noticeable lag. A reasonable setting is
+        			noticeable lag.  A reasonable setting is
         			"linematch:60", as this will enable alignment
-        			for a 2 buffer diff hunk of 30 lines each,
-        			or a 3 buffer diff hunk of 20 lines each.
+        			for a 2 buffer diff hunk of 30 lines each, or
+        			a 3 buffer diff hunk of 20 lines each.
         			Implicitly sets "filler" when this is set.
 
         	vertical	Start diff mode with vertical splits (unless
@@ -2574,11 +2585,11 @@ local options = {
         - For Unix and Win32, if a directory ends in two path separators "//",
           the swap file name will be built from the complete path to the file
           with all path separators replaced by percent '%' signs (including
-          the colon following the drive letter on Win32). This will ensure
+          the colon following the drive letter on Win32).  This will ensure
           file name uniqueness in the preserve directory.
           On Win32, it is also possible to end with "\\".  However, When a
           separating comma is following, you must use "//", since "\\" will
-          include the comma in the file name. Therefore it is recommended to
+          include the comma in the file name.  Therefore it is recommended to
           use '//', instead of '\\'.
         - Spaces after the comma are ignored, other spaces are considered part
           of the directory name.  To have a space at the start of a directory
@@ -2806,7 +2817,7 @@ local options = {
         makes a difference for error messages, the bell will be used always
         for a lot of errors without a message (e.g., hitting <Esc> in Normal
         mode).  See 'visualbell' to make the bell behave like a screen flash
-        or do nothing. See 'belloff' to finetune when to ring the bell.
+        or do nothing.  See 'belloff' to finetune when to ring the bell.
       ]=],
       full_name = 'errorbells',
       scope = { 'global' },
@@ -3047,7 +3058,7 @@ local options = {
         illegal byte sequence.
         WRONG VALUES:			WHAT'S WRONG:
         	latin1,utf-8		"latin1" will always be used
-        	utf-8,ucs-bom,latin1	BOM won't be recognized in an utf-8
+        	utf-8,ucs-bom,latin1	BOM won't be recognized in a utf-8
         				file
         	cp1250,latin1		"cp1250" will always be used
         If 'fileencodings' is empty, 'fileencoding' is not modified.
@@ -3173,7 +3184,13 @@ local options = {
    names is normally ignored]],
       },
       desc = [=[
-        When set case is ignored when using file names and directories.
+        When set, case is ignored when using file and directory names.
+
+        This option is on by default on systems where the filesystem is
+        traditionally case-insensitive (for example MS-Windows and macOS).
+        However, Vim cannot determine at runtime whether a particular
+        filesystem is case-sensitive or case-insensitive.
+
         See 'wildignorecase' for only ignoring case when doing completion.
       ]=],
       full_name = 'fileignorecase',
@@ -3244,7 +3261,10 @@ local options = {
           fold		'·' or '-'	filling 'foldtext'
           foldopen	'-'		mark the beginning of a fold
           foldclose	'+'		show a closed fold
-          foldsep	'│' or '|'      open fold middle marker
+          foldsep	'│' or '|'	open fold middle marker
+          foldinner	none		character to show instead of the
+        				numeric foldlevel when it would be
+        				repeated in a narrow 'foldcolumn'
           diff		'-'		deleted lines of the 'diff' option
           msgsep	' '		message separator 'display'
           eob		'~'		empty lines at the end of a buffer
@@ -3286,6 +3306,7 @@ local options = {
           foldclose	FoldColumn		|hl-FoldColumn|
           foldsep	FoldColumn		|hl-FoldColumn|
           diff		DiffDelete		|hl-DiffDelete|
+          msgsep	MsgSeparator		|hl-MsgSeparator|
           eob		EndOfBuffer		|hl-EndOfBuffer|
           lastline	NonText			|hl-NonText|
           trunc		one of the many Popup menu highlighting groups like
@@ -3729,7 +3750,7 @@ local options = {
         the internal format mechanism.
 
         If the expression starts with s: or |<SID>|, then it is replaced with
-        the script ID (|local-function|). Example: >vim
+        the script ID (|local-function|).  Example: >vim
         	set formatexpr=s:MyFormatExpr()
         	set formatexpr=<SID>SomeFormatExpr()
         <	Otherwise, the expression is evaluated in the context of the script
@@ -3853,7 +3874,7 @@ local options = {
         	:s///gg		  subst. all	  subst. one
 
         NOTE: Setting this option may break plugins that rely on the default
-        behavior of the 'g' flag. This will also make the 'g' flag have the
+        behavior of the 'g' flag.  This will also make the 'g' flag have the
         opposite effect of that documented in |:s_g|.
       ]=],
       full_name = 'gdefault',
@@ -4652,7 +4673,7 @@ local options = {
         Note: Not used for |<cfile>|.
 
         If the expression starts with s: or |<SID>|, then it is replaced with
-        the script ID (|local-function|). Example: >vim
+        the script ID (|local-function|).  Example: >vim
         	setlocal includeexpr=s:MyIncludeExpr()
         	setlocal includeexpr=<SID>SomeIncludeExpr()
         <	Otherwise, the expression is evaluated in the context of the script
@@ -4694,7 +4715,7 @@ local options = {
         avoid that Vim hangs while you are typing the pattern.
         The |hl-IncSearch| highlight group determines the highlighting.
         When 'hlsearch' is on, all matched strings are highlighted too while
-        typing a search command. See also: 'hlsearch'.
+        typing a search command.  See also: 'hlsearch'.
         If you don't want to turn 'hlsearch' on, but want to highlight all
         matches while searching, you can turn on and off 'hlsearch' with
         autocmd.  Example: >vim
@@ -4733,7 +4754,7 @@ local options = {
         when the expression is evaluated (but it may be moved around).
 
         If the expression starts with s: or |<SID>|, then it is replaced with
-        the script ID (|local-function|). Example: >vim
+        the script ID (|local-function|).  Example: >vim
         	set indentexpr=s:MyIndentExpr()
         	set indentexpr=<SID>SomeIndentExpr()
         <	Otherwise, the expression is evaluated in the context of the script
@@ -5296,8 +5317,8 @@ local options = {
         than at the last character that fits on the screen.  Unlike
         'wrapmargin' and 'textwidth', this does not insert <EOL>s in the file,
         it only affects the way the file is displayed, not its contents.
-        If 'breakindent' is set, line is visually indented. Then, the value
-        of 'showbreak' is used to put in front of wrapped lines. This option
+        If 'breakindent' is set, line is visually indented.  Then, the value
+        of 'showbreak' is used to put in front of wrapped lines.  This option
         is not used when the 'wrap' option is off.
         Note that <Tab> characters after an <EOL> are mostly not displayed
         with the right amount of white space.
@@ -6142,8 +6163,8 @@ local options = {
       defaults = false,
       desc = [=[
         When on, mouse move events are delivered to the input queue and are
-        available for mapping |<MouseMove>|. The default, off, avoids the mouse
-        movement overhead except when needed.
+        available for mapping |<MouseMove>|.  The default, off, avoids the
+        mouse movement overhead except when needed.
         Warning: Setting this option can make pending mappings to be aborted
         when the mouse is moved.
       ]=],
@@ -6296,7 +6317,7 @@ local options = {
         bin	If included, numbers starting with "0b" or "0B" will be
         	considered to be binary.  Example: Using CTRL-X on
         	"0b1000" subtracts one, resulting in "0b0111".
-        unsigned    If included, numbers are recognized as unsigned. Thus a
+        unsigned    If included, numbers are recognized as unsigned.  Thus a
         	leading dash or negative sign won't be considered as part of
         	the number.  Examples:
         	    Using CTRL-X on "2020" in "9-2020" results in "9-2019"
@@ -6370,14 +6391,14 @@ local options = {
       desc = [=[
         Minimal number of columns to use for the line number.  Only relevant
         when the 'number' or 'relativenumber' option is set or printing lines
-        with a line number. Since one space is always between the number and
+        with a line number.  Since one space is always between the number and
         the text, there is one less character for the number itself.
         The value is the minimum width.  A bigger width is used when needed to
         fit the highest line number in the buffer respectively the number of
         rows in the window, depending on whether 'number' or 'relativenumber'
-        is set. Thus with the Vim default of 4 there is room for a line number
-        up to 999. When the buffer has 1000 lines five columns will be used.
-        The minimum value is 1, the maximum value is 20.
+        is set.  Thus with the Vim default of 4 there is room for a line
+        number up to 999.  When the buffer has 1000 lines five columns will be
+        used. The minimum value is 1, the maximum value is 20.
       ]=],
       full_name = 'numberwidth',
       redraw = { 'current_window' },
@@ -6394,7 +6415,7 @@ local options = {
         completion with CTRL-X CTRL-O. |i_CTRL-X_CTRL-O|
         See |complete-functions| for an explanation of how the function is
         invoked and what it should return.  The value can be the name of a
-        function, a |lambda| or a |Funcref|. See |option-value-function| for
+        function, a |lambda| or a |Funcref|.  See |option-value-function| for
         more information.
         This option is usually set by a filetype plugin:
         |:filetype-plugin-on|
@@ -6433,7 +6454,7 @@ local options = {
       desc = [=[
         This option specifies a function to be called by the |g@| operator.
         See |:map-operator| for more info and an example.  The value can be
-        the name of a function, a |lambda| or a |Funcref|. See
+        the name of a function, a |lambda| or a |Funcref|.  See
         |option-value-function| for more information.
 
         This option cannot be set from a |modeline| or in the |sandbox|, for
@@ -6699,6 +6720,21 @@ local options = {
       varname = 'p_pb',
     },
     {
+      full_name = 'pumborder',
+      scope = { 'global' },
+      cb = 'did_set_pumborder',
+      defaults = { if_true = '' },
+      values = { '', 'double', 'single', 'shadow', 'rounded', 'solid', 'bold', 'none' },
+      desc = [=[
+        Defines the default border style of popupmenu windows. Same as
+        'winborder'.
+      ]=],
+      short_desc = N_('border of popupmenu'),
+      type = 'string',
+      list = 'onecomma',
+      varname = 'p_pumborder',
+    },
+    {
       abbreviation = 'ph',
       defaults = 0,
       desc = [=[
@@ -6771,7 +6807,7 @@ local options = {
         for each entry in the corresponding quickfix or location list.  See
         |quickfix-window-function| for an explanation of how to write the
         function and an example.  The value can be the name of a function, a
-        |lambda| or a |Funcref|. See |option-value-function| for more
+        |lambda| or a |Funcref|.  See |option-value-function| for more
         information.
 
         This option cannot be set from a |modeline| or in the |sandbox|, for
@@ -6924,12 +6960,12 @@ local options = {
       defaults = false,
       desc = [=[
         Show the line number relative to the line with the cursor in front of
-        each line. Relative line numbers help you use the |count| you can
+        each line.  Relative line numbers help you use the |count| you can
         precede some vertical motion commands (e.g. j k + -) with, without
-        having to calculate it yourself. Especially useful in combination with
-        other commands (e.g. y d c < > gq gw =).
-        When the 'n' option is excluded from 'cpoptions' a wrapped
-        line will not use the column of line numbers.
+        having to calculate it yourself.  Especially useful in combination
+        with other commands (e.g. y d c < > gq gw =).
+        When the 'n' option is excluded from 'cpoptions' a wrapped line will
+        not use the column of line numbers.
         The 'numberwidth' option can be used to set the room used for the line
         number.
         When a long, wrapped line doesn't start with the first character, '-'
@@ -7922,7 +7958,7 @@ local options = {
         the "!" and ":!" commands.  Includes the redirection.  See
         'shellquote' to exclude the redirection.  It's probably not useful
         to set both options.
-        When the value is '(' then ')' is appended. When the value is '"('
+        When the value is '(' then ')' is appended.  When the value is '"('
         then ')"' is appended.
         When the value is '(' then also see 'shellxescape'.
         This option cannot be set from a |modeline| or in the |sandbox|, for
@@ -8011,7 +8047,7 @@ local options = {
         	`:silent` was used for the command; note that this also
         	affects messages from 'autoread' reloading
           S	do not show search count message when searching, e.g.	*shm-S*
-        	"[1/5]". When the "S" flag is not present (e.g. search count
+        	"[1/5]".  When the "S" flag is not present (e.g. search count
         	is shown), the "search hit BOTTOM, continuing at TOP" and
         	"search hit TOP, continuing at BOTTOM" messages are only
         	indicated by a "W" (Mnemonic: Wrapped) letter before the
@@ -8267,12 +8303,12 @@ local options = {
         'number',
       },
       desc = [=[
-        When and how to draw the signcolumn. Valid values are:
+        When and how to draw the signcolumn.  Valid values are:
            "auto"	only when there is a sign to display
            "auto:[1-9]" resize to accommodate multiple signs up to the
-                        given number (maximum 9), e.g. "auto:4"
+        		given number (maximum 9), e.g. "auto:4"
            "auto:[1-8]-[2-9]"
-                        resize to accommodate multiple signs up to the
+        		resize to accommodate multiple signs up to the
         		given maximum number (maximum 9) while keeping
         		at least the given minimum (maximum 8) fixed
         		space. The minimum number should always be less
@@ -8280,8 +8316,8 @@ local options = {
            "no"		never
            "yes"	always
            "yes:[1-9]"  always, with fixed space for signs up to the given
-                        number (maximum 9), e.g. "yes:3"
-           "number"	display signs in the 'number' column. If the number
+        		number (maximum 9), e.g. "yes:3"
+           "number"	display signs in the 'number' column.  If the number
         		column is not present, then behaves like "auto".
       ]=],
       full_name = 'signcolumn',
@@ -8364,7 +8400,7 @@ local options = {
       desc = [=[
         Scrolling works with screen lines.  When 'wrap' is set and the first
         line in the window wraps part of it may not be visible, as if it is
-        above the window. "<<<" is displayed at the start of the first line,
+        above the window.  "<<<" is displayed at the start of the first line,
         highlighted with |hl-NonText|.
         You may also want to add "lastline" to the 'display' option to show as
         much of the last line as possible.
@@ -8498,7 +8534,7 @@ local options = {
         the two-letter, lower case region name.  You can use more than one
         region by listing them: "en_us,en_ca" supports both US and Canadian
         English, but not words specific for Australia, New Zealand or Great
-        Britain. (Note: currently en_au and en_nz dictionaries are older than
+        Britain.  (Note: currently en_au and en_nz dictionaries are older than
         en_ca, en_gb and en_us).
         If the name "cjk" is included East Asian characters are excluded from
         spell checking.  This is useful when editing text that also has Asian
@@ -8591,7 +8627,7 @@ local options = {
 
         timeout:{millisec}   Limit the time searching for suggestions to
         		{millisec} milliseconds.  Applies to the following
-        		methods.  When omitted the limit is 5000. When
+        		methods.  When omitted the limit is 5000.  When
         		negative there is no limit.
 
         file:{filename} Read file {filename}, which must have two columns,
@@ -8667,9 +8703,9 @@ local options = {
           topline	Keep the topline the same.
 
         For the "screen" and "topline" values, the cursor position will be
-        changed when necessary. In this case, the jumplist will be populated
-        with the previous cursor position. For "screen", the text cannot always
-        be kept on the same screen line when 'wrap' is enabled.
+        changed when necessary.  In this case, the jumplist will be populated
+        with the previous cursor position.  For "screen", the text cannot
+        always be kept on the same screen line when 'wrap' is enabled.
       ]=],
       full_name = 'splitkeep',
       scope = { 'global' },
@@ -9366,7 +9402,7 @@ local options = {
         The function gets the tag pattern and should return a List of matching
         tags.  See |tag-function| for an explanation of how to write the
         function and an example.  The value can be the name of a function, a
-        |lambda| or a |Funcref|. See |option-value-function| for more
+        |lambda| or a |Funcref|.  See |option-value-function| for more
         information.
         This option cannot be set from a |modeline| or in the |sandbox|, for
         security reasons.
@@ -9611,7 +9647,7 @@ local options = {
       defaults = '',
       desc = [=[
         This option specifies a function to be used for thesaurus completion
-        with CTRL-X CTRL-T. |i_CTRL-X_CTRL-T| See |compl-thesaurusfunc|.
+        with CTRL-X CTRL-T.  |i_CTRL-X_CTRL-T| See |compl-thesaurusfunc|.
         The value can be the name of a function, a |lambda| or a |Funcref|.
         See |option-value-function| for more information.
 
@@ -9983,9 +10019,9 @@ local options = {
       cb = 'did_set_vartabstop',
       defaults = '',
       desc = [=[
-        Defines variable-width tab stops. The value is a comma-separated list
-        of widths in columns.  Each width defines the number of columns
-        before the next tab stop; the last value repeats indefinitely.
+        Defines variable-width tab stops.  The value is a comma-separated list
+        of widths in columns.  Each width defines the number of columns before
+        the next tab stop; the last value repeats indefinitely.
 
         For example: >
         	:set vartabstop=4,8
@@ -10468,23 +10504,23 @@ local options = {
         		expressions or with 'smartcase' enabled.  However, the
         		case of the appended matched word may not exactly
         		match the case of the word in the buffer.
-          fuzzy		Use |fuzzy-matching| to find completion matches. When
+          fuzzy		Use |fuzzy-matching| to find completion matches.  When
         		this value is specified, wildcard expansion will not
         		be used for completion.  The matches will be sorted by
         		the "best match" rather than alphabetically sorted.
         		This will find more matches than the wildcard
-        		expansion. Currently fuzzy matching based completion
+        		expansion.  Currently fuzzy matching based completion
         		is not supported for file and directory names and
         		instead wildcard expansion is used.
-          pum		Display the completion matches using the popup menu
-        		in the same style as the |ins-completion-menu|.
+          pum		Display the completion matches using the popup menu in
+        		the same style as the |ins-completion-menu|.
           tagfile	When using CTRL-D to list matching tags, the kind of
         		tag and the file of the tag is listed.	Only one match
         		is displayed per line.  Often used tag kinds are:
         			d	#define
         			f	function
 
-        This option does not apply to |ins-completion|. See 'completeopt' for
+        This option does not apply to |ins-completion|.  See 'completeopt' for
         that.
       ]=],
       full_name = 'wildoptions',
@@ -10805,6 +10841,11 @@ local options = {
         <	See 'sidescroll', 'listchars' and |wrap-off|.
         This option can't be set from a |modeline| when the 'diff' option is
         on.
+        If 'nowrap' was set from a |modeline| or in the |sandbox|, '>' is used
+        as the |lcs-extends| character regardless of the value of the 'list'
+        and 'listchars' options.  This is to prevent malicious code outside
+        the viewport from going unnoticed.  Use `:setlocal nowrap` manually
+        afterwards to disable this behavior.
       ]=],
       full_name = 'wrap',
       redraw = { 'current_window' },

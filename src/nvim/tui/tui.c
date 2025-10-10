@@ -79,6 +79,7 @@ struct TUIData {
   Loop *loop;
   unibi_var_t params[9];
   char buf[OUTBUF_SIZE];
+  char *buf_to_flush;  ///< If non-null, flush this instead of buf[].
   size_t bufpos;
   TermInput input;
   uv_loop_t write_loop;
@@ -648,8 +649,13 @@ void tui_stop(TUIData *tui)
   tui->input.callbacks.primary_device_attr = tui_stop_cb;
   terminfo_disable(tui);
 
-  // Wait until DA1 response is received
-  LOOP_PROCESS_EVENTS_UNTIL(tui->loop, tui->loop->events, EXIT_TIMEOUT_MS, tui->stopped);
+  // Wait until DA1 response is received, or stdin is closed (#35744).
+  LOOP_PROCESS_EVENTS_UNTIL(tui->loop, tui->loop->events, EXIT_TIMEOUT_MS,
+                            tui->stopped || tui->input.read_stream.did_eof);
+  if (!tui->stopped && !tui->input.read_stream.did_eof) {
+    WLOG("TUI: timed out waiting for DA1 response");
+  }
+  tui->stopped = true;
 
   tui_terminal_stop(tui);
   stream_set_blocking(tui->input.in_fd, true);   // normalize stream (#2598)
@@ -1890,7 +1896,7 @@ static void unibi_goto(TUIData *tui, int row, int col)
   unibi_out(tui, unibi_cursor_address);
 }
 
-#define UNIBI_OUT(fn) \
+#define UNIBI_OUT(fn, name_fn) \
   do { \
     const char *str = NULL; \
     if (unibi_index >= 0) { \
@@ -1908,11 +1914,14 @@ retry: \
       unibi_format(vars, vars + 26, str, params, out, tui, pad, tui); \
       if (tui->overflow) { \
         tui->bufpos = orig_pos; \
-        /* If orig_pos is 0, there's nothing to flush and retrying won't work. */ \
-        /* TODO(zeertzjq): should this situation still be handled? */ \
         if (orig_pos > 0) { \
           flush_buf(tui); \
+          orig_pos = 0; \
           goto retry; \
+        } else {  /* orig_pos == 0 */ \
+          /* There's nothing to flush and retrying won't work. */ \
+          ELOG("TUI: escape sequence for %s too long", name_fn(unibi_index)); \
+          tui->overflow = false; \
         } \
       } \
       tui->cork = false; \
@@ -1920,11 +1929,15 @@ retry: \
   } while (0)
 static void unibi_out(TUIData *tui, int unibi_index)
 {
-  UNIBI_OUT(unibi_get_str);
+#define UNIBI_NAME_STR(i) unibi_name_str((unsigned)(i))
+  UNIBI_OUT(unibi_get_str, UNIBI_NAME_STR);
+#undef UNIBI_NAME_STR
 }
 static void unibi_out_ext(TUIData *tui, int unibi_index)
 {
-  UNIBI_OUT(unibi_get_ext_str);
+#define UNIBI_GET_EXT_STR_NAME(i) unibi_get_ext_str_name(tui->ut, (unsigned)(i))
+  UNIBI_OUT(unibi_get_ext_str, UNIBI_GET_EXT_STR_NAME);
+#undef UNIBI_GET_EXT_STR_NAME
 }
 #undef UNIBI_OUT
 
@@ -1944,8 +1957,14 @@ static void out(void *ctx, const char *str, size_t len)
       return;
     }
     flush_buf(tui);
+    if (len > sizeof(tui->buf)) {
+      // Don't use tui->buf[] when the string to output is too long. #30794
+      tui->buf_to_flush = (char *)str;
+      tui->bufpos = len;
+      flush_buf(tui);
+      return;
+    }
   }
-  // TODO(zeertzjq): handle string longer than buffer size? #30794
 
   memcpy(tui->buf + tui->bufpos, str, len);
   tui->bufpos += len;
@@ -2586,7 +2605,7 @@ static void flush_buf(TUIData *tui)
   bufs[0].base = pre;
   bufs[0].len = UV_BUF_LEN(flush_buf_start(tui, pre, sizeof(pre)));
 
-  bufs[1].base = tui->buf;
+  bufs[1].base = tui->buf_to_flush != NULL ? tui->buf_to_flush : tui->buf;
   bufs[1].len = UV_BUF_LEN(tui->bufpos);
 
   bufs[2].base = post;
@@ -2604,6 +2623,7 @@ static void flush_buf(TUIData *tui)
     }
     uv_run(&tui->write_loop, UV_RUN_DEFAULT);
   }
+  tui->buf_to_flush = NULL;
   tui->bufpos = 0;
   tui->overflow = false;
 }

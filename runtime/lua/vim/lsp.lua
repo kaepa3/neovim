@@ -28,7 +28,6 @@ local lsp = vim._defer_require('vim.lsp', {
 
 local log = lsp.log
 local protocol = lsp.protocol
-local ms = protocol.Methods
 local util = lsp.util
 local changetracking = lsp._changetracking
 
@@ -37,10 +36,10 @@ local changetracking = lsp._changetracking
 lsp.rpc_response_error = lsp.rpc.rpc_response_error
 
 lsp._resolve_to_request = {
-  [ms.codeAction_resolve] = ms.textDocument_codeAction,
-  [ms.codeLens_resolve] = ms.textDocument_codeLens,
-  [ms.documentLink_resolve] = ms.textDocument_documentLink,
-  [ms.inlayHint_resolve] = ms.textDocument_inlayHint,
+  ['codeAction/resolve'] = 'textDocument/codeAction',
+  ['codeLens/resolve'] = 'textDocument/codeLens',
+  ['documentLink/resolve'] = 'textDocument/documentLink',
+  ['inlayHint/resolve'] = 'textDocument/inlayHint',
 }
 
 -- TODO improve handling of scratch buffers with LSP attached.
@@ -50,7 +49,7 @@ lsp._resolve_to_request = {
 ---@param method (vim.lsp.protocol.Method.ClientToServer) name of the method
 function lsp._unsupported_method(method)
   local msg = string.format(
-    'method %s is not supported by any of the servers registered for the current buffer',
+    'vim.lsp: method %q is not supported by any server activated for this buffer',
     method
   )
   log.warn(msg)
@@ -199,8 +198,21 @@ end
 --- See also `reuse_client` to dynamically decide (per-buffer) when `cmd` should be re-invoked.
 --- @field cmd? string[]|fun(dispatchers: vim.lsp.rpc.Dispatchers, config: vim.lsp.ClientConfig): vim.lsp.rpc.PublicClient
 ---
---- Filetypes the client will attach to, if activated by `vim.lsp.enable()`. If not provided, the
---- client will attach to all filetypes.
+--- Filetypes the client will attach to, or `nil` for ALL filetypes. To match files by name,
+--- pattern, or contents, you can define a custom filetype using |vim.filetype.add()|:
+--- ```lua
+--- vim.filetype.add({
+---   filename = {
+---     ['my_filename'] = 'my_filetype1',
+---   },
+---   pattern = {
+---     ['.*/etc/my_file_pattern/.*'] = 'my_filetype2',
+---   },
+--- })
+--- vim.lsp.config('…', {
+---   filetypes = { 'my_filetype1', 'my_filetype2' },
+--- }
+--- ```
 --- @field filetypes? string[]
 ---
 --- Predicate which decides if a client should be re-used. Used on all running clients. The default
@@ -219,22 +231,19 @@ end
 --- Filename(s) (".git/", "package.json", …) used to decide the workspace root. Unused if `root_dir`
 --- is defined. The list order decides priority. To indicate "equal priority", specify names in
 --- a nested list `{ { 'a.txt', 'b.lua' }, ... }`.
----
---- For each item, Nvim will search upwards (from the buffer file) for that marker, or list of
---- markers; search stops at the first directory containing that marker, and the directory is used
---- as the root dir (workspace folder).
----
---- Example: Find the first ancestor directory containing file or directory "stylua.toml"; if not
---- found, find the first ancestor containing ".git":
---- ```lua
+--- - For each item, Nvim will search upwards (from the buffer file) for that marker, or list of
+---   markers; search stops at the first directory containing that marker, and the directory is used
+---   as the root dir (workspace folder).
+--- - Example: Find the first ancestor directory containing file or directory "stylua.toml"; if not
+---   found, find the first ancestor containing ".git":
+---   ```
 ---   root_markers = { 'stylua.toml', '.git' }
---- ```
----
---- Example: Find the first ancestor directory containing EITHER "stylua.toml" or ".luarc.json"; if
---- not found, find the first ancestor containing ".git":
---- ```lua
+---   ```
+--- - Example: Find the first ancestor directory containing EITHER "stylua.toml" or ".luarc.json";
+---   if not found, find the first ancestor containing ".git":
+---   ```
 ---   root_markers = { { 'stylua.toml', '.luarc.json' }, '.git' }
---- ```
+---   ```
 ---
 --- @field root_markers? (string|string[])[]
 
@@ -426,16 +435,21 @@ local function validate_config(config)
 end
 
 --- @param bufnr integer
---- @param name string
 --- @param config vim.lsp.Config
-local function can_start(bufnr, name, config)
-  local config_ok, err = pcall(validate_config, config)
-  if not config_ok then
-    log.error(('cannot start %s due to config error: %s'):format(name, err))
+--- @param logging boolean
+local function can_start(bufnr, config, logging)
+  if
+    type(config.filetypes) == 'table'
+    and not vim.tbl_contains(config.filetypes, vim.bo[bufnr].filetype)
+  then
     return false
   end
 
-  if config.filetypes and not vim.tbl_contains(config.filetypes, vim.bo[bufnr].filetype) then
+  local config_ok, err = pcall(validate_config, config)
+  if not config_ok then
+    if logging then
+      log.error(('invalid "%s" config: %s'):format(config.name, err))
+    end
     return false
   end
 
@@ -462,9 +476,7 @@ local function lsp_enable_callback(bufnr)
   -- Stop any clients that no longer apply to this buffer.
   local clients = lsp.get_clients({ bufnr = bufnr, _uninitialized = true })
   for _, client in ipairs(clients) do
-    if
-      lsp.is_enabled(client.name) and not can_start(bufnr, client.name, lsp.config[client.name])
-    then
+    if lsp.is_enabled(client.name) and not can_start(bufnr, lsp.config[client.name], false) then
       lsp.buf_detach_client(bufnr, client.id)
     end
   end
@@ -472,7 +484,7 @@ local function lsp_enable_callback(bufnr)
   -- Start any clients that apply to this buffer.
   for name in vim.spairs(lsp._enabled_configs) do
     local config = lsp.config[name]
-    if config and can_start(bufnr, name, config) then
+    if config and can_start(bufnr, config, true) then
       -- Deepcopy config so changes done in the client
       -- do not propagate back to the enabled configs.
       config = vim.deepcopy(config)
@@ -751,17 +763,17 @@ end
 ---@param bufnr integer
 function lsp._set_defaults(client, bufnr)
   if
-    client:supports_method(ms.textDocument_definition) and is_empty_or_default(bufnr, 'tagfunc')
+    client:supports_method('textDocument/definition') and is_empty_or_default(bufnr, 'tagfunc')
   then
     vim.bo[bufnr].tagfunc = 'v:lua.vim.lsp.tagfunc'
   end
   if
-    client:supports_method(ms.textDocument_completion) and is_empty_or_default(bufnr, 'omnifunc')
+    client:supports_method('textDocument/completion') and is_empty_or_default(bufnr, 'omnifunc')
   then
     vim.bo[bufnr].omnifunc = 'v:lua.vim.lsp.omnifunc'
   end
   if
-    client:supports_method(ms.textDocument_rangeFormatting)
+    client:supports_method('textDocument/rangeFormatting')
     and is_empty_or_default(bufnr, 'formatprg')
     and is_empty_or_default(bufnr, 'formatexpr')
   then
@@ -769,7 +781,7 @@ function lsp._set_defaults(client, bufnr)
   end
   vim._with({ buf = bufnr }, function()
     if
-      client:supports_method(ms.textDocument_hover)
+      client:supports_method('textDocument/hover')
       and is_empty_or_default(bufnr, 'keywordprg')
       and vim.fn.maparg('K', 'n', false, false) == ''
     then
@@ -778,10 +790,9 @@ function lsp._set_defaults(client, bufnr)
       end, { buffer = bufnr, desc = 'vim.lsp.buf.hover()' })
     end
   end)
-  if client:supports_method(ms.textDocument_diagnostic) then
+  if client:supports_method('textDocument/diagnostic') then
     lsp.diagnostic._enable(bufnr)
   end
-  lsp.document_color.enable(true, bufnr)
 end
 
 --- @deprecated
@@ -806,12 +817,12 @@ local function text_document_did_save_handler(bufnr)
     local name = api.nvim_buf_get_name(bufnr)
     local old_name = changetracking._get_and_set_name(client, bufnr, name)
     if old_name and name ~= old_name then
-      client:notify(ms.textDocument_didClose, {
+      client:notify('textDocument/didClose', {
         textDocument = {
           uri = vim.uri_from_fname(old_name),
         },
       })
-      client:notify(ms.textDocument_didOpen, {
+      client:notify('textDocument/didOpen', {
         textDocument = {
           version = 0,
           uri = uri,
@@ -827,7 +838,7 @@ local function text_document_did_save_handler(bufnr)
       if type(save_capability) == 'table' and save_capability.includeText then
         included_text = text(bufnr)
       end
-      client:notify(ms.textDocument_didSave, {
+      client:notify('textDocument/didSave', {
         textDocument = {
           uri = uri,
         },
@@ -862,12 +873,12 @@ local function buf_attach(bufnr)
           },
           reason = protocol.TextDocumentSaveReason.Manual, ---@type integer
         }
-        if client:supports_method(ms.textDocument_willSave) then
-          client:notify(ms.textDocument_willSave, params)
+        if client:supports_method('textDocument/willSave') then
+          client:notify('textDocument/willSave', params)
         end
-        if client:supports_method(ms.textDocument_willSaveWaitUntil) then
+        if client:supports_method('textDocument/willSaveWaitUntil') then
           local result, err =
-            client:request_sync(ms.textDocument_willSaveWaitUntil, params, 1000, ctx.buf)
+            client:request_sync('textDocument/willSaveWaitUntil', params, 1000, ctx.buf)
           if result and result.result then
             util.apply_text_edits(result.result, ctx.buf, client.offset_encoding)
           elseif err then
@@ -901,8 +912,8 @@ local function buf_attach(bufnr)
       local params = { textDocument = { uri = uri } }
       for _, client in ipairs(clients) do
         changetracking.reset_buf(client, bufnr)
-        if client:supports_method(ms.textDocument_didClose) then
-          client:notify(ms.textDocument_didClose, params)
+        if client:supports_method('textDocument/didClose') then
+          client:notify('textDocument/didClose', params)
         end
       end
       for _, client in ipairs(clients) do
@@ -1359,7 +1370,7 @@ function lsp.formatexpr(opts)
   end
   local bufnr = api.nvim_get_current_buf()
   for _, client in pairs(lsp.get_clients({ bufnr = bufnr })) do
-    if client:supports_method(ms.textDocument_rangeFormatting) then
+    if client:supports_method('textDocument/rangeFormatting') then
       local params = util.make_formatting_params()
       local end_line = vim.fn.getline(end_lnum) --[[@as string]]
       local end_col = vim.str_utfindex(end_line, client.offset_encoding)
@@ -1375,7 +1386,7 @@ function lsp.formatexpr(opts)
         },
       }
       local response =
-        client:request_sync(ms.textDocument_rangeFormatting, params, timeout_ms, bufnr)
+        client:request_sync('textDocument/rangeFormatting', params, timeout_ms, bufnr)
       if response and response.result then
         util.apply_text_edits(response.result, bufnr, client.offset_encoding)
         return 0

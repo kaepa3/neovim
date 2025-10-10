@@ -1117,11 +1117,9 @@ function vim.api.nvim_del_var(name) end
 ---   - success: The progress item completed successfully
 ---   - running: The progress is ongoing
 ---   - failed: The progress item failed
----   - cancel: The progressing process should be canceled.
----             note: Cancel needs to be handled by progress
----             initiator by listening for the `Progress` event
---- - percent: How much progress is done on the progress
----   message
+---   - cancel: The progressing process should be canceled. NOTE: Cancel must be handled by
+---     progress initiator by listening for the `Progress` event
+--- - percent: How much progress is done on the progress message
 --- - data: dictionary containing additional information
 --- @return integer|string # Message id.
 --- - -1 means nvim_echo didn't show a message
@@ -1606,7 +1604,8 @@ function vim.api.nvim_input(keys) end
 --- The same specifiers are used as for a key press, except
 --- that the "-" separator is optional, so "C-A-", "c-a"
 --- and "CA" can all be used to specify Ctrl+Alt+click.
---- @param grid integer Grid number if the client uses `ui-multigrid`, else 0.
+--- @param grid integer Grid number (used by `ui-multigrid` client), or 0 to let Nvim decide positioning of
+--- windows. For more information, see [dev-ui-multigrid]
 --- @param row integer Mouse row-position (zero-based, like redraw events)
 --- @param col integer Mouse column-position (zero-based, like redraw events)
 function vim.api.nvim_input_mouse(button, action, modifier, grid, row, col) end
@@ -1726,7 +1725,7 @@ function vim.api.nvim_open_term(buffer, opts) end
 --- provided or `win == 0`, a window will be created adjacent to the current window.
 --- If -1 is provided, a top-level split will be created. `vertical` and `split` are
 --- only valid for normal windows, and are used to control split direction. For `vertical`,
---- the exact direction is determined by `'splitright'` and `'splitbelow'`.
+--- the exact direction is determined by 'splitright' and 'splitbelow'.
 --- Split windows cannot have `bufpos`/`row`/`col`/`border`/`title`/`footer`
 --- properties.
 ---
@@ -2115,7 +2114,7 @@ function vim.api.nvim_set_current_line(line) end
 --- @param tabpage integer `tab-ID` to focus
 function vim.api.nvim_set_current_tabpage(tabpage) end
 
---- Sets the current window (and tabpage, implicitly).
+--- Navigates to the given window (and tabpage, implicitly).
 ---
 --- @param window integer `window-ID` to focus
 function vim.api.nvim_set_current_win(window) end

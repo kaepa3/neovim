@@ -24,6 +24,7 @@
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/eval/vars.h"
 #include "nvim/event/defs.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
@@ -53,7 +54,6 @@
 #include "nvim/message.h"
 #include "nvim/message_defs.h"
 #include "nvim/mouse.h"
-#include "nvim/ops.h"
 #include "nvim/option.h"
 #include "nvim/option_vars.h"
 #include "nvim/os/fs.h"
@@ -62,6 +62,7 @@
 #include "nvim/os/time.h"
 #include "nvim/pos_defs.h"
 #include "nvim/regexp.h"
+#include "nvim/register.h"
 #include "nvim/runtime.h"
 #include "nvim/runtime_defs.h"
 #include "nvim/state_defs.h"
@@ -1108,6 +1109,10 @@ static bool do_clear_hist_temp = true;
 
 void do_autocmd_progress(MsgID msg_id, HlMessage msg, MessageData *msg_data)
 {
+  if (!has_event(EVENT_PROGRESS)) {
+    return;
+  }
+
   MAXSIZE_TEMP_DICT(data, 7);
   ArrayOf(String) messages = ARRAY_DICT_INIT;
   for (size_t i = 0; i < msg.size; i++) {
@@ -1124,8 +1129,7 @@ void do_autocmd_progress(MsgID msg_id, HlMessage msg, MessageData *msg_data)
   }
 
   apply_autocmds_group(EVENT_PROGRESS, msg_data ? msg_data->title.data : "", NULL, true,
-                       AUGROUP_ALL, NULL,
-                       NULL, &DICT_OBJ(data));
+                       AUGROUP_ALL, NULL, NULL, &DICT_OBJ(data));
   kv_destroy(messages);
 }
 
@@ -3290,7 +3294,7 @@ void msg_ext_ui_flush(void)
 
     ui_call_msg_show(cstr_as_string(msg_ext_kind), *tofree, msg_ext_overwrite, msg_ext_history,
                      msg_ext_append, msg_ext_id);
-    // clear info after emiting message.
+    // clear info after emitting message.
     if (msg_ext_history) {
       api_free_array(*tofree);
     } else {

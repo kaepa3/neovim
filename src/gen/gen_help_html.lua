@@ -89,10 +89,11 @@ local new_layout = {
 
 -- Map of new:old pages, to redirect renamed pages.
 local redirects = {
+  ['api-ui-events'] = 'ui',
   ['credits'] = 'backers',
+  ['plugins'] = 'editorconfig',
   ['terminal'] = 'nvim_terminal_emulator',
   ['tui'] = 'term',
-  ['api-ui-events'] = 'ui',
 }
 
 -- TODO: These known invalid |links| require an update to the relevant docs.
@@ -632,7 +633,7 @@ local function visit_node(root, level, lang_tree, headings, opt, stats)
     end
     return s
   elseif node_name == 'argument' then
-    return ('%s<code>{%s}</code>'):format(ws(), text)
+    return ('%s<code>%s</code>'):format(ws(), trim(node_text(root)))
   elseif node_name == 'codeblock' then
     return text
   elseif node_name == 'language' then
@@ -1093,7 +1094,7 @@ local function gen_helptags_json(fname)
     -- "foo.html#tag"
     t[tag] = ('%s#%s'):format(htmlpage, url_encode(tag))
   end
-  tofile(fname, vim.json.encode(t))
+  tofile(fname, vim.json.encode(t, { indent = '  ', sort_keys = true }))
 end
 
 local function gen_css(fname)

@@ -405,7 +405,7 @@ do
     vim.keymap.set('n', '[<C-T>', function()
       -- count doesn't work with :ptprevious, must use range. See #30641.
       cmd({ cmd = 'ptprevious', range = { vim.v.count1 } })
-    end, { desc = ' :ptprevious' })
+    end, { desc = ':ptprevious' })
 
     vim.keymap.set('n', ']<C-T>', function()
       -- count doesn't work with :ptnext, must use range. See #30641.
@@ -676,7 +676,7 @@ do
     end,
   })
 
-  -- Only do the following when the TUI is attached
+  -- Check if a TTY is attached
   local tty = nil
   for _, ui in ipairs(vim.api.nvim_list_uis()) do
     if ui.chan == 1 and ui.stdout_tty then
@@ -974,6 +974,21 @@ do
       end
     end,
   })
+
+  if tty then
+    -- Show progress bars in supporting terminals
+    vim.api.nvim_create_autocmd('Progress', {
+      group = vim.api.nvim_create_augroup('nvim.progress', {}),
+      desc = 'Display native progress bars',
+      callback = function(ev)
+        if ev.data.status == 'running' then
+          vim.api.nvim_ui_send(string.format('\027]9;4;1;%d\027\\', ev.data.percent))
+        else
+          vim.api.nvim_ui_send('\027]9;4;0;0\027\\')
+        end
+      end,
+    })
+  end
 end
 
 --- Default options

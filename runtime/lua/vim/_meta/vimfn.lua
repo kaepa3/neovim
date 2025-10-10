@@ -1893,6 +1893,9 @@ function vim.fn.exp(expr) end
 ---   :r    Root (one extension removed)
 ---   :e    Extension only
 ---
+--- More modifiers are supported, for the full list see
+--- |filename-modifiers|.
+---
 --- Example: >vim
 ---   let &tags = expand("%:p:h") .. "/tags"
 --- <Note that when expanding a string that starts with '%', '#' or
@@ -3075,14 +3078,14 @@ function vim.fn.getcmdscreenpos() end
 --- Returns an empty string otherwise.
 --- Also see |getcmdpos()|, |setcmdpos()| and |getcmdline()|.
 ---
---- @return ':'|'>'|'/'|'?'|'@'|'-'|'='
+--- @return ':'|'>'|'/'|'?'|'@'|'-'|'='|''
 function vim.fn.getcmdtype() end
 
 --- Return the current |command-line-window| type. Possible return
 --- values are the same as |getcmdtype()|. Returns an empty string
 --- when not in the command-line window.
 ---
---- @return ':'|'>'|'/'|'?'|'@'|'-'|'='
+--- @return ':'|'>'|'/'|'?'|'@'|'-'|'='|''
 function vim.fn.getcmdwintype() end
 
 --- Return a list of command-line completion matches. The String
@@ -5697,7 +5700,7 @@ function vim.fn.mapset(dict) end
 --- @param pat string
 --- @param start? integer
 --- @param count? integer
---- @return any
+--- @return integer
 function vim.fn.match(expr, pat, start, count) end
 
 --- Defines a pattern to be highlighted in the current window (a
@@ -5761,8 +5764,8 @@ function vim.fn.match(expr, pat, start, count) end
 --- @param pattern string
 --- @param priority? integer
 --- @param id? integer
---- @param dict? string
---- @return any
+--- @param dict? table
+--- @return integer
 function vim.fn.matchadd(group, pattern, priority, id, dict) end
 
 --- Same as |matchadd()|, but requires a list of positions {pos}
@@ -5805,8 +5808,8 @@ function vim.fn.matchadd(group, pattern, priority, id, dict) end
 --- @param pos any[]
 --- @param priority? integer
 --- @param id? integer
---- @param dict? string
---- @return any
+--- @param dict? table
+--- @return integer|table
 function vim.fn.matchaddpos(group, pos, priority, id, dict) end
 
 --- Selects the {nr} match item, as set with a |:match|,
@@ -5821,7 +5824,7 @@ function vim.fn.matchaddpos(group, pos, priority, id, dict) end
 --- to three matches. |matchadd()| does not have this limitation.
 ---
 --- @param nr integer
---- @return any
+--- @return string[]
 function vim.fn.matcharg(nr) end
 
 --- Returns the |List| of matches in lines from {lnum} to {end} in
@@ -5872,7 +5875,7 @@ function vim.fn.matcharg(nr) end
 --- @param lnum string|integer
 --- @param end_ string|integer
 --- @param dict? table
---- @return any
+--- @return string[]
 function vim.fn.matchbufline(buf, pat, lnum, end_, dict) end
 
 --- Deletes a match with ID {id} previously defined by |matchadd()|
@@ -5909,7 +5912,7 @@ function vim.fn.matchdelete(id, win) end
 --- @param pat string
 --- @param start? integer
 --- @param count? integer
---- @return any
+--- @return integer
 function vim.fn.matchend(expr, pat, start, count) end
 
 --- If {list} is a list of strings, then returns a |List| with all
@@ -5977,7 +5980,7 @@ function vim.fn.matchend(expr, pat, start, count) end
 --- @param list any[]
 --- @param str string
 --- @param dict? table
---- @return any
+--- @return table
 function vim.fn.matchfuzzy(list, str, dict) end
 
 --- Same as |matchfuzzy()|, but returns the list of matched
@@ -6004,7 +6007,7 @@ function vim.fn.matchfuzzy(list, str, dict) end
 --- @param list any[]
 --- @param str string
 --- @param dict? table
---- @return any
+--- @return table
 function vim.fn.matchfuzzypos(list, str, dict) end
 
 --- Same as |match()|, but return a |List|.  The first item in the
@@ -6022,7 +6025,7 @@ function vim.fn.matchfuzzypos(list, str, dict) end
 --- @param pat string
 --- @param start? integer
 --- @param count? integer
---- @return any
+--- @return string[]
 function vim.fn.matchlist(expr, pat, start, count) end
 
 --- Same as |match()|, but return the matched string.  Example: >vim
@@ -6041,7 +6044,7 @@ function vim.fn.matchlist(expr, pat, start, count) end
 --- @param pat string
 --- @param start? integer
 --- @param count? integer
---- @return any
+--- @return string
 function vim.fn.matchstr(expr, pat, start, count) end
 
 --- Returns the |List| of matches in {list} where {pat} matches.
@@ -6079,7 +6082,7 @@ function vim.fn.matchstr(expr, pat, start, count) end
 --- @param list string[]
 --- @param pat string
 --- @param dict? table
---- @return any
+--- @return string[]
 function vim.fn.matchstrlist(list, pat, dict) end
 
 --- Same as |matchstr()|, but return the matched string, the start
@@ -6103,7 +6106,7 @@ function vim.fn.matchstrlist(list, pat, dict) end
 --- @param pat string
 --- @param start? integer
 --- @param count? integer
---- @return any
+--- @return table
 function vim.fn.matchstrpos(expr, pat, start, count) end
 
 --- Return the maximum value of all items in {expr}. Example: >vim
@@ -6550,6 +6553,14 @@ function vim.fn.perleval(expr) end
 --- @param y number
 --- @return number
 function vim.fn.pow(x, y) end
+
+--- Returns non-zero if text has been inserted after the cursor
+--- because "preinsert" is present in 'completeopt', or because
+--- "longest" is present in 'completeopt' while 'autocomplete'
+--- is active.  Otherwise returns zero.
+---
+--- @return number
+function vim.fn.preinserted() end
 
 --- Return the line number of the first line at or above {lnum}
 --- that is not blank.  Example: >vim
@@ -8631,11 +8642,12 @@ function vim.fn.settagstack(nr, dict, action) end
 function vim.fn.setwinvar(nr, varname, val) end
 
 --- Returns a String with 64 hex characters, which is the SHA256
---- checksum of {string}.
+--- checksum of {expr}.
+--- {expr} is a String or a Blob.
 ---
---- @param string string
+--- @param expr string
 --- @return string
-function vim.fn.sha256(string) end
+function vim.fn.sha256(expr) end
 
 --- Escape {string} for use as a shell command argument.
 ---
@@ -10699,9 +10711,9 @@ function vim.fn.utf16idx(string, idx, countcc, charidx) end
 function vim.fn.values(dict) end
 
 --- The result is a Number, which is the screen column of the file
---- position given with {expr}.  That is, the last screen position
---- occupied by the character at that position, when the screen
---- would be of unlimited width.  When there is a <Tab> at the
+--- position given with {expr}.  That is, the total number of
+--- screen cells occupied by the part of the line until the end of
+--- the character at that position.  When there is a <Tab> at the
 --- position, the returned Number will be the column at the end of
 --- the <Tab>.  For example, for a <Tab> in column 1, with 'ts'
 --- set to 8, it returns 8. |conceal| is ignored.

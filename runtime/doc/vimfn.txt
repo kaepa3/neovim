@@ -2136,6 +2136,9 @@ expand({string} [, {nosuf} [, {list}]])                               *expand()*
 			:r		Root (one extension removed)
 			:e		Extension only
 
+		More modifiers are supported, for the full list see
+		|filename-modifiers|.
+
 		Example: >vim
 			let &tags = expand("%:p:h") .. "/tags"
 <		Note that when expanding a string that starts with '%', '#' or
@@ -3430,7 +3433,7 @@ getcmdtype()                                                      *getcmdtype()*
 		Also see |getcmdpos()|, |setcmdpos()| and |getcmdline()|.
 
                 Return: ~
-                  (`':'|'>'|'/'|'?'|'@'|'-'|'='`)
+                  (`':'|'>'|'/'|'?'|'@'|'-'|'='|''`)
 
 getcmdwintype()                                                *getcmdwintype()*
 		Return the current |command-line-window| type. Possible return
@@ -3438,7 +3441,7 @@ getcmdwintype()                                                *getcmdwintype()*
 		when not in the command-line window.
 
                 Return: ~
-                  (`':'|'>'|'/'|'?'|'@'|'-'|'='`)
+                  (`':'|'>'|'/'|'?'|'@'|'-'|'='|''`)
 
 getcompletion({pat}, {type} [, {filtered}])                    *getcompletion()*
 		Return a list of command-line completion matches. The String
@@ -6280,7 +6283,7 @@ match({expr}, {pat} [, {start} [, {count}]])                           *match()*
                   • {count} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`integer`)
 
                                                 *matchadd()* *E798* *E799* *E801* *E957*
 matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])
@@ -6346,10 +6349,10 @@ matchadd({group}, {pattern} [, {priority} [, {id} [, {dict}]]])
                   • {pattern} (`string`)
                   • {priority} (`integer?`)
                   • {id} (`integer?`)
-                  • {dict} (`string?`)
+                  • {dict} (`table?`)
 
                 Return: ~
-                  (`any`)
+                  (`integer`)
 
 matchaddpos({group}, {pos} [, {priority} [, {id} [, {dict}]]])   *matchaddpos()*
 		Same as |matchadd()|, but requires a list of positions {pos}
@@ -6393,10 +6396,10 @@ matchaddpos({group}, {pos} [, {priority} [, {id} [, {dict}]]])   *matchaddpos()*
                   • {pos} (`any[]`)
                   • {priority} (`integer?`)
                   • {id} (`integer?`)
-                  • {dict} (`string?`)
+                  • {dict} (`table?`)
 
                 Return: ~
-                  (`any`)
+                  (`integer|table`)
 
 matcharg({nr})                                                      *matcharg()*
 		Selects the {nr} match item, as set with a |:match|,
@@ -6414,7 +6417,7 @@ matcharg({nr})                                                      *matcharg()*
                   • {nr} (`integer`)
 
                 Return: ~
-                  (`any`)
+                  (`string[]`)
 
 matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict}])           *matchbufline()*
 		Returns the |List| of matches in lines from {lnum} to {end} in
@@ -6468,7 +6471,7 @@ matchbufline({buf}, {pat}, {lnum}, {end}, [, {dict}])           *matchbufline()*
                   • {dict} (`table?`)
 
                 Return: ~
-                  (`any`)
+                  (`string[]`)
 
 matchdelete({id} [, {win}])                            *matchdelete()* *E802* *E803*
 		Deletes a match with ID {id} previously defined by |matchadd()|
@@ -6511,7 +6514,7 @@ matchend({expr}, {pat} [, {start} [, {count}]])                     *matchend()*
                   • {count} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`integer`)
 
 matchfuzzy({list}, {str} [, {dict}])                              *matchfuzzy()*
 		If {list} is a list of strings, then returns a |List| with all
@@ -6582,7 +6585,7 @@ matchfuzzy({list}, {str} [, {dict}])                              *matchfuzzy()*
                   • {dict} (`table?`)
 
                 Return: ~
-                  (`any`)
+                  (`table`)
 
 matchfuzzypos({list}, {str} [, {dict}])                        *matchfuzzypos()*
 		Same as |matchfuzzy()|, but returns the list of matched
@@ -6612,7 +6615,7 @@ matchfuzzypos({list}, {str} [, {dict}])                        *matchfuzzypos()*
                   • {dict} (`table?`)
 
                 Return: ~
-                  (`any`)
+                  (`table`)
 
 matchlist({expr}, {pat} [, {start} [, {count}]])                   *matchlist()*
 		Same as |match()|, but return a |List|.  The first item in the
@@ -6633,7 +6636,7 @@ matchlist({expr}, {pat} [, {start} [, {count}]])                   *matchlist()*
                   • {count} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`string[]`)
 
 matchstr({expr}, {pat} [, {start} [, {count}]])                     *matchstr()*
 		Same as |match()|, but return the matched string.  Example: >vim
@@ -6655,7 +6658,7 @@ matchstr({expr}, {pat} [, {start} [, {count}]])                     *matchstr()*
                   • {count} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`string`)
 
 matchstrlist({list}, {pat} [, {dict}])                          *matchstrlist()*
 		Returns the |List| of matches in {list} where {pat} matches.
@@ -6696,7 +6699,7 @@ matchstrlist({list}, {pat} [, {dict}])                          *matchstrlist()*
                   • {dict} (`table?`)
 
                 Return: ~
-                  (`any`)
+                  (`string[]`)
 
 matchstrpos({expr}, {pat} [, {start} [, {count}]])               *matchstrpos()*
 		Same as |matchstr()|, but return the matched string, the start
@@ -6723,7 +6726,7 @@ matchstrpos({expr}, {pat} [, {start} [, {count}]])               *matchstrpos()*
                   • {count} (`integer?`)
 
                 Return: ~
-                  (`any`)
+                  (`table`)
 
 max({expr})                                                              *max()*
 		Return the maximum value of all items in {expr}. Example: >vim
@@ -7225,6 +7228,15 @@ pow({x}, {y})                                                            *pow()*
                 Parameters: ~
                   • {x} (`number`)
                   • {y} (`number`)
+
+                Return: ~
+                  (`number`)
+
+preinserted()                                                    *preinserted()*
+		Returns non-zero if text has been inserted after the cursor
+		because "preinsert" is present in 'completeopt', or because
+		"longest" is present in 'completeopt' while 'autocomplete'
+		is active.  Otherwise returns zero.
 
                 Return: ~
                   (`number`)
@@ -9468,12 +9480,13 @@ setwinvar({nr}, {varname}, {val})                                  *setwinvar()*
                 Return: ~
                   (`any`)
 
-sha256({string})                                                      *sha256()*
+sha256({expr})                                                        *sha256()*
 		Returns a String with 64 hex characters, which is the SHA256
-		checksum of {string}.
+		checksum of {expr}.
+		{expr} is a String or a Blob.
 
                 Parameters: ~
-                  • {string} (`string`)
+                  • {expr} (`string`)
 
                 Return: ~
                   (`string`)
@@ -11754,9 +11767,9 @@ values({dict})                                                        *values()*
 
 virtcol({expr} [, {list} [, {winid}]])                               *virtcol()*
 		The result is a Number, which is the screen column of the file
-		position given with {expr}.  That is, the last screen position
-		occupied by the character at that position, when the screen
-		would be of unlimited width.  When there is a <Tab> at the
+		position given with {expr}.  That is, the total number of
+		screen cells occupied by the part of the line until the end of
+		the character at that position.  When there is a <Tab> at the
 		position, the returned Number will be the column at the end of
 		the <Tab>.  For example, for a <Tab> in column 1, with 'ts'
 		set to 8, it returns 8. |conceal| is ignored.

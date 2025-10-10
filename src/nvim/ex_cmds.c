@@ -36,9 +36,9 @@
 #include "nvim/drawscreen.h"
 #include "nvim/edit.h"
 #include "nvim/errors.h"
-#include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/eval/vars.h"
 #include "nvim/ex_cmds.h"
 #include "nvim/ex_cmds2.h"
 #include "nvim/ex_cmds_defs.h"
@@ -1772,7 +1772,9 @@ void ex_file(exarg_T *eap)
 /// ":update".
 void ex_update(exarg_T *eap)
 {
-  if (curbufIsChanged()) {
+  if (curbufIsChanged()
+      || (!bt_nofilename(curbuf) && curbuf->b_ffname != NULL
+          && !os_path_exists(curbuf->b_ffname))) {
     do_write(eap);
   }
 }

@@ -873,7 +873,7 @@ vim.wait({time}, {callback}, {interval}, {fast_only})             *vim.wait()*
 
     Parameters: ~
       • {time}       (`integer`) Number of milliseconds to wait
-      • {callback}   (`fun(): boolean?`) Optional callback. Waits until
+      • {callback}   (`fun(): boolean, ...?`) Optional callback. Waits until
                      {callback} returns true
       • {interval}   (`integer?`) (Approximate) number of milliseconds to wait
                      between polls
@@ -2057,12 +2057,12 @@ vim.tbl_extend({behavior}, {...})                           *vim.tbl_extend()*
     See also: ~
       • |extend()|
 
-vim.tbl_filter({func}, {t})                                 *vim.tbl_filter()*
+vim.tbl_filter({fn}, {t})                                   *vim.tbl_filter()*
     Filter a table using a predicate function
 
     Parameters: ~
-      • {func}  (`function`) Function
-      • {t}     (`table`) Table
+      • {fn}  (`function`) Function
+      • {t}   (`table`) Table
 
     Return: ~
         (`any[]`) Table of filtered values
@@ -2110,12 +2110,14 @@ vim.tbl_keys({t})                                             *vim.tbl_keys()*
       • From
         https://github.com/premake/premake-core/blob/master/src/base/table.lua
 
-vim.tbl_map({func}, {t})                                       *vim.tbl_map()*
-    Apply a function to all values of a table.
+vim.tbl_map({fn}, {t})                                         *vim.tbl_map()*
+    Applies function `fn` to all values of table `t`, in `pairs()` iteration
+    order (which is not guaranteed to be stable, even when the data doesn't
+    change).
 
     Parameters: ~
-      • {func}  (`fun(value: T): any`) Function
-      • {t}     (`table<any, T>`) Table
+      • {fn}  (`fun(value: T): any`) Function
+      • {t}   (`table<any, T>`) Table
 
     Return: ~
         (`table`) Table of transformed values
@@ -2160,6 +2162,7 @@ vim.validate({name}, {value}, {validator}, {optional}, {message})
           -- ...
         end
 <
+
     2. `vim.validate(spec)` (deprecated) where `spec` is of type
        `table<string,[value:any, validator: vim.validate.Validator, optional_or_msg? : boolean|string]>)`
        Validates a argument specification. Specs are evaluated in alphanumeric
@@ -2364,7 +2367,9 @@ vim.filetype.match({args})                              *vim.filetype.match()*
 
     The filetype can be detected using one of three methods:
     1. Using an existing buffer
+
     2. Using only a file name
+
     3. Using only file contents
 
     Of these, option 1 provides the most accurate result as it uses both the
@@ -3342,7 +3347,7 @@ JSON-encoded strings. Supports |vim.NIL| and |vim.empty_dict()|.
 
 
 vim.json.decode({str}, {opts})                             *vim.json.decode()*
-    Decodes (or "unpacks") the JSON-encoded {str} to a Lua object.
+    Decodes (or "unpacks") stringified JSON to a Lua object.
     • Decodes JSON "null" as |vim.NIL| (controllable by {opts}, see below).
     • Decodes empty object as |vim.empty_dict()|.
     • Decodes empty array as `{}` (empty Lua table).
@@ -3354,27 +3359,41 @@ vim.json.decode({str}, {opts})                             *vim.json.decode()*
 
     Parameters: ~
       • {str}   (`string`) Stringified JSON data.
-      • {opts}  (`table<string,any>?`) Options table with keys:
-                • luanil: (table) Table with keys:
-                  • object: (boolean) When true, converts `null` in JSON
-                    objects to Lua `nil` instead of |vim.NIL|.
-                  • array: (boolean) When true, converts `null` in JSON arrays
-                    to Lua `nil` instead of |vim.NIL|.
+      • {opts}  (`table?`) A table with the following fields:
+                • {luanil}? (`{ object?: boolean, array?: boolean }`, default:
+                  `nil`) Convert `null` in JSON objects and/or arrays to Lua
+                  `nil` instead of |vim.NIL|.
 
     Return: ~
         (`any`)
 
 vim.json.encode({obj}, {opts})                             *vim.json.encode()*
-    Encodes (or "packs") Lua object {obj} as JSON in a Lua string.
+    Encodes (or "packs") a Lua object to stringified JSON.
+
+    Example: Implement a basic 'formatexpr' for JSON, so |gq| with a motion
+    formats JSON in a buffer. (The motion must operate on a valid JSON
+    object.) >lua
+        function _G.fmt_json()
+          local indent = vim.bo.expandtab and (' '):rep(vim.o.shiftwidth) or '\t'
+          local lines = vim.api.nvim_buf_get_lines(0, vim.v.lnum - 1, vim.v.lnum + vim.v.count - 1, true)
+          local o = vim.json.decode(table.concat(lines, '\n'))
+          local stringified = vim.json.encode(o, { indent = indent, sort_keys = true })
+          lines = vim.split(stringified, '\n')
+          vim.api.nvim_buf_set_lines(0, vim.v.lnum - 1, vim.v.count, true, lines)
+        end
+        vim.o.formatexpr = 'v:lua.fmt_json()'
+<
 
     Parameters: ~
       • {obj}   (`any`)
-      • {opts}  (`table<string,any>?`) Options table with keys:
-                • escape_slash: (boolean) (default false) Escape slash
+      • {opts}  (`table?`) A table with the following fields:
+                • {escape_slash}? (`boolean`, default: `false`) Escape slash
                   characters "/" in string values.
-                • indent: (string) (default "") String used for indentation at
-                  each nesting level. If non-empty enables newlines and a
-                  space after colons.
+                • {indent}? (`string`, default: `""`) If non-empty, the
+                  returned JSON is formatted with newlines and whitespace,
+                  where `indent` defines the whitespace at each nesting level.
+                • {sort_keys}? (`boolean`, default: `false`) Sort object keys
+                  in alphabetical order.
 
     Return: ~
         (`string`)
@@ -3929,7 +3948,7 @@ vim.net.request({url}, {opts}, {on_response})              *vim.net.request()*
 
     This function operates in one mode:
     • Asynchronous (non-blocking): Returns immediately and passes the response
-      object to the provided `on_response` handler on completetion.
+      object to the provided `on_response` handler on completion.
 
     Parameters: ~
       • {url}          (`string`) The URL for the request.
@@ -3942,7 +3961,7 @@ vim.net.request({url}, {opts}, {on_response})              *vim.net.request()*
                          Response Object will be `true` instead of the
                          response body.
       • {on_response}  (`fun(err?: string, response?: { body: string|boolean })`)
-                       Callback invoked on request completetion. The `body`
+                       Callback invoked on request completion. The `body`
                        field in the response object contains the raw response
                        data (text or binary). Called with (err, nil) on
                        failure, or (nil, { body = string|boolean }) on
@@ -4093,7 +4112,7 @@ Provides operations to compare, calculate, and convert ranges represented by
 
         -- Create a range from two positions.
         local range1 = vim.range(pos1, pos2)
-        -- Or createa range from four integers representing start and end positions.
+        -- Or create a range from four integers representing start and end positions.
         local range2 = vim.range(3, 5, 4, 0)
 
         -- Because `vim.Range` is end exclusive, `range1` and `range2` both represent
@@ -4403,7 +4422,7 @@ vim.snippet.jump({direction})                             *vim.snippet.jump()*
            else
              return '<Tab>'
            end
-         end, { descr = '...', expr = true, silent = true })
+         end, { desc = '...', expr = true, silent = true })
 <
 
     Parameters: ~
@@ -4603,7 +4622,7 @@ vim.system({cmd}, {opts}, {on_exit})                            *vim.system()*
                    return of SystemObj:wait().
 
     Overloads: ~
-      • `fun(cmd: string, on_exit: fun(out: vim.SystemCompleted)): vim.SystemObj`
+      • `fun(cmd: string[], on_exit: fun(out: vim.SystemCompleted)): vim.SystemObj`
 
     Return: ~
         (`vim.SystemObj`) See |vim.SystemObj|.

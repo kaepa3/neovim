@@ -24,6 +24,7 @@
 #include "nvim/eval.h"
 #include "nvim/eval/typval.h"
 #include "nvim/eval/typval_defs.h"
+#include "nvim/eval/vars.h"
 #include "nvim/event/loop.h"
 #include "nvim/event/multiqueue.h"
 #include "nvim/ex_cmds.h"
@@ -2013,7 +2014,7 @@ static void getchar_common(typval_T *argvars, typval_T *rettv, bool allow_number
         int winnr = 1;
         // Find the window at the mouse coordinates and compute the
         // text position.
-        win_T *const win = mouse_find_win(&grid, &row, &col);
+        win_T *const win = mouse_find_win_inner(&grid, &row, &col);
         if (win == NULL) {
           return;
         }
