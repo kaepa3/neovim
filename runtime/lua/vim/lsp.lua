@@ -376,7 +376,6 @@ lsp.config = setmetatable({ _configs = {} }, {
       end
 
       if not rtp_config and not self._configs[name] then
-        log.warn(('%s does not have a configuration'):format(name))
         return
       end
 
@@ -434,10 +433,16 @@ local function validate_config(config)
   validate('filetypes', config.filetypes, 'table', true)
 end
 
+--- Returns true if:
+--- 1. the config is managed by vim.lsp,
+--- 2. it applies to the given buffer, and
+--- 3. its config is valid (in particular: its `cmd` isn't broken).
+---
 --- @param bufnr integer
 --- @param config vim.lsp.Config
 --- @param logging boolean
 local function can_start(bufnr, config, logging)
+  assert(config)
   if
     type(config.filetypes) == 'table'
     and not vim.tbl_contains(config.filetypes, vim.bo[bufnr].filetype)
@@ -476,7 +481,13 @@ local function lsp_enable_callback(bufnr)
   -- Stop any clients that no longer apply to this buffer.
   local clients = lsp.get_clients({ bufnr = bufnr, _uninitialized = true })
   for _, client in ipairs(clients) do
-    if lsp.is_enabled(client.name) and not can_start(bufnr, lsp.config[client.name], false) then
+    -- Don't index into lsp.config[…] unless is_enabled() is true.
+    if
+      lsp.is_enabled(client.name)
+      -- Check that the client is managed by vim.lsp.config before deciding to detach it!
+      and lsp.config[client.name]
+      and not can_start(bufnr, lsp.config[client.name], false)
+    then
       lsp.buf_detach_client(bufnr, client.id)
     end
   end
@@ -1075,7 +1086,7 @@ end
 --- @field name? string
 ---
 --- Only return clients supporting the given method
---- @field method? string
+--- @field method? vim.lsp.protocol.Method.ClientToServer
 ---
 --- Also return uninitialized clients.
 --- @field package _uninitialized? boolean

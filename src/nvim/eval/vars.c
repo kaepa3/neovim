@@ -1369,7 +1369,7 @@ static void tv_list_unlet_range(list_T *const l, listitem_T *const li_first, con
 int do_unlet(const char *const name, const size_t name_len, const bool forceit)
   FUNC_ATTR_NONNULL_ALL
 {
-  const char *varname;
+  const char *varname = NULL;  // init to shut up gcc
   dict_T *dict;
   hashtab_T *ht = find_var_ht_dict(name, name_len, &varname, &dict);
 
@@ -2606,7 +2606,7 @@ static OptVal tv_to_optval(typval_T *tv, OptIndex opt_idx, const char *option, b
       value = CSTR_TO_OPTVAL(strval);
     } else if (!is_tty_opt) {
       err = true;
-      emsg(_(e_stringreq));
+      emsg(_(e_string_required));
     }
   } else {
     abort();  // This should never happen.

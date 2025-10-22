@@ -270,6 +270,15 @@ static void pum_compute_horizontal_placement(win_T *target_win, int cursor_col)
   pum_width = max_col - pum_scrollbar;
 }
 
+static inline int pum_border_width(void)
+{
+  if (*p_pumborder == NUL || strequal(p_pumborder, opt_winborder_values[7])) {
+    return 0;  // No border
+  }
+  // Shadow (1) only has right+bottom, others (2) have full border
+  return strequal(p_pumborder, opt_winborder_values[3]) ? 1 : 2;
+}
+
 /// Show the popup menu with items "array[size]".
 /// "array" must remain valid until pum_undisplay() is called!
 /// When possible the leftmost character is aligned with cursor column.
@@ -297,8 +306,7 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed, i
 
   pum_rl = (State & MODE_CMDLINE) == 0 && curwin->w_p_rl;
 
-  int pum_border_size = *p_pumborder != NUL ? 2 : 0;
-
+  int border_width = pum_border_width();
   do {
     // Mark the pum as visible already here,
     // to avoid that must_redraw is set when 'cursorcolumn' is on.
@@ -387,10 +395,10 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed, i
 
     // Figure out the vertical size and position of the pum.
     pum_compute_vertical_placement(size, target_win, pum_win_row, above_row, below_row,
-                                   pum_border_size);
+                                   border_width);
 
     // don't display when we only have room for one line
-    if (pum_border_size == 0 && (pum_height < 1 || (pum_height == 1 && size > 1))) {
+    if (border_width == 0 && (pum_height < 1 || (pum_height == 1 && size > 1))) {
       return;
     }
 
@@ -410,8 +418,8 @@ void pum_display(pumitem_T *array, int size, int selected, bool array_changed, i
     // Figure out the horizontal size and position of the pum.
     pum_compute_horizontal_placement(target_win, cursor_col);
 
-    if (pum_col + pum_border_size + pum_width > Columns) {
-      pum_col -= pum_border_size;
+    if (pum_col + border_width + pum_width > Columns) {
+      pum_col -= border_width;
     }
 
     // Set selected item and redraw.  If the window size changed need to redo
@@ -599,25 +607,38 @@ void pum_redraw(void)
   }
 
   WinConfig fconfig = WIN_CONFIG_INIT;
-  int pum_border_width = 0;
+  int border_width = pum_border_width();
   // setup popup menu border if 'pumborder' option is set
-  if (*p_pumborder != NUL) {
-    pum_border_width = 2;
+  if (border_width > 0) {
     fconfig.border = true;
     Error err = ERROR_INIT;
-    parse_border_style(CSTR_AS_OBJ(p_pumborder), &fconfig, &err);
-    // shadow style uses different highlights for different positions
-    if (strcmp(p_pumborder, opt_winborder_values[3]) == 0) {
+    if (!parse_winborder(&fconfig, p_pumborder, &err)) {
+      if (ERROR_SET(&err)) {
+        emsg(err.msg);
+      }
+      api_clear_error(&err);
+      return;
+    }
+
+    // Shadow style: only adds border on right and bottom edges
+    if (strequal(p_pumborder, opt_winborder_values[3])) {
+      fconfig.shadow = true;
       int blend = SYN_GROUP_STATIC("PmenuShadow");
       int through = SYN_GROUP_STATIC("PmenuShadowThrough");
-      int attrs[] = { 0, 0, through, blend, blend, blend, through, 0 };
-      memcpy(fconfig.border_attr, attrs, sizeof(attrs));
-    } else {
-      // Non-shadow styles use PumBorder highlight for all border chars
+      fconfig.border_hl_ids[2] = through;
+      fconfig.border_hl_ids[3] = blend;
+      fconfig.border_hl_ids[4] = blend;
+      fconfig.border_hl_ids[5] = blend;
+      fconfig.border_hl_ids[6] = through;
+    }
+
+    // convert border highlight IDs to attributes, use PmenuBorder as default
+    for (int i = 0; i < 8; i++) {
       int attr = hl_attr_active[HLF_PBR];
-      for (int i = 0; i < 8; i++) {
-        fconfig.border_attr[i] = attr;
+      if (fconfig.border_hl_ids[i]) {
+        attr = hl_get_ui_attr(-1, HLF_PBR, fconfig.border_hl_ids[i], false);
       }
+      fconfig.border_attr[i] = attr;
     }
     api_clear_error(&err);
   }
@@ -626,14 +647,14 @@ void pum_redraw(void)
   pum_left_col = pum_col - col_off;
   pum_right_col = pum_left_col + grid_width;
   bool moved = ui_comp_put_grid(&pum_grid, pum_row, pum_left_col,
-                                pum_height + pum_border_width, grid_width + pum_border_width, false,
+                                pum_height + border_width, grid_width + border_width, false,
                                 true);
   bool invalid_grid = moved || pum_invalid;
   pum_invalid = false;
   must_redraw_pum = false;
 
   if (!pum_grid.chars || pum_grid.rows != pum_height || pum_grid.cols != grid_width) {
-    grid_alloc(&pum_grid, pum_height + pum_border_width, grid_width + pum_border_width,
+    grid_alloc(&pum_grid, pum_height + border_width, grid_width + border_width,
                !invalid_grid, false);
     ui_call_grid_resize(pum_grid.handle, pum_grid.cols, pum_grid.rows);
   } else if (invalid_grid) {
@@ -653,9 +674,11 @@ void pum_redraw(void)
   // avoid set border for mouse menu
   int mouse_menu = State != MODE_CMDLINE && pum_grid.zindex == kZIndexCmdlinePopupMenu;
   if (!mouse_menu && fconfig.border) {
-    grid_draw_border(&pum_grid, fconfig, NULL, 0, NULL);
-    row++;
-    col_off++;
+    grid_draw_border(&pum_grid, &fconfig, NULL, 0, NULL);
+    if (!fconfig.shadow) {
+      row++;
+      col_off++;
+    }
   }
 
   // Never display more than we have
@@ -930,8 +953,8 @@ static void pum_preview_set_text(buf_T *buf, char *info, linenr_T *lnum, int *ma
 /// adjust floating info preview window position
 static void pum_adjust_info_position(win_T *wp, int width)
 {
-  int extra_width = *p_pumborder != NUL ? 2 : 0;
-  int col = pum_col + pum_width + pum_scrollbar + 1 + extra_width;
+  int border_width = pum_border_width();
+  int col = pum_col + pum_width + pum_scrollbar + 1 + border_width;
   // TODO(glepnir): support config align border by using completepopup
   // align menu
   int right_extra = Columns - col;

@@ -2260,7 +2260,7 @@ bool ins_compl_has_autocomplete(void)
   return curbuf->b_p_ac >= 0 ? curbuf->b_p_ac : p_ac;
 }
 
-/// Cacluate fuzzy score and sort completion matches unless sorting is disabled.
+/// Calculate fuzzy score and sort completion matches unless sorting is disabled.
 static void ins_compl_fuzzy_sort(void)
 {
   unsigned cur_cot_flags = get_cot_flags();
@@ -6054,6 +6054,7 @@ static int ins_compl_start(void)
   can_si = false;
   can_si_back = false;
   if (stop_arrow() == FAIL) {
+    did_ai = save_did_ai;
     return FAIL;
   }
 
@@ -6148,6 +6149,7 @@ static int ins_compl_start(void)
     API_CLEAR_STRING(compl_pattern);
     API_CLEAR_STRING(compl_orig_text);
     kv_destroy(compl_orig_extmarks);
+    did_ai = save_did_ai;
     return FAIL;
   }
 
@@ -6162,6 +6164,7 @@ static int ins_compl_start(void)
     ui_flush();
   }
 
+  did_ai = save_did_ai;
   return OK;
 }
 
