@@ -74,6 +74,7 @@
 #include "nvim/macros_defs.h"
 #include "nvim/main.h"
 #include "nvim/map_defs.h"
+#include "nvim/mark.h"
 #include "nvim/mbyte.h"
 #include "nvim/memline.h"
 #include "nvim/memory.h"
@@ -159,10 +160,11 @@ struct terminal {
   // window height has increased) and must be deleted from the terminal buffer
   int sb_pending;
   size_t sb_deleted;                // Lines deleted from sb_buffer.
+  size_t sb_deleted_last;           // Value of sb_deleted on last refresh_scrollback()
 
   char *title;     // VTermStringFragment buffer
-  size_t title_len;    // number of rows pushed to sb_buffer
-  size_t title_size;   // sb_buffer size
+  size_t title_len;
+  size_t title_size;
 
   // buf_T instance that acts as a "drawing surface" for libvterm
   // we can't store a direct reference to the buffer because the
@@ -771,7 +773,7 @@ bool terminal_enter(void)
   set_terminal_winopts(s);
 
   s->term->pending.cursor = true;  // Update the cursor shape table
-  adjust_topline(s->term, buf, 0);  // scroll to end
+  adjust_topline_cursor(s->term, buf, 0);  // scroll to end
   showmode();
   ui_cursor_shape();
 
@@ -2106,7 +2108,7 @@ static void refresh_terminal(Terminal *term)
   refresh_screen(term, buf);
 
   int ml_added = buf->b_ml.ml_line_count - ml_before;
-  adjust_topline(term, buf, ml_added);
+  adjust_topline_cursor(term, buf, ml_added);
 
   // Copy pending events back to the main event queue
   multiqueue_move_events(main_loop.events, term->pending.events);
@@ -2220,6 +2222,8 @@ static void adjust_scrollback(Terminal *term, buf_T *buf)
       term->sb_current--;
       xfree(term->sb_buffer[term->sb_current]);
     }
+    mark_adjust_buf(buf, 1, (linenr_T)diff, MAXLNUM, -(linenr_T)diff, true,
+                    kMarkAdjustTerm, kExtmarkUndo);
     deleted_lines_buf(buf, 1, (linenr_T)diff);
   }
 
@@ -2235,6 +2239,11 @@ static void adjust_scrollback(Terminal *term, buf_T *buf)
 // Refresh the scrollback of an invalidated terminal.
 static void refresh_scrollback(Terminal *term, buf_T *buf)
 {
+  linenr_T deleted = (linenr_T)(term->sb_deleted - term->sb_deleted_last);
+  deleted = MIN(deleted, buf->b_ml.ml_line_count);
+  mark_adjust_buf(buf, 1, deleted, MAXLNUM, -deleted, true, kMarkAdjustTerm, kExtmarkUndo);
+  term->sb_deleted_last = term->sb_deleted;
+
   int width, height;
   vterm_get_size(term->vt, &height, &width);
 
@@ -2315,8 +2324,10 @@ static void refresh_screen(Terminal *term, buf_T *buf)
   term->invalid_end = -1;
 }
 
-static void adjust_topline(Terminal *term, buf_T *buf, int added)
+static void adjust_topline_cursor(Terminal *term, buf_T *buf, int added)
 {
+  linenr_T ml_end = buf->b_ml.ml_line_count;
+
   FOR_ALL_TAB_WINDOWS(tp, wp) {
     if (wp->w_buffer == buf) {
       if (wp == curwin && is_focused(term)) {
@@ -2325,9 +2336,7 @@ static void adjust_topline(Terminal *term, buf_T *buf, int added)
         continue;
       }
 
-      linenr_T ml_end = buf->b_ml.ml_line_count;
       bool following = ml_end == wp->w_cursor.lnum + added;  // cursor at end?
-
       if (following) {
         // "Follow" the terminal output
         wp->w_cursor.lnum = ml_end;
@@ -2337,6 +2346,17 @@ static void adjust_topline(Terminal *term, buf_T *buf, int added)
         wp->w_cursor.lnum = MIN(wp->w_cursor.lnum, ml_end);
       }
       mb_check_adjust_col(wp);
+    }
+  }
+
+  if (ml_end == buf->b_last_cursor.mark.lnum + added) {
+    buf->b_last_cursor.mark.lnum = ml_end;
+  }
+
+  for (size_t i = 0; i < kv_size(buf->b_wininfo); i++) {
+    WinInfo *wip = kv_A(buf->b_wininfo, i);
+    if (ml_end == wip->wi_mark.mark.lnum + added) {
+      wip->wi_mark.mark.lnum = ml_end;
     }
   }
 }
