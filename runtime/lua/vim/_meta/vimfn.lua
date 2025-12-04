@@ -1127,53 +1127,6 @@ function vim.fn.complete_check() end
 --- @return table
 function vim.fn.complete_info(what) end
 
---- Searches backward from the given position and returns a List
---- of matches according to the 'isexpand' option.  When no
---- arguments are provided, uses the current cursor position.
----
---- Each match is represented as a List containing
---- [startcol, trigger_text] where:
---- - startcol: column position where completion should start,
----   or -1 if no trigger position is found.  For multi-character
----   triggers, returns the column of the first character.
---- - trigger_text: the matching trigger string from 'isexpand',
----   or empty string if no match was found or when using the
----   default 'iskeyword' pattern.
----
---- When 'isexpand' is empty, uses the 'iskeyword' pattern "\k\+$"
---- to find the start of the current keyword.
----
---- Examples: >vim
----   set isexpand=.,->,/,/*,abc
----   func CustomComplete()
----     let res = complete_match()
----     if res->len() == 0 | return | endif
----     let [col, trigger] = res[0]
----     let items = []
----     if trigger == '/*'
----       let items = ['/** */']
----     elseif trigger == '/'
----       let items = ['/*! */', '// TODO:', '// fixme:']
----     elseif trigger == '.'
----       let items = ['length()']
----     elseif trigger =~ '^\->'
----       let items = ['map()', 'reduce()']
----     elseif trigger =~ '^\abc'
----       let items = ['def', 'ghk']
----     endif
----     if items->len() > 0
----       let startcol = trigger =~ '^/' ? col : col + len(trigger)
----       call complete(startcol, items)
----     endif
----   endfunc
----   inoremap <Tab> <Cmd>call CustomComplete()<CR>
---- <
----
---- @param lnum? integer
---- @param col? integer
---- @return table
-function vim.fn.complete_match(lnum, col) end
-
 --- confirm() offers the user a dialog, from which a choice can be
 --- made.  It returns the number of the choice.  For the first
 --- choice this is 1.
@@ -2328,12 +2281,13 @@ function vim.fn.fmod(expr1, expr2) end
 
 --- Escape {string} for use as file name command argument.  All
 --- characters that have a special meaning, such as `'%'` and `'|'`
---- are escaped with a backslash.
---- For most systems the characters escaped are
---- " \t\n*?[{`$\\%#'\"|!<".  For systems where a backslash
---- appears in a filename, it depends on the value of 'isfname'.
---- A leading '+' and '>' is also escaped (special after |:edit|
---- and |:write|).  And a "-" by itself (special after |:cd|).
+--- are escaped with a backslash. For most systems the characters
+--- escaped are: >
+---   \t\n *?[{`$\\%#'\"|!<
+--- <For systems where a backslash appears in a filename, it
+--- depends on the value of 'isfname'. A leading '+' and '>' is
+--- also escaped (special after |:edit| and |:write|).  And a "-"
+--- by itself (special after |:cd|).
 --- Returns an empty string on error.
 --- Example: >vim
 ---   let fname = '+some str%nge|name'
@@ -3530,33 +3484,30 @@ function vim.fn.getmousepos() end
 --- @return integer
 function vim.fn.getpid() end
 
---- Get the position for String {expr}.
---- The accepted values for {expr} are:
----     .      The cursor position.
----     $      The last line in the current buffer.
+--- Gets a position, where {expr} is one of:
+---     .      Cursor position.
+---     $      Last line in the current buffer.
 ---     'x      Position of mark x (if the mark is not set, 0 is
 ---       returned for all values).
 ---     w0      First line visible in current window (one if the
 ---       display isn't updated, e.g. in silent Ex mode).
 ---     w$      Last line visible in current window (this is one
 ---       less than "w0" if no lines are visible).
----     v      When not in Visual mode, returns the cursor
----       position.  In Visual mode, returns the other end
----       of the Visual area.  A good way to think about
----       this is that in Visual mode "v" and "." complement
----       each other.  While "." refers to the cursor
----       position, "v" refers to where |v_o| would move the
----       cursor.  As a result, you can use "v" and "."
----       together to work on all of a selection in
----       characterwise Visual mode.  If the cursor is at
----       the end of a characterwise Visual area, "v" refers
----       to the start of the same Visual area.  And if the
----       cursor is at the start of a characterwise Visual
----       area, "v" refers to the end of the same Visual
----       area.  "v" differs from |'<| and |'>| in that it's
----       updated right away.
---- Note that a mark in another file can be used.  The line number
---- then applies to another buffer.
+---     v      End of the current Visual selection (unlike |'<|
+---       |'>| which give the previous, not current, Visual
+---       selection), or the cursor position if not in Visual
+---       mode.
+---
+---       To get the current selected region: >vim
+---         let region = getregionpos(getpos('v'), getpos('.'))
+--- <
+---       Explanation: in Visual mode "v" and "." complement each
+---       other.  While "." refers to the cursor position, "v"
+---       refers to where |v_o| would move the cursor.  So you can
+---       use "v" and "." together to get the selected region.
+---
+--- Note that if a mark in another file is used, the line number
+--- applies to that buffer.
 ---
 --- The result is a |List| with four numbers:
 ---     [bufnum, lnum, col, off]
@@ -3839,8 +3790,14 @@ function vim.fn.getregion(pos1, pos2, opts) end
 --- the offset of the character's first cell not included in the
 --- selection, otherwise all its cells are included.
 ---
---- Apart from the options supported by |getregion()|, {opts} also
---- supports the following:
+--- To get the current visual selection: >vim
+---   let region = getregionpos(getpos('v'), getpos('.'))
+--- <
+--- The {opts} Dict supports the following items:
+---
+---   type    See |getregion()|.
+---
+---   exclusive  See |getregion()|.
 ---
 ---   eol    If |TRUE|, indicate positions beyond
 ---       the end of a line with "col" values
@@ -8317,9 +8274,9 @@ function vim.fn.setline(lnum, text) end
 --- for the list of supported keys in {what}.
 ---
 --- @param nr integer
---- @param list any
+--- @param list vim.quickfix.entry[]
 --- @param action? string
---- @param what? table
+--- @param what? vim.fn.setqflist.what
 --- @return any
 function vim.fn.setloclist(nr, list, action, what) end
 
@@ -10128,7 +10085,7 @@ function vim.fn.synIDattr(synID, what, mode) end
 --- @return integer
 function vim.fn.synIDtrans(synID) end
 
---- The result is a |List| with currently three items:
+--- The result is a |List| with three items:
 --- 1. The first item in the list is 0 if the character at the
 ---    position {lnum} and {col} is not part of a concealable
 ---    region, 1 if it is.  {lnum} is used like with |getline()|.

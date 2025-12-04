@@ -2757,6 +2757,9 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     "tablineat",
     "tag_binary",
     "termguicolors",
+#ifdef HAVE_UNIBILIUM
+    "terminfo",
+#endif
     "termresponse",
     "textobjects",
     "timers",
@@ -2798,20 +2801,21 @@ static void f_has(typval_T *argvars, typval_T *rettv, EvalFuncData fptr)
     } else if (STRNICMP(name, "patch", 5) == 0) {
       if (name[5] == '-'
           && strlen(name) >= 11
-          && ascii_isdigit(name[6])
-          && ascii_isdigit(name[8])
-          && ascii_isdigit(name[10])) {
-        int major = atoi(name + 6);
-        int minor = atoi(name + 8);
+          && (name[6] >= '1' && name[6] <= '9')) {
+        char *end;
 
-        // Expect "patch-9.9.01234".
-        n = (major < VIM_VERSION_MAJOR
-             || (major == VIM_VERSION_MAJOR
-                 && (minor < VIM_VERSION_MINOR
-                     || (minor == VIM_VERSION_MINOR
-                         && has_vim_patch(atoi(name + 10))))));
-      } else {
-        n = has_vim_patch(atoi(name + 5));
+        // This works for patch-8.1.2, patch-9.0.3, patch-10.0.4, etc.
+        // Not for patch-9.10.5.
+        int major = (int)strtoul(name + 6, &end, 10);
+        if (*end == '.' && ascii_isdigit(end[1])
+            && end[2] == '.' && ascii_isdigit(end[3])) {
+          int minor = atoi(end + 1);
+
+          // Expect "patch-9.9.01234".
+          n = has_vim_patch(atoi(end + 3), major * 100 + minor);
+        }
+      } else if (ascii_isdigit(name[5])) {
+        n = has_vim_patch(atoi(name + 5), 0);
       }
     } else if (STRNICMP(name, "nvim-", 5) == 0) {
       // Expect "nvim-x.y.z"

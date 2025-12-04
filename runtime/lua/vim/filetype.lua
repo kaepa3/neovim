@@ -549,6 +549,8 @@ local extension = {
   graphql = 'graphql',
   graphqls = 'graphql',
   gretl = 'gretl',
+  groff = 'groff',
+  mom = 'groff',
   gradle = 'groovy',
   groovy = 'groovy',
   gsp = 'gsp',
@@ -703,6 +705,7 @@ local extension = {
   journal = 'ledger',
   ldg = 'ledger',
   ledger = 'ledger',
+  xrl = 'leex',
   leo = 'leo',
   less = 'less',
   lex = 'lex',
@@ -874,7 +877,6 @@ local extension = {
   roff = 'nroff',
   tmac = 'nroff',
   man = 'nroff',
-  mom = 'nroff',
   nr = 'nroff',
   tr = 'nroff',
   nsi = 'nsis',
@@ -1099,6 +1101,7 @@ local extension = {
   rjs = 'ruby',
   rxml = 'ruby',
   rb = 'ruby',
+  rbi = 'ruby',
   rant = 'ruby',
   ru = 'ruby',
   rbw = 'ruby',
@@ -1207,6 +1210,7 @@ local extension = {
   ass = 'ssa',
   st = 'st',
   ipd = 'starlark',
+  sky = 'starlark',
   star = 'starlark',
   starlark = 'starlark',
   imata = 'stata',
@@ -1602,6 +1606,7 @@ local filename = {
   Earthfile = 'earthfile',
   ['.editorconfig'] = 'editorconfig',
   ['elinks.conf'] = 'elinks',
+  ['rebar.config'] = 'erlang',
   ['mix.lock'] = 'elixir',
   ['filter-rules'] = 'elmfilt',
   ['exim.conf'] = 'exim',
@@ -1844,6 +1849,7 @@ local filename = {
   ['requirements.in'] = 'requirements',
   ['resolv.conf'] = 'resolv',
   ['robots.txt'] = 'robots',
+  Brewfile = 'ruby',
   Gemfile = 'ruby',
   Puppetfile = 'ruby',
   ['.irbrc'] = 'ruby',
@@ -2627,6 +2633,7 @@ local pattern = {
     ['^www%.conf'] = starsetf('dosini'),
     ['^drac%.'] = starsetf('dracula'),
     ['/dtrace/.*%.d$'] = 'dtrace',
+    ['%.app%.src$'] = 'erlang',
     ['esmtprc$'] = 'esmtprc',
     ['/0%.orig/'] = starsetf(detect.foam),
     ['/0/'] = starsetf(detect.foam),
@@ -3098,14 +3105,12 @@ end
 ---
 ---@param args vim.filetype.match.args Table specifying which matching strategy to use.
 ---                 Accepted keys are:
----@return string|nil # If a match was found, the matched filetype.
----@return function|nil # A function that modifies buffer state when called (for example, to set some
----                     filetype specific buffer variables). The function accepts a buffer number as
----                     its only argument.
----@return boolean|nil # Return true if a match was found by falling back to a generic configuration
----                    file (i.e., ".conf"). If true, the filetype should be set with
----                    `:setf FALLBACK conf`, which enables a later |:setf| command to override the
----                    filetype. See `:help setf` for more information.
+---@return string|nil   # The matched filetype, if any.
+---@return function|nil # A function `fun(buf: integer)` that modifies buffer state when called (for
+---                     example, to set some filetype specific buffer variables).
+---@return boolean|nil  # true if a match was found by falling back to a generic filetype
+---                     (i.e., ".conf"), which indicates the filetype should be set with
+---                     `:setf FALLBACK conf`. See |:setfiletype|.
 function M.match(args)
   vim.validate('arg', args, 'table')
 

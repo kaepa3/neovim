@@ -351,8 +351,8 @@ describe('TUI :restart', function()
     restart_pid_check()
     gui_running_check()
 
-    -- Check ":restart +qall" on an unmodified buffer.
-    tt.feed_data(':restart +qall\013')
+    -- Check ":restart +qall!" on an unmodified buffer.
+    tt.feed_data(':restart +qall!\013')
     screen_expect(s0)
     restart_pid_check()
     gui_running_check()
@@ -378,6 +378,14 @@ describe('TUI :restart', function()
     tt.feed_data('C\013')
     screen:expect({ any = vim.pesc('[No Name]') })
 
+    -- Check :restart respects 'confirm' option.
+    tt.feed_data(':set confirm\013')
+    tt.feed_data(':restart\013')
+    screen:expect({ any = vim.pesc('Save changes to "Untitled"?') })
+    tt.feed_data('C\013')
+    screen:expect({ any = vim.pesc('[No Name]') })
+    tt.feed_data(':set noconfirm\013')
+
     -- Check ":confirm restart <cmd>" on a modified buffer.
     tt.feed_data(':confirm restart echo "Hello"\013')
     screen:expect({ any = vim.pesc('Save changes to "Untitled"?') })
@@ -389,8 +397,18 @@ describe('TUI :restart', function()
     restart_pid_check()
     gui_running_check()
 
-    -- Check ":restart" on the modified buffer.
+    -- Check ":confirm restart +echo" correctly ignores ":confirm"
+    tt.feed_data(':confirm restart +echo\013')
+    screen:expect({ any = vim.pesc('+cmd did not quit the server') })
+
+    -- Check ":restart" on a modified buffer.
+    tt.feed_data('ithis will be removed\027')
     tt.feed_data(':restart\013')
+    screen:expect({ any = vim.pesc('Vim(qall):E37: No write since last change') })
+
+    -- Check ":restart +qall!" on a modified buffer.
+    tt.feed_data('ithis will be removed\027')
+    tt.feed_data(':restart +qall!\013')
     screen_expect(s0)
     restart_pid_check()
     gui_running_check()
@@ -3971,7 +3989,7 @@ describe('TUI client', function()
 
     -- Run :restart on the remote client.
     -- The remote client should start a new server while the original one should exit.
-    feed_data(':restart\n')
+    feed_data(':restart +qall!\n')
     screen_client:expect([[
       ^                                                  |
       {100:~                                                 }|*3
@@ -4073,7 +4091,7 @@ describe('TUI client', function()
 
     -- Run :restart on the client.
     -- The client should start a new server while the original server should exit.
-    feed_data(':restart\n')
+    feed_data(':restart +qall!\n')
     screen_client:expect([[
       ^                                                  |
       {100:~                                                 }|*4

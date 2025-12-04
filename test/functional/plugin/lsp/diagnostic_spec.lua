@@ -129,7 +129,7 @@ describe('vim.lsp.diagnostic', function()
         }, { client_id = client_id })
 
         local diags = vim.diagnostic.get(diagnostic_bufnr)
-        vim.lsp.stop_client(client_id)
+        vim.lsp.get_client_by_id(client_id):stop()
         vim.api.nvim_exec_autocmds('VimLeavePre', { modeline = false })
         return diags
       end)
@@ -146,6 +146,40 @@ describe('vim.lsp.diagnostic', function()
         end),
         result[1].end_col
       )
+    end)
+
+    it('ignores outdated diagnostics', function()
+      local result = exec_lua(function()
+        vim.lsp.diagnostic.on_publish_diagnostics(nil, {
+          uri = fake_uri,
+          version = vim.lsp.util.buf_versions[diagnostic_bufnr] - 1,
+          diagnostics = {
+            _G.make_error('Error', 0, 0, 1, 0),
+          },
+        }, { client_id = client_id })
+
+        local diags = vim.diagnostic.get(diagnostic_bufnr)
+        return diags
+      end)
+
+      -- Ignored: outdated version.
+      eq(0, #result)
+
+      result = exec_lua(function()
+        vim.lsp.diagnostic.on_publish_diagnostics(nil, {
+          uri = fake_uri,
+          version = vim.lsp.util.buf_versions[diagnostic_bufnr],
+          diagnostics = {
+            _G.make_error('Error', 0, 0, 1, 0),
+          },
+        }, { client_id = client_id })
+
+        local diags = vim.diagnostic.get(diagnostic_bufnr)
+        return diags
+      end)
+
+      -- Applied: up-to-date version.
+      eq(1, #result)
     end)
 
     it('does not create buffer on empty diagnostics', function()
@@ -361,7 +395,7 @@ describe('vim.lsp.diagnostic', function()
       )
 
       exec_lua(function()
-        vim.lsp.stop_client(client_id)
+        vim.lsp.get_client_by_id(client_id):stop()
       end)
 
       eq(
@@ -373,9 +407,8 @@ describe('vim.lsp.diagnostic', function()
     end)
 
     it('keeps diagnostics when one client detaches and others still are attached', function()
-      local client_id2
       exec_lua(function()
-        client_id2 = vim.lsp.start({ name = 'dummy2', cmd = _G.server.cmd })
+        _G.client_id2 = vim.lsp.start({ name = 'dummy2', cmd = _G.server.cmd })
 
         vim.lsp.diagnostic.on_diagnostic(nil, {
           kind = 'full',
@@ -400,7 +433,7 @@ describe('vim.lsp.diagnostic', function()
       )
 
       exec_lua(function()
-        vim.lsp.stop_client(client_id2)
+        vim.lsp.get_client_by_id(_G.client_id2):stop()
       end)
 
       eq(

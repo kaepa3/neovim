@@ -23,7 +23,7 @@ describe('cmdline2', function()
     exec('tabnew | tabprev')
     feed(':set ch=0')
     screen:expect([[
-      {5: }{100:2}{5: [No Name] }{24: [No Name] }{2:                            }{24:X}|
+      {5: [No Name] }{24: [No Name] }{2:                              }{24:X}|
                                                            |
       {1:~                                                    }|*11
       {16::}{15:set} {16:ch}{15:=}0^                                            |
@@ -31,14 +31,14 @@ describe('cmdline2', function()
     feed('<CR>')
     exec('tabnext')
     screen:expect([[
-      {24: [No Name] }{5: }{100:2}{5: [No Name] }{2:                            }{24:X}|
+      {24: [No Name] }{5: [No Name] }{2:                              }{24:X}|
       ^                                                     |
       {1:~                                                    }|*11
       {16::}{15:set} {16:ch}{15:=}0                                            |
     ]])
     exec('tabnext')
     screen:expect([[
-      {5: }{100:2}{5: [No Name] }{24: [No Name] }{2:                            }{24:X}|
+      {5: [No Name] }{24: [No Name] }{2:                              }{24:X}|
       ^                                                     |
       {1:~                                                    }|*12
     ]])
@@ -123,5 +123,41 @@ describe('cmdline2', function()
       {16::}{15:find} ^                                               |
     ]])
     t.eq(n.eval('v:errmsg'), "E1514: 'findfunc' did not return a List type")
+  end)
+end)
+
+describe('cmdline2', function()
+  it('resizing during startup shows confirm prompt #36439', function()
+    clear({
+      args = {
+        '--clean',
+        '+lua require("vim._extui").enable({})',
+        "+call feedkeys(':')",
+      },
+    })
+    local screen = Screen.new()
+    feed('call confirm("Ok?")<CR>')
+    screen:try_resize(screen._width + 1, screen._height)
+    screen:expect([[
+                                                            |
+      {1:~                                                     }|*8
+      {3:                                                      }|
+                                                            |
+      {6:Ok?}                                                   |
+                                                            |
+      {6:[O]k: }^                                                |
+    ]])
+    -- And resizing the next event loop iteration also works.
+    feed('k')
+    screen:try_resize(screen._width, screen._height + 1)
+    screen:expect([[
+                                                            |
+      {1:~                                                     }|*9
+      {3:                                                      }|
+                                                            |
+      {6:Ok?}                                                   |
+                                                            |
+      {6:[O]k: }^                                                |
+    ]])
   end)
 end)

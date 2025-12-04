@@ -10,7 +10,7 @@ local function system(cmd)
   return result.code == 0, vim.trim(('%s\n%s'):format(result.stdout, result.stderr))
 end
 
-local suggest_faq = 'https://github.com/neovim/neovim/blob/master/BUILD.md#building'
+local suggest_faq = 'https://neovim.io/doc/build/#building'
 
 local function check_runtime()
   health.start('Runtime')
@@ -355,7 +355,7 @@ local function check_terminal()
     return
   end
 
-  health.start('terminal')
+  health.start('Terminal')
   local cmd = { 'infocmp', '-L' }
   local ok, out = system(cmd)
   local kbs_entry = vim.fn.matchstr(out, 'key_backspace=[^,[:space:]]*')
@@ -417,21 +417,11 @@ local function check_external_tools()
     health.warn('ripgrep not available')
   end
 
-  -- `vim.pack` requires `git` executable with version at least 2.36
+  -- `vim.pack` prefers git 2.36 but tries to work with 2.x.
   if vim.fn.executable('git') == 1 then
     local git = vim.fn.exepath('git')
-    local out = vim.system({ 'git', 'version' }, {}):wait().stdout or ''
-    local version = vim.version.parse(out)
-    if version < vim.version.parse('2.36') then
-      local msg = string.format(
-        'git is available (%s), but needs at least version 2.36 (not %s) to work with `vim.pack`',
-        git,
-        tostring(version)
-      )
-      health.warn(msg)
-    else
-      health.ok(('%s (%s)'):format(vim.trim(out), git))
-    end
+    local version = vim.system({ 'git', 'version' }, {}):wait().stdout or ''
+    health.ok(('%s (%s)'):format(vim.trim(version), git))
   else
     health.warn('git not available (required by `vim.pack`)')
   end
@@ -503,7 +493,139 @@ local function check_external_tools()
   end
 end
 
+local function detect_terminal()
+  local e = vim.env
+  if e.TERM_PROGRAM then
+    local v = e.TERM_PROGRAM_VERSION --- @type string?
+    return e.TERM_PROGRAM_VERSION and (e.TERM_PROGRAM .. ' ' .. v) or e.TERM_PROGRAM
+  end
+
+  local map = {
+    KITTY_WINDOW_ID = 'kitty',
+    ALACRITTY_SOCKET = 'alacritty',
+    ALACRITTY_LOG = 'alacritty',
+    WEZTERM_EXECUTABLE = 'wezterm',
+    KONSOLE_VERSION = function()
+      return 'konsole ' .. e.KONSOLE_VERSION
+    end,
+    VTE_VERSION = function()
+      return 'vte ' .. e.VTE_VERSION
+    end,
+  }
+
+  for key, val in pairs(map) do
+    local env = e[key] --- @type string?
+    if env then
+      return type(val) == 'function' and val() or val
+    end
+  end
+
+  return 'unknown'
+end
+
+local function check_sysinfo()
+  vim.health.start('System Info')
+
+  -- Use :version because `vim.version().build` returns "Homebrew" for brew installs.
+  local version_out = vim.api.nvim_exec2('version', { output = true }).output
+  local nvim_version = version_out:match('NVIM (v[^\n]+)') or 'unknown'
+  local commit --[[@type string]] = (version_out:match('%+g(%x+)') or ''):sub(1, 12)
+
+  if vim.trim(commit) ~= '' then
+    local has_git = vim.fn.executable('git') == 1
+    local has_curl = vim.fn.executable('curl') == 1
+    local cmd = has_git and { 'git', 'ls-remote', 'https://github.com/neovim/neovim', 'HEAD' }
+      or has_curl and {
+        'curl',
+        '-s',
+        'https://api.github.com/repos/neovim/neovim/commits/master',
+        '-H',
+        'Accept: application/vnd.github.sha',
+      }
+      or nil
+
+    if cmd then
+      local result = vim.system(cmd, { text = true }):wait()
+      if result.code == 0 then
+        local upstream = assert(result.stdout:match('^(%x+)') or result.stdout)
+        if not upstream:find(commit) then
+          vim.health.warn(
+            ('Build is outdated. Local: %s, Latest: %s'):format(commit, upstream:sub(1, 12))
+          )
+        else
+          vim.health.ok(('Using latest HEAD: %s'):format(upstream:sub(1, 12)))
+        end
+      end
+    else
+      vim.health.warn('Cannot check for updates: git or curl not found')
+    end
+  end
+
+  local os_info = vim.uv.os_uname()
+  local os_string = os_info.sysname .. ' ' .. os_info.release
+  local terminal = detect_terminal()
+  local term_env = vim.env.TERM or 'unknown'
+
+  vim.health.info(('Nvim version: `%s` %s'):format(nvim_version, commit))
+  vim.health.info('Operating system: ' .. os_string)
+  vim.health.info('Terminal: ' .. terminal)
+  vim.health.info('$TERM: ' .. term_env)
+
+  local body = vim.text.indent(
+    0,
+    string.format(
+      [[
+    ## Problem
+
+    ## Steps to reproduce
+
+    ```
+    nvim --clean
+    ```
+
+    ## Expected behavior
+
+    ## System info
+
+    - Nvim version (nvim -v): `%s` neovim/neovim@%s
+    - Vim (not Nvim) behaves the same?: ?
+    - Operating system/version: %s
+    - Terminal name/version: %s
+    - $TERM environment variable: `%s`
+    - Installation: ?
+
+]],
+      nvim_version,
+      commit,
+      os_string,
+      terminal,
+      term_env
+    )
+  )
+
+  local encoded_body = vim.uri_encode(body) --- @type string
+  local issue_url = 'https://github.com/neovim/neovim/issues/new?labels=bug&body=' .. encoded_body
+  vim.schedule(function()
+    local win = vim.api.nvim_get_current_win()
+    local buf = vim.api.nvim_win_get_buf(win)
+    if vim.bo[buf].filetype ~= 'checkhealth' then
+      return
+    end
+    _G.nvim_health_bugreport_open = function()
+      vim.ui.open(issue_url)
+    end
+    vim.wo[win].winbar =
+      '%#WarningMsg#%@v:lua.nvim_health_bugreport_open@Click to Create Bug Report on GitHub%X%*'
+    vim.api.nvim_create_autocmd('BufDelete', {
+      buffer = buf,
+      once = true,
+      command = 'lua _G.nvim_health_bugreport_open = nil',
+    })
+  end)
+end
+
 function M.check()
+  check_sysinfo()
   check_config()
   check_runtime()
   check_performance()
